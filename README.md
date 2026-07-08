@@ -1,6 +1,6 @@
 # DA Music 🎵
 
-A premium, cross-platform audio player application built with Flutter and Riverpod. Featuring beautiful design elements (glassmorphism, vibrant fluid dark theme colors, seamless layouts) and a fully pluggable, decoupled music source and playback architecture.
+A premium,  audio player application built with Flutter and Riverpod. Featuring beautiful design elements (vibrant fluid dark theme colors, seamless layouts) and a fully pluggable, decoupled music source and playback architecture.
 
 ## Core Highlights
 
