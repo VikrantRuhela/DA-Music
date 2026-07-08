@@ -14,7 +14,6 @@ class TonearmWidget extends ConsumerStatefulWidget {
 
 class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   double? _dragAngle;
-  double? _pausedAngleOverride;
   bool _isDragging = false;
   String? _lastSongId;
 
@@ -37,22 +36,26 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
 
     setState(() {
       _isDragging = true;
-      _dragAngle = draggedAngle;
     });
 
     const double startAngle = 24.0 * (pi / 180.0);
+    const double parkedAngle = 2.0 * (pi / 180.0);
     final controller = ref.read(playbackControllerProvider);
     final playbackState = ref.read(playbackStateProvider);
 
     if (draggedAngle >= startAngle) {
       // ZONE B: Stylus is above playable grooves -> Resume Playback
-      _pausedAngleOverride = null;
+      setState(() {
+        _dragAngle = draggedAngle;
+      });
       if (playbackState.status == PlaybackStatus.paused) {
         controller.play();
       }
     } else {
-      // ZONE A: Stylus is dragged away from grooves -> Pause Playback immediately
-      _pausedAngleOverride = draggedAngle;
+      // ZONE A: Stylus is dragged away from grooves -> Pause and snap to PARKED position
+      setState(() {
+        _dragAngle = parkedAngle;
+      });
       if (playbackState.status == PlaybackStatus.playing) {
         controller.pause();
       }
@@ -73,12 +76,8 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     final controller = ref.read(playbackControllerProvider);
 
     if (finalAngle >= startAngle) {
-      // Released inside groove area -> play and let progress guide it
-      _pausedAngleOverride = null;
       controller.play();
     } else {
-      // Released off record -> Stay paused at the current released angle (Do NOT snap back)
-      _pausedAngleOverride = finalAngle;
       controller.pause();
     }
   }
@@ -98,14 +97,11 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
 
     final String? songId = currentSong?.id;
 
-    // Reset override state instantly when a new song starts
     if (songId != _lastSongId) {
       _lastSongId = songId;
-      _pausedAngleOverride = null;
     }
 
     final isPlaying = currentSong != null && playbackState.status == PlaybackStatus.playing;
-    final isPaused = currentSong != null && playbackState.status == PlaybackStatus.paused;
 
     double targetAngle;
     double targetLift;
@@ -118,20 +114,10 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       // Playing: moves slowly across grooves strictly based on playback progress
       targetAngle = (24.0 + progress * 11.0) * (pi / 180.0);
       targetLift = 0.0; // Lands gently on the record
-    } else if (isPaused) {
-      // Paused: Lifted off record
-      targetLift = 1.0;
-      if (_pausedAngleOverride != null) {
-        // Keeps the tonearm exactly where the user released it
-        targetAngle = _pausedAngleOverride!;
-      } else {
-        // Paused via UI button: returns completely to the predefined parked position beside the vinyl
-        targetAngle = 21.0 * (pi / 180.0);
-      }
     } else {
-      // Stopped / Idle: fully raised on rest holder
+      // Stopped / Paused: always returns COMPLETELY to the predefined parked position beside the vinyl
       targetAngle = 2.0 * (pi / 180.0);
-      targetLift = 1.0;
+      targetLift = 1.0; // Fully raised/parked
     }
 
     return GestureDetector(
