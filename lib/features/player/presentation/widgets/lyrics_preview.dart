@@ -17,6 +17,7 @@ class LyricsPreview extends ConsumerStatefulWidget {
 class _LyricsPreviewState extends ConsumerState<LyricsPreview> {
   final ScrollController _scrollController = ScrollController();
   int _lastActiveIndex = -1;
+  String? _lastSongId;
 
   @override
   void dispose() {
@@ -37,13 +38,29 @@ class _LyricsPreviewState extends ConsumerState<LyricsPreview> {
   Widget build(BuildContext context) {
     final colors = context.daColors;
     final typography = context.daTypography;
+    final currentSong = ref.watch(currentSongProvider);
     final lyricsState = ref.watch(lyricsControllerProvider);
     final playbackPosition = ref.watch(playbackControllerProvider).position;
+
+    if (currentSong != null && currentSong.id != _lastSongId) {
+      _lastSongId = currentSong.id;
+      _lastActiveIndex = -1;
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0.0);
+      }
+    }
 
     int activeIndex = -1;
     List<String> lines = [];
 
-    if (lyricsState.syncedLyrics != null && lyricsState.syncedLyrics!.isNotEmpty) {
+    final bool isCorrectSong = currentSong != null && lyricsState.songId == currentSong.id;
+    final bool isLoading = lyricsState.isLoading || !isCorrectSong;
+
+    if (isLoading) {
+      lines = ['Loading lyrics...'];
+    } else if (lyricsState.isInstrumental) {
+      lines = ['Instrumental'];
+    } else if (lyricsState.syncedLyrics != null && lyricsState.syncedLyrics!.isNotEmpty) {
       final sortedTimestamps = lyricsState.syncedLyrics!.keys.toList()..sort();
       lines = sortedTimestamps.map((t) => lyricsState.syncedLyrics![t]!).toList();
       for (int i = 0; i < sortedTimestamps.length; i++) {
@@ -57,9 +74,7 @@ class _LyricsPreviewState extends ConsumerState<LyricsPreview> {
       lines = lyricsState.plainLyrics.split('\n');
     }
 
-    if (lyricsState.isInstrumental) {
-      lines = ['Instrumental'];
-    } else if (lines.isEmpty) {
+    if (lines.isEmpty && !isLoading) {
       lines = [lyricsState.error ?? 'Lyrics unavailable.'];
     }
 

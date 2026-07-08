@@ -15,6 +15,7 @@ class LyricsSection extends ConsumerStatefulWidget {
 class _LyricsSectionState extends ConsumerState<LyricsSection> {
   final ScrollController _scrollController = ScrollController();
   int _lastActiveIndex = -1;
+  String? _lastSongId;
 
   @override
   void dispose() {
@@ -35,8 +36,21 @@ class _LyricsSectionState extends ConsumerState<LyricsSection> {
   Widget build(BuildContext context) {
     final colors = context.daColors;
     final typography = context.daTypography;
+    final currentSong = ref.watch(currentSongProvider);
     final lyricsState = ref.watch(lyricsControllerProvider);
     final playbackPosition = ref.watch(playbackControllerProvider).position;
+
+    if (currentSong != null && currentSong.id != _lastSongId) {
+      _lastSongId = currentSong.id;
+      _lastActiveIndex = -1;
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0.0);
+      }
+    }
+
+    if (currentSong == null || lyricsState.isLoading || lyricsState.songId != currentSong.id) {
+      return const SizedBox.shrink();
+    }
 
     int activeIndex = -1;
     List<String> lines = [];

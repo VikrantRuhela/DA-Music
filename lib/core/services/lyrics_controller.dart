@@ -46,24 +46,15 @@ class LyricsState {
 class LyricsController extends StateNotifier<LyricsState> {
   final LyricsRepository _lyricsRepository;
   final List<LyricsProvider> _providers;
-  final Ref _ref;
 
-  LyricsController(this._lyricsRepository, this._providers, this._ref) : super(LyricsState()) {
-    _init();
-  }
+  LyricsController(this._lyricsRepository, this._providers) : super(LyricsState());
 
-  void _init() {
-    _ref.listen<shared.Song?>(currentSongProvider, (previous, next) {
-      if (next != null) {
-        loadLyricsForSong(next);
-      } else {
-        state = LyricsState();
-      }
-    }, fireImmediately: true);
+  void clearLyrics() {
+    state = LyricsState();
   }
 
   Future<void> loadLyricsForSong(shared.Song song) async {
-    state = state.copyWith(
+    state = LyricsState(
       isLoading: true,
       songId: song.id,
       plainLyrics: '',
@@ -143,5 +134,15 @@ class LyricsController extends StateNotifier<LyricsState> {
 final lyricsControllerProvider = StateNotifierProvider<LyricsController, LyricsState>((ref) {
   final repo = ref.watch(lyricsRepositoryProvider);
   final providers = [LrcLibProvider()];
-  return LyricsController(repo, providers, ref);
+  final controller = LyricsController(repo, providers);
+  
+  ref.listen<shared.Song?>(currentSongProvider, (previous, next) {
+    if (next != null) {
+      controller.loadLyricsForSong(next);
+    } else {
+      controller.clearLyrics();
+    }
+  }, fireImmediately: true);
+
+  return controller;
 });

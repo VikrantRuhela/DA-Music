@@ -20,6 +20,7 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
   bool _isUserScrolling = false;
   Timer? _userScrollTimer;
   int _lastActiveIndex = -1;
+  String? _lastSongId;
 
   @override
   void dispose() {
@@ -49,6 +50,16 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
     final currentSong = ref.watch(currentSongProvider);
     final lyricsState = ref.watch(lyricsControllerProvider);
     final playbackPosition = ref.watch(playbackControllerProvider).position;
+
+    if (currentSong != null && currentSong.id != _lastSongId) {
+      _lastSongId = currentSong.id;
+      _lastActiveIndex = -1;
+      _isUserScrolling = false;
+      _userScrollTimer?.cancel();
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0.0);
+      }
+    }
 
     if (currentSong == null) {
       return Scaffold(
@@ -191,7 +202,7 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
                 Expanded(
                   child: Builder(
                     builder: (context) {
-                      if (lyricsState.isLoading) {
+                      if (lyricsState.isLoading || lyricsState.songId != currentSong.id) {
                         return const Center(
                           child: CircularProgressIndicator(color: Colors.white),
                         );

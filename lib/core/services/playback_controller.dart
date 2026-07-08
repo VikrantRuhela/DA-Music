@@ -34,6 +34,8 @@ class PlaybackController extends ChangeNotifier {
   int _lastVolume = 80;
   double _playbackSpeed = 1.0;
   Timer? _positionTimer;
+  bool _isSeeking = false;
+  Timer? _seekLockTimer;
 
   final List<Song> _queueSongs = [];
   int _currentIndex = -1;
@@ -321,10 +323,12 @@ class PlaybackController extends ChangeNotifier {
 
   void _startPositionTimer() {
     _positionTimer?.cancel();
-    _positionTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
+    _positionTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
       if (_status == PlaybackStatus.playing) {
-        _currentPosition = _playbackEngine.currentPosition;
-        notifyListeners();
+        if (!_isSeeking) {
+          _currentPosition = _playbackEngine.currentPosition;
+          notifyListeners();
+        }
       } else {
         _positionTimer?.cancel();
       }
@@ -376,10 +380,17 @@ class PlaybackController extends ChangeNotifier {
   }
 
   Future<void> seek(Duration position) async {
-    await _runAction('seek', () => _playbackEngine.seek(position));
+    _seekLockTimer?.cancel();
+    _isSeeking = true;
     _currentPosition = position;
     _eventController.add(clean.PositionChanged(position));
     notifyListeners();
+
+    await _runAction('seek', () => _playbackEngine.seek(position));
+
+    _seekLockTimer = Timer(const Duration(milliseconds: 300), () {
+      _isSeeking = false;
+    });
   }
 
   Future<void> next() async {

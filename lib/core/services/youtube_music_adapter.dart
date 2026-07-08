@@ -654,84 +654,130 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
 
     final scored = <({yt.SearchVideo video, int score, String reasons})>[];
 
+    final normOrigTitle = originalTitle.toLowerCase().replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), '').trim();
+    final normOrigArtist = originalArtist.toLowerCase().replaceAll(' - topic', '').replaceAll('vevo', '').trim();
+    
+    final origArtistParts = normOrigArtist.split(RegExp(r'[,&]|\b(feat|ft|and)\b')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    final bool origIsRemix = normOrigTitle.contains('remix');
+
     for (final c in candidates) {
       if (c.id.value == originalId) continue;
 
       int score = 0;
       final reasons = <String>[];
 
-      // 1. Strict Artist Match Check
-      final normArtist = originalArtist.toLowerCase().replaceAll(' - topic', '').replaceAll('vevo', '').trim();
+      // 1. Artist Matching
       final normAuthor = c.author.toLowerCase().replaceAll(' - topic', '').replaceAll('vevo', '').trim();
+      final candArtistParts = normAuthor.split(RegExp(r'[,&]|\b(feat|ft|and)\b')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
       
-      bool artistMatch = false;
-      if (normAuthor == normArtist) {
-        score += 1000;
-        artistMatch = true;
-        reasons.add('Exact artist match (+1000)');
-      } else if (normAuthor.contains(normArtist) || normArtist.contains(normAuthor)) {
-        score += 600;
-        artistMatch = true;
-        reasons.add('Partial artist match (+600)');
-      } else if (c.title.toLowerCase().contains(normArtist)) {
-        score += 400;
-        artistMatch = true;
-        reasons.add('Artist in title match (+400)');
+      bool exactArtist = false;
+      bool partialArtist = false;
+
+      for (final op in origArtistParts) {
+        for (final cp in candArtistParts) {
+          if (op == cp) {
+            exactArtist = true;
+            break;
+          }
+          if (op.contains(cp) || cp.contains(op)) {
+            partialArtist = true;
+          }
+        }
+        if (exactArtist) break;
       }
 
-      // Reject completely if no artist name overlap is present to prevent wrong artist substitutions
-      if (!artistMatch) {
+      if (exactArtist) {
+        score += 2000;
+        reasons.add('Exact artist match (+2000)');
+      } else if (partialArtist) {
+        score += 1000;
+        reasons.add('Partial artist match (+1000)');
+      } else if (c.title.toLowerCase().contains(normOrigArtist)) {
+        score += 500;
+        reasons.add('Artist in title match (+500)');
+      } else {
+        score -= 5000;
+        reasons.add('Different artist penalty (-5000)');
+      }
+
+      // Reject completely if no artist overlap is present to prevent wrong artist substitutions
+      if (!exactArtist && !partialArtist && !c.title.toLowerCase().contains(normOrigArtist)) {
         continue;
       }
 
       // 2. Song Title Match
-      final cleanOrigTitle = originalTitle.toLowerCase().replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), '').trim();
       final cleanCandTitle = c.title.toLowerCase().replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), '').trim();
-      
-      final normOrigTitle = cleanOrigTitle.replaceAll('&', 'and').replaceAll(RegExp(r'[^a-z0-9]'), '');
       final normCandTitle = cleanCandTitle.replaceAll('&', 'and').replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final normOrigTitleClean = normOrigTitle.replaceAll('&', 'and').replaceAll(RegExp(r'[^a-z0-9]'), '');
 
-      if (normCandTitle == normOrigTitle) {
-        score += 300;
-        reasons.add('Exact title match (+300)');
-      } else if (normCandTitle.contains(normOrigTitle) || normOrigTitle.contains(normCandTitle)) {
-        score += 100;
-        reasons.add('Partial title match (+100)');
+      if (normCandTitle == normOrigTitleClean) {
+        score += 2000;
+        reasons.add('Exact title match (+2000)');
+      } else if (normCandTitle.contains(normOrigTitleClean) || normOrigTitleClean.contains(normCandTitle)) {
+        score += 1000;
+        reasons.add('Partial title match (+1000)');
       } else {
-        // Reject completely if title is completely different
-        continue;
+        continue; // Title completely different
       }
 
-      // 3. Album Match (if available)
+      // 3. Remix/Cover/Karaoke/Instrumental penalties
+      final bool candIsRemix = cleanCandTitle.contains('remix');
+      if (candIsRemix && !origIsRemix) {
+        score -= 3000;
+        reasons.add('Unofficial Remix penalty (-3000)');
+      }
+      
+      final bool candIsCover = cleanCandTitle.contains('cover') || cleanCandTitle.contains('tribute');
+      if (candIsCover && !normOrigTitle.contains('cover')) {
+        score -= 3000;
+        reasons.add('Cover version penalty (-3000)');
+      }
+
+      final bool candIsKaraoke = cleanCandTitle.contains('karaoke') || cleanCandTitle.contains('instrumental');
+      if (candIsKaraoke && !normOrigTitle.contains('karaoke') && !normOrigTitle.contains('instrumental')) {
+        score -= 3000;
+        reasons.add('Karaoke/Instrumental penalty (-3000)');
+      }
+
+      final bool candIsLyricsOrFan = cleanCandTitle.contains('lyrics') || cleanCandTitle.contains('lyric video') || cleanCandTitle.contains('fan-made') || cleanCandTitle.contains('unofficial');
+      if (candIsLyricsOrFan) {
+        score -= 1000;
+        reasons.add('Unofficial/Lyrics video penalty (-1000)');
+      }
+
+      // 4. Album Match (if available)
       if (originalAlbum != 'yt_album_unknown' && originalAlbum.isNotEmpty) {
         final normAlbum = originalAlbum.toLowerCase().trim();
         final candidateText = '${c.title} ${c.author}'.toLowerCase();
         if (candidateText.contains(normAlbum)) {
-          score += 200;
-          reasons.add('Album match (+200)');
+          score += 800;
+          reasons.add('Album match (+800)');
         }
       }
 
-      // 4. Strict Duration (±3 seconds)
+      // 5. Strict Duration Matching
       final diff = _parseDuration(c.duration).inSeconds - originalDuration.inSeconds;
       if (diff.abs() <= 3) {
-        score += 150;
-        reasons.add('Duration matches within ±3s (+150)');
-      } else if (diff.abs() <= 10) {
-        score += 50;
-        reasons.add('Duration matches within ±10s (+50)');
-      } else {
-        score -= 200;
-        reasons.add('Duration mismatch penalty (-200)');
+        score += 1200;
+        reasons.add('Duration matches within ±3s (+1200)');
+      } else if (diff.abs() <= 8) {
+        score += 600;
+        reasons.add('Duration matches within ±8s (+600)');
+      } else if (diff.abs() > 30) {
+        score -= 1500;
+        reasons.add('Duration mismatch >30s penalty (-1500)');
+      } else if (diff.abs() > 15) {
+        score -= 800;
+        reasons.add('Duration mismatch >15s penalty (-800)');
       }
 
-      // 5. Official upload check
-      final isOfficial = !c.author.endsWith(' - Topic') && 
-                         !c.title.toLowerCase().contains('(audio)') &&
-                         !c.title.toLowerCase().contains('official audio');
-      if (isOfficial) {
-        score += 100;
-        reasons.add('Official/public upload source (+100)');
+      // 6. Official upload checks
+      if (c.author.endsWith(' - Topic')) {
+        score += 1500;
+        reasons.add('Official YT Music Topic channel (+1500)');
+      } else if (c.author.toLowerCase().contains('official') || c.title.toLowerCase().contains('official')) {
+        score += 500;
+        reasons.add('Official artist/video upload (+500)');
       }
 
       scored.add((video: c, score: score, reasons: reasons.join(', ')));
@@ -748,7 +794,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     DALogger.info('  -> Selected candidate: [${scored.first.video.id.value}] "${scored.first.video.title}" with score ${scored.first.score}');
     DALogger.info('========================================================================');
 
-    if (scored.first.score < 200) {
+    if (scored.first.score < 400) {
       DALogger.info('YouTubeMusicAdapter: Selected fallback candidate has low score (${scored.first.score}). Aborting fallback to prevent wrong song playback.');
       return null;
     }
@@ -1111,12 +1157,39 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         }
       }
 
+      String cleanOwner = '';
+      if (author.isNotEmpty) {
+        final parts = author.split(' • ');
+        for (final part in parts) {
+          final p = part.trim();
+          if (p.isEmpty ||
+              p.toLowerCase() == 'album' ||
+              p.toLowerCase() == 'playlist' ||
+              p.toLowerCase() == 'ep' ||
+              p.toLowerCase() == 'single' ||
+              RegExp(r'^\d+$').hasMatch(p) ||
+              p.contains('songs') ||
+              p.contains('minutes') ||
+              p.contains('likes')) {
+            continue;
+          }
+          cleanOwner = p;
+          break;
+        }
+        if (cleanOwner.isEmpty) {
+          cleanOwner = parts.first.trim();
+        }
+      }
+      if (cleanOwner.isEmpty || cleanOwner.toLowerCase() == 'album' || cleanOwner.toLowerCase() == 'playlist') {
+        cleanOwner = 'Unknown Artist';
+      }
+
       final playlistObj = Playlist(
         id: id,
         title: title,
         description: description,
         cover: Artwork(coverUrl),
-        owner: author.split(' • ').first,
+        owner: cleanOwner,
         songIds: songs.map((s) => s.id).toList(),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
