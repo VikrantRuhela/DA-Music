@@ -825,7 +825,6 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     }
 
     // 1. Determine if this is a Topic track (official audio track) and store metadata
-    bool isTopicTrack = false;
     String? fallbackQuery;
     String? originalTitle;
     String? originalArtist;
@@ -838,11 +837,6 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       originalArtist = cached.artistId;
       originalAlbum = cached.albumId;
       originalDuration = cached.duration.value;
-      isTopicTrack = originalArtist.endsWith(' - Topic') || 
-                     originalArtist.endsWith('VEVO') ||
-                     originalTitle.toLowerCase().contains('(audio)') ||
-                     originalTitle.toLowerCase().contains('official audio') ||
-                     cached.albumId != 'yt_album_unknown';
       fallbackQuery = _cleanQuery(originalArtist, originalTitle);
     } else {
       try {
@@ -851,64 +845,11 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         originalArtist = video.author;
         originalAlbum = 'yt_album_unknown';
         originalDuration = video.duration ?? const Duration(minutes: 3);
-        isTopicTrack = video.author.endsWith(' - Topic') || 
-                       video.author.endsWith('VEVO') ||
-                       video.title.toLowerCase().contains('(audio)') ||
-                       video.title.toLowerCase().contains('official audio');
         fallbackQuery = _cleanQuery(video.author, video.title);
       } catch (_) {}
     }
 
-    // 2. If it is a Topic track, immediately use search fallback to public video
-    if (isTopicTrack && fallbackQuery != null) {
-      try {
-        DALogger.info('YouTubeMusicAdapter: Topic track detected for ID "$id". Searching fallback: "$fallbackQuery"');
-        final searchResults = await _ytClient.search.searchContent(fallbackQuery);
-        final candidates = searchResults.whereType<yt.SearchVideo>().toList();
-        final fallbackVideo = rankFallbackCandidates(
-          candidates: candidates,
-          originalId: id,
-          originalTitle: originalTitle ?? '',
-          originalArtist: originalArtist ?? '',
-          originalAlbum: originalAlbum ?? 'yt_album_unknown',
-          originalDuration: originalDuration,
-        );
-        
-        if (fallbackVideo != null) {
-          final fallbackId = fallbackVideo.id.value;
-          DALogger.info('YouTubeMusicAdapter: Resolving fallback stream for ID "$id" via "$fallbackId"');
-          final manifest = await _ytClient.videos.streamsClient.getManifest(
-            fallbackId,
-            ytClients: [yt.YoutubeApiClient.androidVr],
-          ).timeout(const Duration(milliseconds: 15000));
-
-          var audioStreams = manifest.audioOnly.where((s) => s.container.name == 'mp4').toList();
-          if (audioStreams.isEmpty) {
-            audioStreams = manifest.audioOnly.toList();
-          }
-          final audioStreamInfo = audioStreams.withHighestBitrate();
-
-          return AudioStream(
-            id: id, // Original ID
-            providerId: this.id,
-            streamUrl: audioStreamInfo.url.toString(),
-            mimeType: 'audio/${audioStreamInfo.codec.subtype}',
-            bitrate: audioStreamInfo.bitrate.bitsPerSecond,
-            duration: const Duration(minutes: 3),
-            expiresAt: DateTime.now().add(const Duration(hours: 4)),
-            headers: const {},
-            quality: 'highest',
-            codec: audioStreamInfo.codec.subtype,
-            isLive: false,
-            isCached: false,
-          );
-        }
-      } catch (err, stack) {
-        DALogger.error('YouTubeMusicAdapter: Fallback resolution failed for query "$fallbackQuery"', err, stack);
-      }
-    }
-
-    // 3. Direct resolution (either it's a public video or fallback search failed)
+    // 2. Direct resolution (Always attempt first to play original ID)
     try {
       final manifest = await _ytClient.videos.streamsClient.getManifest(
         id,
@@ -936,7 +877,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         isCached: false,
       );
     } catch (e) {
-      DALogger.info('YouTubeMusicAdapter: Direct stream resolution failed for ID "$id": $e. Attempting search fallback...');
+      DALogger.info('YouTubeMusicAdapter: Direct stream resolution failed for ID "$id": $e. Attempting search fallback as last resort...');
       
       if (fallbackQuery != null) {
         try {

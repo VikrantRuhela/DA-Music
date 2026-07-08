@@ -25,18 +25,11 @@ class PlayerHeader extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'PLAYING FROM',
+              'NOW PLAYING',
               style: typography.caption.copyWith(
                 color: colors.primary,
                 letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: DATokens.spacingTiny),
-            Text(
-              currentSong != null ? 'YouTube Music Search' : 'No track selected',
-              style: typography.body.copyWith(
-                color: colors.textSecondary,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
