@@ -13,6 +13,72 @@ class TonearmWidget extends ConsumerStatefulWidget {
 }
 
 class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
+  double? _dragAngle;
+
+  void _handleDrag(Offset localPos) {
+    final currentSong = ref.read(currentSongProvider);
+    if (currentSong == null) return;
+
+    const double pivotX = 380.0;
+    const double pivotY = 90.0;
+
+    // Calculate relative vector from fixed pivot
+    final double dx = pivotX - localPos.dx;
+    final double dy = localPos.dy - pivotY;
+
+    // Calculate angle in radians
+    double draggedAngle = atan2(dx, dy);
+
+    // Clamp to realistic bounds (0 to 45 degrees)
+    draggedAngle = draggedAngle.clamp(0.0 * (pi / 180.0), 45.0 * (pi / 180.0));
+
+    setState(() {
+      _dragAngle = draggedAngle;
+    });
+
+    const double startAngle = 24.0 * (pi / 180.0);
+    const double endAngle = 35.0 * (pi / 180.0);
+
+    final controller = ref.read(playbackControllerProvider);
+
+    if (draggedAngle >= startAngle && draggedAngle <= endAngle) {
+      // Dragging inside playable grooves -> Seek to corresponding progress
+      final double progress = (draggedAngle - startAngle) / (endAngle - startAngle);
+      final duration = currentSong.duration;
+      if (duration.inMilliseconds > 0) {
+        controller.seek(Duration(milliseconds: (progress * duration.inMilliseconds).toInt()));
+      }
+    } else if (draggedAngle < startAngle - 2.0 * (pi / 180.0)) {
+      // Dragging off the record -> Pause immediately
+      final playbackState = ref.read(playbackStateProvider);
+      if (playbackState.status == PlaybackStatus.playing) {
+        controller.pause();
+      }
+    }
+  }
+
+  void _endDrag() {
+    if (_dragAngle == null) return;
+
+    const double startAngle = 24.0 * (pi / 180.0);
+    const double endAngle = 35.0 * (pi / 180.0);
+
+    final double finalAngle = _dragAngle!;
+    final controller = ref.read(playbackControllerProvider);
+
+    setState(() {
+      _dragAngle = null;
+    });
+
+    if (finalAngle >= startAngle && finalAngle <= endAngle) {
+      // Released inside playable grooves -> Resume play
+      controller.play();
+    } else {
+      // Released off record -> Remain paused
+      controller.pause();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.daColors;
@@ -26,29 +92,49 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
 
-    final isPlayingOrPaused = currentSong != null &&
-        (playbackState.status == PlaybackStatus.playing ||
-            playbackState.status == PlaybackStatus.paused);
+    final isPlaying = currentSong != null && playbackState.status == PlaybackStatus.playing;
+    final isPaused = currentSong != null && playbackState.status == PlaybackStatus.paused;
 
-    // REST: 2 degrees, PLAY: 24 (start/outer groove) to 41 (end/inner groove) degrees
-    final double targetAngle = isPlayingOrPaused
-        ? (24.0 + progress * 17.0) * (pi / 180.0)
-        : 2.0 * (pi / 180.0);
+    double targetAngle;
+    double targetLift;
 
-    // Lift goes from 0.0 (landed on record) to 1.0 (raised on holder)
-    final double targetLift = isPlayingOrPaused ? 0.0 : 1.0;
+    if (_dragAngle != null) {
+      // Currently being dragged by the user
+      targetAngle = _dragAngle!;
+      targetLift = 0.8; // Raised slightly while dragging
+    } else if (isPlaying) {
+      // Playing: stylus on record moving from 24 to 35 degrees
+      targetAngle = (24.0 + progress * 11.0) * (pi / 180.0);
+      targetLift = 0.0; // Fully lowered onto groove
+    } else if (isPaused) {
+      // Paused: Lift slightly and hover slightly back
+      final double progressAngle = (24.0 + progress * 11.0);
+      targetAngle = (progressAngle - 3.0).clamp(2.0, 35.0) * (pi / 180.0);
+      targetLift = 0.75; // Hovering just above record
+    } else {
+      // Stopped / Idle: On rest holder
+      targetAngle = 2.0 * (pi / 180.0);
+      targetLift = 1.0; // Fully raised
+    }
 
-    return IgnorePointer(
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (details) => _handleDrag(details.localPosition),
+      onPanUpdate: (details) => _handleDrag(details.localPosition),
+      onPanEnd: (_) => _endDrag(),
+      onPanCancel: () => _endDrag(),
       child: Stack(
         children: [
+          // Smooth rotation physics angle transition
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 2.0 * (pi / 180.0), end: targetAngle),
-            duration: Duration(milliseconds: isPlayingOrPaused ? 800 : 1000),
-            curve: Curves.easeInOutCubic,
+            duration: Duration(milliseconds: _dragAngle != null ? 50 : (isPlaying ? 800 : 1000)),
+            curve: _dragAngle != null ? Curves.linear : Curves.easeInOutCubic,
             builder: (context, angle, child) {
+              // Smooth lift transitions
               return TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 1.0, end: targetLift),
-                duration: const Duration(milliseconds: 500),
+                duration: const Duration(milliseconds: 400),
                 curve: Curves.easeInOut,
                 builder: (context, lift, child) {
                   return CustomPaint(
@@ -85,7 +171,7 @@ class _TonearmPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Pivot Base Center point (completely outside the record circle)
+    // Fixed Pivot Base Center point (outside the record circle)
     const double pivotX = 380.0;
     const double pivotY = 90.0;
 
@@ -117,15 +203,15 @@ class _TonearmPainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: const Offset(pivotX, pivotY), radius: 12.0));
     canvas.drawCircle(const Offset(pivotX, pivotY), 12.0, innerBasePaint);
 
-    // 3. Draw Tonearm Body (rotates around pivot)
+    // 3. Draw Tonearm Body (rotates around fixed pivot)
     canvas.save();
     canvas.translate(pivotX, pivotY);
     canvas.rotate(angle);
 
     // Lift scale & offset for 3D raised height effect
-    final double armScale = 1.0 + 0.03 * lift;
-    final double shadowOffset = 5.0 + 7.0 * lift;
-    final double shadowBlur = 6.0 + 5.0 * lift;
+    final double armScale = 1.0 + 0.035 * lift;
+    final double shadowOffset = 4.0 + 8.0 * lift;
+    final double shadowBlur = 5.0 + 7.0 * lift;
     canvas.scale(armScale);
 
     // Rigid S-arm length = 230px. S-arm tube: starts at (0, 0), curves down-left, ends at (X=-80, Y=215)
