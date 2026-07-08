@@ -13,24 +13,7 @@ class LyricsSection extends ConsumerStatefulWidget {
 }
 
 class _LyricsSectionState extends ConsumerState<LyricsSection> {
-  final ScrollController _scrollController = ScrollController();
-  int _lastActiveIndex = -1;
   String? _lastSongId;
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _scrollToActiveLine(int index) {
-    if (!_scrollController.hasClients) return;
-    _scrollController.animateTo(
-      (index * 32.0).clamp(0.0, _scrollController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,13 +25,13 @@ class _LyricsSectionState extends ConsumerState<LyricsSection> {
 
     if (currentSong != null && currentSong.id != _lastSongId) {
       _lastSongId = currentSong.id;
-      _lastActiveIndex = -1;
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(0.0);
-      }
     }
 
     if (currentSong == null || lyricsState.isLoading || lyricsState.songId != currentSong.id) {
+      return const SizedBox.shrink();
+    }
+
+    if (lyricsState.isInstrumental) {
       return const SizedBox.shrink();
     }
 
@@ -69,126 +52,78 @@ class _LyricsSectionState extends ConsumerState<LyricsSection> {
       lines = lyricsState.plainLyrics.split('\n');
     }
 
-    if (lyricsState.isInstrumental) {
-      lines = ['Instrumental'];
-    }
-
-    // If lyrics are not available, completely hide the card
-    final bool hasLyrics = lines.isNotEmpty && !lines.contains('Lyrics unavailable.');
+    // Completely hide the card if lyrics are unavailable
+    final bool hasLyrics = lines.isNotEmpty && 
+        !lines.contains('Lyrics unavailable.') && 
+        !lines.contains('Lyrics are unavailable for this song.');
     if (!hasLyrics) {
       return const SizedBox.shrink();
     }
 
-    if (activeIndex != _lastActiveIndex && activeIndex != -1) {
-      _lastActiveIndex = activeIndex;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToActiveLine(activeIndex);
-      });
-    }
+    final String currentLine = activeIndex >= 0 && activeIndex < lines.length
+        ? lines[activeIndex]
+        : (lines.isNotEmpty && lyricsState.syncedLyrics == null ? lines.first : '...');
+
+    final String nextLine = activeIndex + 1 >= 0 && activeIndex + 1 < lines.length
+        ? lines[activeIndex + 1]
+        : '';
 
     return Container(
-      height: 160.0,
-      constraints: const BoxConstraints(maxWidth: 600.0),
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 480.0),
       margin: const EdgeInsets.symmetric(horizontal: DATokens.spacingLarge),
+      padding: const EdgeInsets.all(DATokens.spacingLarge),
       decoration: BoxDecoration(
-        color: colors.surfaceCard.withValues(alpha: 0.3),
+        color: colors.primary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(DATokens.radiusLarge),
         border: Border.all(
-          color: colors.border.withValues(alpha: 0.5),
+          color: colors.primary.withValues(alpha: 0.25),
           width: 1.0,
         ),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Scrollable Lyrics List
-          ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(
-                vertical: DATokens.spacingMedium,
-                horizontal: DATokens.spacingLarge,
-              ),
-              physics: const BouncingScrollPhysics(),
-              itemCount: lines.length,
-              itemBuilder: (context, index) {
-                final isActive = activeIndex != -1 && index == activeIndex;
-                final color = isActive
-                    ? colors.primary
-                    : colors.textSecondary.withValues(alpha: 0.6);
-
-                final style = isActive
-                    ? typography.body.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16.0,
-                      )
-                    : typography.body.copyWith(
-                        color: color,
-                        fontSize: 14.0,
-                      );
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: DATokens.spacingTiny + 2.0,
-                  ),
-                  child: Center(
-                    child: Text(
-                      lines[index],
-                      style: style,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Top Fade Gradient Overlay
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 32.0,
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      colors.surface.withValues(alpha: 0.5),
-                      Colors.transparent,
-                    ],
-                  ),
+          Row(
+            children: [
+              Icon(Icons.lyrics_outlined, size: 16.0, color: colors.primary),
+              const SizedBox(width: DATokens.spacingSmall),
+              Text(
+                'LYRICS',
+                style: typography.caption.copyWith(
+                  color: colors.primary,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
                 ),
               ),
-            ),
+            ],
           ),
-
-          // Bottom Fade Gradient Overlay
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 32.0,
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      colors.surface.withValues(alpha: 0.5),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
+          const SizedBox(height: DATokens.spacingMedium),
+          Text(
+            currentLine,
+            style: typography.body.copyWith(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 16.0,
+              height: 1.4,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (nextLine.isNotEmpty) ...[
+            const SizedBox(height: DATokens.spacingSmall),
+            Text(
+              nextLine,
+              style: typography.body.copyWith(
+                color: colors.textSecondary.withValues(alpha: 0.6),
+                fontSize: 13.0,
+                height: 1.4,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
+          ],
         ],
       ),
     );

@@ -78,7 +78,9 @@ class _ProgressSectionState extends ConsumerState<ProgressSection> {
                   style: typography.caption.copyWith(color: colors.textSecondary),
                 ),
                 Text(
-                  _formatDuration(duration),
+                  duration > displayPosition
+                      ? '-${_formatDuration(duration - displayPosition)}'
+                      : '0:00',
                   style: typography.caption.copyWith(color: colors.textSecondary),
                 ),
               ],

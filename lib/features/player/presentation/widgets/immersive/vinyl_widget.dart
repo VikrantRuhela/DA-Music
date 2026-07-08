@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../../core/extensions/context_extensions.dart';
 import '../../../../../app/theme/tokens.dart';
 import '../../../../../shared/providers/player_providers.dart';
@@ -13,34 +12,72 @@ class VinylWidget extends ConsumerStatefulWidget {
   ConsumerState<VinylWidget> createState() => _VinylWidgetState();
 }
 
-class _VinylWidgetState extends ConsumerState<VinylWidget> {
+class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  double _angle = 0.0;
+  double _currentSpeed = 0.0;
   bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..addListener(_tick);
+    _controller.repeat();
+  }
+
+  void _tick() {
+    final playbackState = ref.read(playbackStateProvider);
+    final isPlaying = playbackState.status == PlaybackStatus.playing;
+    final double targetSpeed = isPlaying ? 1.0 : 0.0;
+
+    // Gradual acceleration (0.02) and deceleration (0.01)
+    if (_currentSpeed < targetSpeed) {
+      _currentSpeed = (_currentSpeed + 0.02).clamp(0.0, 1.0);
+    } else if (_currentSpeed > targetSpeed) {
+      _currentSpeed = (_currentSpeed - 0.01).clamp(0.0, 1.0);
+    }
+
+    if (_currentSpeed > 0.0) {
+      setState(() {
+        // Continuous rotation step
+        _angle += 0.035 * _currentSpeed;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_tick);
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.daColors;
-    final playbackState = ref.watch(playbackStateProvider);
-    final isPlaying = playbackState.status == PlaybackStatus.playing;
     final currentSong = ref.watch(currentSongProvider);
 
     final glowShadow = _isHovered
         ? [
             BoxShadow(
-              color: colors.primary.withValues(alpha: 0.3),
-              blurRadius: 36.0,
-              spreadRadius: 6.0,
+              color: colors.primary.withValues(alpha: 0.25),
+              blurRadius: 40.0,
+              spreadRadius: 8.0,
             ),
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
-              blurRadius: 24.0,
-              offset: const Offset(0, 12),
+              color: Colors.black.withValues(alpha: 0.6),
+              blurRadius: 30.0,
+              offset: const Offset(0, 15),
             )
           ]
         : [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 20.0,
-              offset: const Offset(0, 10),
+              color: Colors.black.withValues(alpha: 0.5),
+              blurRadius: 24.0,
+              offset: const Offset(0, 12),
             )
           ];
 
@@ -51,74 +88,84 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> {
         child: AnimatedContainer(
           duration: DATokens.durationFast,
           curve: DATokens.curveHover,
-          width: 320.0,
-          height: 320.0,
+          width: 360.0,
+          height: 360.0,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             boxShadow: glowShadow,
           ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Outer Vinyl Plate & Grooves
-              Container(
-                width: 320.0,
-                height: 320.0,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.black,
-                  border: Border.all(
-                    color: colors.border,
-                    width: 2.0,
-                  ),
-                  gradient: RadialGradient(
-                    colors: [
-                      Colors.black,
-                      Colors.grey.shade900,
-                      Colors.black,
-                      Colors.grey.shade900,
-                      Colors.black,
-                    ],
-                    stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
-                  ),
-                ),
-              ),
-
-              // Multiple Groove Rings
-              Container(
-                width: 260.0,
-                height: 260.0,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    width: 1.0,
-                  ),
-                ),
-              ),
-              Container(
-                width: 200.0,
-                height: 200.0,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    width: 1.0,
-                  ),
-                ),
-              ),
-
-              // Center Label
-              _VinylCenterLabel(
-                child: Container(
-                  width: 120.0,
-                  height: 120.0,
+          child: Transform.rotate(
+            angle: _angle,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Outer Vinyl Plate with Radial Gradient (Reflections)
+                Container(
+                  width: 360.0,
+                  height: 360.0,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: colors.primary.withValues(alpha: 0.15),
+                    color: Colors.black,
+                    border: Border.all(
+                      color: colors.border.withValues(alpha: 0.3),
+                      width: 1.0,
+                    ),
+                    gradient: const RadialGradient(
+                      colors: [
+                        Color(0xFF0D0D0D),
+                        Color(0xFF262626),
+                        Color(0xFF0D0D0D),
+                        Color(0xFF1F1F1F),
+                        Color(0xFF000000),
+                      ],
+                      stops: [0.0, 0.4, 0.65, 0.85, 1.0],
+                    ),
+                  ),
+                ),
+
+                // Vinyl Grooves Details
+                for (double d in [320.0, 300.0, 280.0, 260.0, 240.0, 220.0, 200.0, 180.0])
+                  Container(
+                    width: d,
+                    height: d,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.035),
+                        width: 0.8,
+                      ),
+                    ),
+                  ),
+
+                // High-fidelity Gloss / Shine overlay (Semi-transparent conic reflection simulation)
+                Container(
+                  width: 360.0,
+                  height: 360.0,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SweepGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.0),
+                        Colors.white.withValues(alpha: 0.06),
+                        Colors.white.withValues(alpha: 0.0),
+                        Colors.white.withValues(alpha: 0.06),
+                        Colors.white.withValues(alpha: 0.0),
+                      ],
+                      stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+                    ),
+                  ),
+                ),
+
+                // Center Record Label (Album Artwork)
+                Container(
+                  width: 130.0,
+                  height: 130.0,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: colors.primary.withValues(alpha: 0.2),
                     border: Border.all(
                       color: Colors.black,
-                      width: 5.0,
+                      width: 6.0,
                     ),
                   ),
                   clipBehavior: Clip.antiAlias,
@@ -132,27 +179,19 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> {
                         )
                       : _buildDefaultCenter(colors),
                 ),
-              ),
 
-              // Spindle Hole
-              Container(
-                width: 12.0,
-                height: 12.0,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.black,
+                // Spindle Hole
+                Container(
+                  width: 10.0,
+                  height: 10.0,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black,
+                  ),
                 ),
-              ),
-            ],
-          )
-              .animate(
-                target: isPlaying ? 1.0 : 0.0,
-                onPlay: (animController) => animController.repeat(),
-              )
-              .rotate(
-                duration: const Duration(seconds: 12),
-                curve: Curves.linear,
-              ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -174,23 +213,12 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> {
             style: context.daTypography.caption.copyWith(
               color: colors.primary,
               fontWeight: FontWeight.w900,
-              fontSize: 11.0,
+              fontSize: 10.0,
               letterSpacing: 1.5,
             ),
           ),
         ],
       ),
     );
-  }
-}
-
-class _VinylCenterLabel extends StatelessWidget {
-  final Widget child;
-
-  const _VinylCenterLabel({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return child;
   }
 }
