@@ -14,7 +14,8 @@ class TonearmWidget extends ConsumerStatefulWidget {
 
 class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   double? _dragAngle;
-  bool _dragLocked = false;
+  double? _pausedAngleOverride;
+  bool _isDragging = false;
 
   void _handleDrag(Offset localPos) {
     final currentSong = ref.read(currentSongProvider);
@@ -30,76 +31,53 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     // Calculate angle in radians
     double draggedAngle = atan2(dx, dy);
 
-    // Clamp to valid physical travel limit (0 to 45 degrees)
-    draggedAngle = draggedAngle.clamp(0.0 * (pi / 180.0), 45.0 * (pi / 180.0));
+    // Clamp to valid physical travel limits (2 to 35 degrees)
+    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 35.0 * (pi / 180.0));
+
+    setState(() {
+      _isDragging = true;
+      _dragAngle = draggedAngle;
+    });
 
     const double startAngle = 24.0 * (pi / 180.0);
-    const double endAngle = 35.0 * (pi / 180.0);
-    const double pausedAngle = 21.0 * (pi / 180.0);
-
     final controller = ref.read(playbackControllerProvider);
     final playbackState = ref.read(playbackStateProvider);
 
-    if (_dragLocked) {
-      // If locked in paused zone, only unlock if user drags back towards the record
-      if (draggedAngle > 22.5 * (pi / 180.0)) {
-        setState(() {
-          _dragLocked = false;
-          _dragAngle = draggedAngle;
-        });
-      }
-      return;
-    }
-
-    if (draggedAngle < startAngle) {
-      // Stylus leaves the record -> Pause immediately and lock to PAUSED position
-      setState(() {
-        _dragAngle = pausedAngle;
-        _dragLocked = true;
-      });
-      if (playbackState.status == PlaybackStatus.playing) {
-        controller.pause();
-      }
-    } else {
-      // Dragging inside the playable grooves
-      final double clampedAngle = draggedAngle.clamp(startAngle, endAngle);
-      setState(() {
-        _dragAngle = clampedAngle;
-      });
-
-      // Synchronize with playback position continuously
-      final double progress = (clampedAngle - startAngle) / (endAngle - startAngle);
-      final duration = currentSong.duration;
-      if (duration.inMilliseconds > 0) {
-        controller.seek(Duration(milliseconds: (progress * duration.inMilliseconds).toInt()));
-      }
-
-      // Automatically resume playback when entering groove area
+    if (draggedAngle >= startAngle) {
+      // ZONE B: Stylus is above playable grooves -> Resume Playback
+      _pausedAngleOverride = null;
       if (playbackState.status == PlaybackStatus.paused) {
         controller.play();
+      }
+    } else {
+      // ZONE A: Stylus is dragged away from grooves -> Pause Playback immediately
+      _pausedAngleOverride = draggedAngle;
+      if (playbackState.status == PlaybackStatus.playing) {
+        controller.pause();
       }
     }
   }
 
   void _endDrag() {
-    if (_dragAngle == null && !_dragLocked) return;
+    if (!_isDragging) return;
 
     const double startAngle = 24.0 * (pi / 180.0);
-    const double endAngle = 35.0 * (pi / 180.0);
-    final double finalAngle = _dragAngle ?? (21.0 * (pi / 180.0));
+    final double finalAngle = _dragAngle ?? (2.0 * (pi / 180.0));
+
+    setState(() {
+      _isDragging = false;
+      _dragAngle = null;
+    });
 
     final controller = ref.read(playbackControllerProvider);
 
-    setState(() {
-      _dragAngle = null;
-      _dragLocked = false;
-    });
-
-    if (finalAngle >= startAngle && finalAngle <= endAngle) {
-      // Released on record -> Resume playback
+    if (finalAngle >= startAngle) {
+      // Released inside groove area -> play and let progress guide it
+      _pausedAngleOverride = null;
       controller.play();
     } else {
-      // Released off record -> Pause and snap to PAUSED position
+      // Released off record -> Stay paused at the current released angle (Do NOT snap back)
+      _pausedAngleOverride = finalAngle;
       controller.pause();
     }
   }
@@ -123,24 +101,29 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     double targetAngle;
     double targetLift;
 
-    if (_dragAngle != null || _dragLocked) {
-      // Interactive dragging state
-      targetAngle = _dragAngle ?? (21.0 * (pi / 180.0));
-      targetLift = 0.8; // Hovering lift height
+    if (_isDragging && _dragAngle != null) {
+      // User is actively dragging: follows finger and lifts off vinyl
+      targetAngle = _dragAngle!;
+      targetLift = 1.0; // Lifted off the record
     } else if (isPlaying) {
-      // Playback active -> follow progress strictly within grooves
+      // Playing: moves slowly across grooves strictly based on playback progress
       targetAngle = (24.0 + progress * 11.0) * (pi / 180.0);
-      targetLift = 0.0; // Touch down on groove
+      targetLift = 0.0; // Lands gently on the record
     } else if (isPaused) {
-      // Paused -> hover slightly lifted at the paused/current progress position
-      final double currentProgressAngle = 24.0 + progress * 11.0;
-      // Rotates slightly back (e.g. 3 degrees) and hovers
-      targetAngle = (currentProgressAngle - 3.0).clamp(21.0, 35.0) * (pi / 180.0);
-      targetLift = 0.75; // Raised slightly off record
+      // Paused: Lifted off record
+      targetLift = 1.0;
+      if (_pausedAngleOverride != null) {
+        // Keeps the tonearm exactly where the user released it
+        targetAngle = _pausedAngleOverride!;
+      } else {
+        // Paused via UI button: lifts and parks slightly back from current position
+        final double currentProgressAngle = 24.0 + progress * 11.0;
+        targetAngle = (currentProgressAngle - 3.0).clamp(2.0, 35.0) * (pi / 180.0);
+      }
     } else {
-      // Stopped / rest holder
+      // Stopped / Idle: fully raised on rest holder
       targetAngle = 2.0 * (pi / 180.0);
-      targetLift = 1.0; // Fully raised
+      targetLift = 1.0;
     }
 
     return GestureDetector(
@@ -151,13 +134,11 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       onPanCancel: () => _endDrag(),
       child: Stack(
         children: [
-          // Smooth angle transition
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 2.0 * (pi / 180.0), end: targetAngle),
-            duration: Duration(milliseconds: (_dragAngle != null && !_dragLocked) ? 40 : (isPlaying ? 800 : 1000)),
-            curve: (_dragAngle != null && !_dragLocked) ? Curves.linear : Curves.easeInOutCubic,
+            duration: Duration(milliseconds: _isDragging ? 40 : (isPlaying ? 800 : 1000)),
+            curve: _isDragging ? Curves.linear : Curves.easeInOutCubic,
             builder: (context, angle, child) {
-              // Smooth lift transition
               return TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 1.0, end: targetLift),
                 duration: const Duration(milliseconds: 400),
@@ -197,7 +178,6 @@ class _TonearmPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Fixed Pivot Center Point (Never moves)
     const double pivotX = 380.0;
     const double pivotY = 90.0;
 
