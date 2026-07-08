@@ -136,13 +136,13 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         children: [
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 2.0 * (pi / 180.0), end: targetAngle),
-            duration: Duration(milliseconds: _isDragging ? 40 : (isPlaying ? 800 : 1000)),
-            curve: _isDragging ? Curves.linear : Curves.easeInOutCubic,
+            duration: Duration(milliseconds: _isDragging ? 40 : 200),
+            curve: _isDragging ? Curves.linear : Curves.easeOut,
             builder: (context, angle, child) {
               return TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 1.0, end: targetLift),
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeInOut,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
                 builder: (context, lift, child) {
                   return CustomPaint(
                     size: const Size(460.0, 380.0),
