@@ -1,0 +1,679 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../app/theme/theme.dart';
+import '../../../app/theme/tokens.dart';
+import '../../../core/services/logger_service.dart';
+import '../../../core/services/search_service.dart';
+import '../../../domain/entities/album.dart';
+import '../../../domain/entities/artist.dart';
+import '../../../domain/entities/playlist.dart';
+import '../../../domain/entities/search_result.dart';
+import '../../../domain/entities/song.dart';
+import '../../../shared/providers/backend_providers.dart';
+import '../../../shared/providers/player_providers.dart';
+import '../../../shared/models/music_models.dart' as shared;
+import '../../../shared/widgets/da_empty_state.dart';
+import '../../../shared/utils/artist_navigation.dart';
+import '../../../shared/utils/song_options.dart';
+
+class SearchPageState {
+  final String query;
+  final bool isLoading;
+  final SearchResult? result;
+  final String? error;
+
+  const SearchPageState({
+    required this.query,
+    required this.isLoading,
+    this.result,
+    this.error,
+  });
+
+  SearchPageState copyWith({
+    String? query,
+    bool? isLoading,
+    SearchResult? result,
+    String? error,
+  }) {
+    return SearchPageState(
+      query: query ?? this.query,
+      isLoading: isLoading ?? this.isLoading,
+      result: result ?? this.result,
+      error: error ?? this.error,
+    );
+  }
+}
+
+class SearchPageNotifier extends StateNotifier<SearchPageState> {
+  final SearchService _searchService;
+  Timer? _debounceTimer;
+
+  SearchPageNotifier(this._searchService)
+      : super(const SearchPageState(query: '', isLoading: false));
+
+  void onQueryChanged(String query) {
+    if (state.query == query) return;
+
+    _debounceTimer?.cancel();
+
+    if (query.trim().isEmpty) {
+      state = SearchPageState(query: query, isLoading: false, result: null);
+      return;
+    }
+
+    state = state.copyWith(query: query, isLoading: true, error: null);
+
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _performSearch(query);
+    });
+  }
+
+  Future<void> _performSearch(String query) async {
+    final currentQuery = query;
+    DALogger.info('SearchPage: Search Started for query "$query"');
+
+    try {
+      final results = await _searchService.search(query);
+
+      if (state.query != currentQuery) {
+        DALogger.info('SearchPage: Search Cancelled for query "$query"');
+        return;
+      }
+
+      final totalCount = results.songs.length +
+          results.albums.length +
+          results.artists.length +
+          results.playlists.length;
+
+      DALogger.info('SearchPage: Search Finished for query "$query". Results count: $totalCount');
+      state = state.copyWith(isLoading: false, result: results);
+    } catch (e, stack) {
+      if (state.query != currentQuery) return;
+      DALogger.error('SearchPage: Search Failed for query "$query"', e, stack);
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  void clear() {
+    _debounceTimer?.cancel();
+    state = const SearchPageState(query: '', isLoading: false, result: null);
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+}
+
+final searchPageProvider =
+    StateNotifierProvider<SearchPageNotifier, SearchPageState>((ref) {
+  return SearchPageNotifier(ref.watch(searchServiceProvider));
+});
+
+class SearchPage extends ConsumerStatefulWidget {
+  final String initialQuery;
+  const SearchPage({super.key, this.initialQuery = ''});
+
+  @override
+  ConsumerState<SearchPage> createState() => _SearchPageState();
+}
+
+class _SearchPageState extends ConsumerState<SearchPage> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialQuery);
+    if (widget.initialQuery.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(searchPageProvider.notifier).onQueryChanged(widget.initialQuery);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).extension<DAThemeExtension>() ?? DAThemeExtension.dark;
+    final state = ref.watch(searchPageProvider);
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(DATokens.spacingMedium),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Search Input Box
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.surfaceCard,
+                  borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+                  border: Border.all(color: theme.border, width: 1.0),
+                ),
+                child: TextField(
+                  controller: _controller,
+                  onChanged: (val) => ref.read(searchPageProvider.notifier).onQueryChanged(val),
+                  style: theme.typography.body.copyWith(color: theme.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Search songs, artists, or albums...',
+                    hintStyle: theme.typography.body.copyWith(color: theme.textSecondary),
+                    prefixIcon: Icon(Icons.search_outlined, color: theme.textSecondary),
+                    suffixIcon: _controller.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear_outlined, color: theme.textSecondary),
+                            onPressed: () {
+                              _controller.clear();
+                              ref.read(searchPageProvider.notifier).clear();
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: DATokens.spacingMedium,
+                      vertical: DATokens.spacingMedium,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: DATokens.spacingMedium),
+
+              // Search Body State transitions
+              Expanded(
+                child: _buildSearchBody(context, state, theme),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBody(BuildContext context, SearchPageState state, DAThemeExtension theme) {
+    if (state.isLoading) {
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(theme.primary),
+        ),
+      );
+    }
+
+    if (state.error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_outlined, color: Colors.redAccent, size: DATokens.iconXLarge),
+            const SizedBox(height: DATokens.spacingMedium),
+            Text(
+              'Search Failed',
+              style: theme.typography.title.copyWith(color: theme.textPrimary),
+            ),
+            const SizedBox(height: DATokens.spacingTiny),
+            Text(
+              state.error!,
+              style: theme.typography.body.copyWith(color: theme.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (state.query.trim().isEmpty) {
+      return const Center(
+        child: DAEmptyState(
+          icon: Icons.search_outlined,
+          title: 'Search',
+          description: 'Search for songs, artists, or albums.',
+        ),
+      );
+    }
+
+    final result = state.result;
+    if (result == null ||
+        (result.songs.isEmpty &&
+            result.albums.isEmpty &&
+            result.artists.isEmpty &&
+            result.playlists.isEmpty)) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_outlined, color: theme.textSecondary, size: DATokens.iconXLarge),
+            const SizedBox(height: DATokens.spacingMedium),
+            Text(
+              'No results found.',
+              style: theme.typography.title.copyWith(color: theme.textPrimary),
+            ),
+            const SizedBox(height: DATokens.spacingTiny),
+            Text(
+              'Try searching with different terms or check spelling.',
+              style: theme.typography.body.copyWith(color: theme.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      children: [
+        // Top Result Section
+        if (result.topResult != null) ...[
+          _buildTopResultSection(result.topResult, theme),
+          const SizedBox(height: DATokens.spacingLarge),
+        ],
+
+        // Songs Section
+        if (result.songs.isNotEmpty) ...[
+          _buildSectionHeader('Songs', theme),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: result.songs.length,
+            itemBuilder: (context, idx) {
+              return _buildSongItem(result.songs, idx, theme);
+            },
+          ),
+          const SizedBox(height: DATokens.spacingLarge),
+        ],
+
+        // Artists Section
+        if (result.artists.isNotEmpty) ...[
+          _buildSectionHeader('Artists', theme),
+          SizedBox(
+            height: 120,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: result.artists.length,
+              itemBuilder: (context, idx) {
+                final artist = result.artists[idx];
+                return _buildArtistItem(artist, theme);
+              },
+            ),
+          ),
+          const SizedBox(height: DATokens.spacingLarge),
+        ],
+
+        // Albums Section
+        if (result.albums.isNotEmpty) ...[
+          _buildSectionHeader('Albums', theme),
+          SizedBox(
+            height: 180,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: result.albums.length,
+              itemBuilder: (context, idx) {
+                final album = result.albums[idx];
+                return _buildAlbumItem(album, theme);
+              },
+            ),
+          ),
+          const SizedBox(height: DATokens.spacingLarge),
+        ],
+
+        // Playlists Section
+        if (result.playlists.isNotEmpty) ...[
+          _buildSectionHeader('Playlists', theme),
+          SizedBox(
+            height: 180,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: result.playlists.length,
+              itemBuilder: (context, idx) {
+                final playlist = result.playlists[idx];
+                return _buildPlaylistItem(playlist, theme);
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title, DAThemeExtension theme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: DATokens.spacingSmall),
+      child: Text(
+        title,
+        style: theme.typography.headline.copyWith(
+          fontSize: 18.0,
+          color: theme.textPrimary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopResultSection(dynamic top, DAThemeExtension theme) {
+    if (top is Song) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Top Result', theme),
+          InkWell(
+            onTap: () {
+              debugPrint('Tapped Song ID: ${top.id}, Title: ${top.title}');
+              final allSearchSongs = <Song>[top];
+              final searchSongs = ref.read(searchPageProvider).result?.songs ?? [];
+              for (final s in searchSongs) {
+                if (s.id != top.id) {
+                  allSearchSongs.add(s);
+                }
+              }
+              final modelSongs = allSearchSongs.map((s) => shared.Song(
+                id: s.id,
+                title: s.title,
+                artist: s.artistId,
+                album: s.albumId,
+                duration: s.duration.value,
+                artworkUrl: s.artwork.url,
+                source: s.sourceId,
+                lyrics: null,
+              )).toList();
+              ref.read(playbackControllerProvider).setQueue(modelSongs, startIndex: 0, autoPlay: true);
+            },
+            borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+            child: Container(
+              padding: const EdgeInsets.all(DATokens.spacingMedium),
+              decoration: BoxDecoration(
+                color: theme.surfaceCard,
+                borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+                border: Border.all(color: theme.border, width: 1.0),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                    child: Image.network(
+                      top.artwork.url,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, st) => Container(
+                        width: 80,
+                        height: 80,
+                        color: theme.surfaceHover,
+                        child: Icon(Icons.music_note_outlined, color: theme.textSecondary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: DATokens.spacingMedium),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          top.title,
+                          style: theme.typography.title.copyWith(fontSize: 18.0),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: DATokens.spacingTiny),
+                        GestureDetector(
+                          onTap: () => navigateToArtistByName(context, ref, top.artistId),
+                          child: Text(
+                            'Song • ${top.artistId}',
+                            style: theme.typography.body.copyWith(
+                              color: theme.textSecondary,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.more_vert, color: theme.textSecondary),
+                    onPressed: () {
+                      final modelSong = shared.Song(
+                        id: top.id,
+                        title: top.title,
+                        artist: top.artistId,
+                        album: top.albumId,
+                        duration: top.duration.value,
+                        artworkUrl: top.artwork.url,
+                        source: top.sourceId,
+                        lyrics: null,
+                      );
+                      showSongOptionsMenu(context, ref, modelSong);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildSongItem(List<Song> allSongs, int index, DAThemeExtension theme) {
+    final song = allSongs[index];
+    return ListTile(
+      onTap: () {
+        debugPrint('Tapped Song ID: ${song.id}, Title: ${song.title}');
+        final modelSongs = allSongs.map((s) => shared.Song(
+          id: s.id,
+          title: s.title,
+          artist: s.artistId,
+          album: s.albumId,
+          duration: s.duration.value,
+          artworkUrl: s.artwork.url,
+          source: s.sourceId,
+          lyrics: null,
+        )).toList();
+        ref.read(playbackControllerProvider).setQueue(modelSongs, startIndex: index, autoPlay: true);
+      },
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+        child: Image.network(
+          song.thumbnail.url,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          errorBuilder: (ctx, err, st) => Container(
+            width: 48,
+            height: 48,
+            color: theme.surfaceHover,
+            child: Icon(Icons.music_note_outlined, color: theme.textSecondary),
+          ),
+        ),
+      ),
+      title: Text(
+        song.title,
+        style: theme.typography.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () => navigateToArtistByName(context, ref, song.artistId),
+            child: Text(
+              song.artistId,
+              style: theme.typography.body.copyWith(
+                color: theme.textSecondary,
+                decoration: TextDecoration.underline,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _formatDuration(song.duration.value),
+            style: theme.typography.caption,
+          ),
+          const SizedBox(width: DATokens.spacingSmall),
+          IconButton(
+            icon: Icon(Icons.more_vert, color: theme.textSecondary),
+            onPressed: () {
+              final modelSong = shared.Song(
+                id: song.id,
+                title: song.title,
+                artist: song.artistId,
+                album: song.albumId,
+                duration: song.duration.value,
+                artworkUrl: song.artwork.url,
+                source: song.sourceId,
+                lyrics: null,
+              );
+              showSongOptionsMenu(context, ref, modelSong);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildArtistItem(Artist artist, DAThemeExtension theme) {
+    return InkWell(
+      onTap: () => context.push('/artist/${artist.id}'),
+      borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+      child: Container(
+        width: 100,
+        margin: const EdgeInsets.only(right: DATokens.spacingMedium),
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 36,
+              backgroundColor: theme.surfaceHover,
+              backgroundImage: NetworkImage(artist.image.url),
+              onBackgroundImageError: (ctx, err) {},
+            ),
+            const SizedBox(height: DATokens.spacingSmall),
+            Text(
+              artist.name,
+              style: theme.typography.caption.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlbumItem(Album album, DAThemeExtension theme) {
+    return InkWell(
+      onTap: () => context.push('/album/${album.id}'),
+      borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+      child: Container(
+        width: 120,
+        margin: const EdgeInsets.only(right: DATokens.spacingMedium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+              child: Image.network(
+                album.cover.url,
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+                errorBuilder: (ctx, err, st) => Container(
+                  width: 120,
+                  height: 120,
+                  color: theme.surfaceHover,
+                  child: Icon(Icons.album_outlined, color: theme.textSecondary),
+                ),
+              ),
+            ),
+            const SizedBox(height: DATokens.spacingSmall),
+            Text(
+              album.title,
+              style: theme.typography.caption.copyWith(fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            GestureDetector(
+              onTap: () => navigateToArtistByName(context, ref, album.artistId),
+              child: Text(
+                album.artistId,
+                style: theme.typography.caption.copyWith(
+                  color: theme.textSecondary,
+                  decoration: TextDecoration.underline,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaylistItem(Playlist playlist, DAThemeExtension theme) {
+    return InkWell(
+      onTap: () => context.push('/album/${playlist.id}'),
+      borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+      child: Container(
+        width: 120,
+        margin: const EdgeInsets.only(right: DATokens.spacingMedium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+              child: Image.network(
+                playlist.cover.url,
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+                errorBuilder: (ctx, err, st) => Container(
+                  width: 120,
+                  height: 120,
+                  color: theme.surfaceHover,
+                  child: Icon(Icons.playlist_play_outlined, color: theme.textSecondary),
+                ),
+              ),
+            ),
+            const SizedBox(height: DATokens.spacingSmall),
+            Text(
+              playlist.title,
+              style: theme.typography.caption.copyWith(fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              'By ${playlist.owner}',
+              style: theme.typography.caption.copyWith(color: theme.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
