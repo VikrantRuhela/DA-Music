@@ -16,6 +16,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   double? _dragAngle;
   double? _pausedAngleOverride;
   bool _isDragging = false;
+  String? _lastSongId;
 
   void _handleDrag(Offset localPos) {
     final currentSong = ref.read(currentSongProvider);
@@ -95,6 +96,14 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
         : 0.0;
 
+    final String? songId = currentSong?.id;
+
+    // Reset override state instantly when a new song starts
+    if (songId != _lastSongId) {
+      _lastSongId = songId;
+      _pausedAngleOverride = null;
+    }
+
     final isPlaying = currentSong != null && playbackState.status == PlaybackStatus.playing;
     final isPaused = currentSong != null && playbackState.status == PlaybackStatus.paused;
 
@@ -116,9 +125,8 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         // Keeps the tonearm exactly where the user released it
         targetAngle = _pausedAngleOverride!;
       } else {
-        // Paused via UI button: lifts and parks slightly back from current position
-        final double currentProgressAngle = 24.0 + progress * 11.0;
-        targetAngle = (currentProgressAngle - 3.0).clamp(2.0, 35.0) * (pi / 180.0);
+        // Paused via UI button: returns completely to the predefined parked position beside the vinyl
+        targetAngle = 21.0 * (pi / 180.0);
       }
     } else {
       // Stopped / Idle: fully raised on rest holder
@@ -133,9 +141,10 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       onPanEnd: (_) => _endDrag(),
       onPanCancel: () => _endDrag(),
       child: Stack(
+        key: ValueKey(songId), // Reset stack state and key animations on track change
         children: [
           TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 2.0 * (pi / 180.0), end: targetAngle),
+            tween: Tween<double>(begin: isPlaying ? 24.0 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
             duration: Duration(milliseconds: _isDragging ? 40 : 200),
             curve: _isDragging ? Curves.linear : Curves.easeOut,
             builder: (context, angle, child) {
