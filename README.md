@@ -2,14 +2,6 @@
 
 A premium,  audio player application built with Flutter and Riverpod. Featuring beautiful design elements (vibrant fluid dark theme colors, seamless layouts) and a fully pluggable, decoupled music source and playback architecture.
 
-## Core Highlights
-
-- 🖥️ **Responsive Three-Panel App Shell**: Seamless fluid transition between Desktop, Tablet, and Mobile viewports without layout jank.
-- 💿 **Signature Fullscreen Vinyl Player**: Morphing shared-element transitions that scale artwork and center rotating vinyl disc grooves.
-- 🎛️ **Decoupled Playback Engine**: Centralized event-driven controller coordinating volume, mute, repeat, shuffle, and queues..
-- 🏃‍♂️ **Premium Motion Tokens**: Fully integrated animation durations, curves, and accessibility scaling handlers (Reduced Motion, Disabled Motion).
-- 📦 **Windows Integration**: Frameless window client decorations, layout position persistence, and custom title bars.
-- 
 # THIS IS NOT A FINAL VERSION OF DA MUSIC I'LL DRAFT A RELEASE WHEN THE PROJECT GETS COMPLETED
 
 ## Getting Started
