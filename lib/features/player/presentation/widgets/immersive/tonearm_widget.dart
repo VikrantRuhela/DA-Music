@@ -14,6 +14,7 @@ class TonearmWidget extends ConsumerStatefulWidget {
 
 class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   double? _dragAngle;
+  bool _dragLocked = false;
 
   void _handleDrag(Offset localPos) {
     final currentSong = ref.read(currentSongProvider);
@@ -29,52 +30,76 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     // Calculate angle in radians
     double draggedAngle = atan2(dx, dy);
 
-    // Clamp to realistic bounds (0 to 45 degrees)
+    // Clamp to valid physical travel limit (0 to 45 degrees)
     draggedAngle = draggedAngle.clamp(0.0 * (pi / 180.0), 45.0 * (pi / 180.0));
-
-    setState(() {
-      _dragAngle = draggedAngle;
-    });
 
     const double startAngle = 24.0 * (pi / 180.0);
     const double endAngle = 35.0 * (pi / 180.0);
+    const double pausedAngle = 21.0 * (pi / 180.0);
 
     final controller = ref.read(playbackControllerProvider);
+    final playbackState = ref.read(playbackStateProvider);
 
-    if (draggedAngle >= startAngle && draggedAngle <= endAngle) {
-      // Dragging inside playable grooves -> Seek to corresponding progress
-      final double progress = (draggedAngle - startAngle) / (endAngle - startAngle);
+    if (_dragLocked) {
+      // If locked in paused zone, only unlock if user drags back towards the record
+      if (draggedAngle > 22.5 * (pi / 180.0)) {
+        setState(() {
+          _dragLocked = false;
+          _dragAngle = draggedAngle;
+        });
+      }
+      return;
+    }
+
+    if (draggedAngle < startAngle) {
+      // Stylus leaves the record -> Pause immediately and lock to PAUSED position
+      setState(() {
+        _dragAngle = pausedAngle;
+        _dragLocked = true;
+      });
+      if (playbackState.status == PlaybackStatus.playing) {
+        controller.pause();
+      }
+    } else {
+      // Dragging inside the playable grooves
+      final double clampedAngle = draggedAngle.clamp(startAngle, endAngle);
+      setState(() {
+        _dragAngle = clampedAngle;
+      });
+
+      // Synchronize with playback position continuously
+      final double progress = (clampedAngle - startAngle) / (endAngle - startAngle);
       final duration = currentSong.duration;
       if (duration.inMilliseconds > 0) {
         controller.seek(Duration(milliseconds: (progress * duration.inMilliseconds).toInt()));
       }
-    } else if (draggedAngle < startAngle - 2.0 * (pi / 180.0)) {
-      // Dragging off the record -> Pause immediately
-      final playbackState = ref.read(playbackStateProvider);
-      if (playbackState.status == PlaybackStatus.playing) {
-        controller.pause();
+
+      // Automatically resume playback when entering groove area
+      if (playbackState.status == PlaybackStatus.paused) {
+        controller.play();
       }
     }
   }
 
   void _endDrag() {
-    if (_dragAngle == null) return;
+    if (_dragAngle == null && !_dragLocked) return;
 
     const double startAngle = 24.0 * (pi / 180.0);
     const double endAngle = 35.0 * (pi / 180.0);
+    final double finalAngle = _dragAngle ?? (21.0 * (pi / 180.0));
 
-    final double finalAngle = _dragAngle!;
     final controller = ref.read(playbackControllerProvider);
 
     setState(() {
       _dragAngle = null;
+      _dragLocked = false;
     });
 
     if (finalAngle >= startAngle && finalAngle <= endAngle) {
-      // Released inside playable grooves -> Resume play
+      // Released on record -> Resume playback
       controller.play();
     } else {
-      // Released off record -> Remain paused
+      // Released off record -> Pause and snap to PAUSED position
       controller.pause();
     }
   }
@@ -98,21 +123,22 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     double targetAngle;
     double targetLift;
 
-    if (_dragAngle != null) {
-      // Currently being dragged by the user
-      targetAngle = _dragAngle!;
-      targetLift = 0.8; // Raised slightly while dragging
+    if (_dragAngle != null || _dragLocked) {
+      // Interactive dragging state
+      targetAngle = _dragAngle ?? (21.0 * (pi / 180.0));
+      targetLift = 0.8; // Hovering lift height
     } else if (isPlaying) {
-      // Playing: stylus on record moving from 24 to 35 degrees
+      // Playback active -> follow progress strictly within grooves
       targetAngle = (24.0 + progress * 11.0) * (pi / 180.0);
-      targetLift = 0.0; // Fully lowered onto groove
+      targetLift = 0.0; // Touch down on groove
     } else if (isPaused) {
-      // Paused: Lift slightly and hover slightly back
-      final double progressAngle = (24.0 + progress * 11.0);
-      targetAngle = (progressAngle - 3.0).clamp(2.0, 35.0) * (pi / 180.0);
-      targetLift = 0.75; // Hovering just above record
+      // Paused -> hover slightly lifted at the paused/current progress position
+      final double currentProgressAngle = 24.0 + progress * 11.0;
+      // Rotates slightly back (e.g. 3 degrees) and hovers
+      targetAngle = (currentProgressAngle - 3.0).clamp(21.0, 35.0) * (pi / 180.0);
+      targetLift = 0.75; // Raised slightly off record
     } else {
-      // Stopped / Idle: On rest holder
+      // Stopped / rest holder
       targetAngle = 2.0 * (pi / 180.0);
       targetLift = 1.0; // Fully raised
     }
@@ -125,13 +151,13 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       onPanCancel: () => _endDrag(),
       child: Stack(
         children: [
-          // Smooth rotation physics angle transition
+          // Smooth angle transition
           TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 2.0 * (pi / 180.0), end: targetAngle),
-            duration: Duration(milliseconds: _dragAngle != null ? 50 : (isPlaying ? 800 : 1000)),
-            curve: _dragAngle != null ? Curves.linear : Curves.easeInOutCubic,
+            duration: Duration(milliseconds: (_dragAngle != null && !_dragLocked) ? 40 : (isPlaying ? 800 : 1000)),
+            curve: (_dragAngle != null && !_dragLocked) ? Curves.linear : Curves.easeInOutCubic,
             builder: (context, angle, child) {
-              // Smooth lift transitions
+              // Smooth lift transition
               return TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 1.0, end: targetLift),
                 duration: const Duration(milliseconds: 400),
@@ -171,7 +197,7 @@ class _TonearmPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Fixed Pivot Base Center point (outside the record circle)
+    // Fixed Pivot Center Point (Never moves)
     const double pivotX = 380.0;
     const double pivotY = 90.0;
 
@@ -181,7 +207,7 @@ class _TonearmPainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
     canvas.drawCircle(const Offset(pivotX, pivotY + 4.0), 22.0, shadowPaint);
 
-    // 2. Draw Pivot Base circular housing (metallic rings)
+    // 2. Draw Pivot Base (metallic rings)
     final Paint basePaint = Paint()
       ..shader = RadialGradient(
         colors: [
@@ -203,23 +229,22 @@ class _TonearmPainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: const Offset(pivotX, pivotY), radius: 12.0));
     canvas.drawCircle(const Offset(pivotX, pivotY), 12.0, innerBasePaint);
 
-    // 3. Draw Tonearm Body (rotates around fixed pivot)
+    // 3. Draw Tonearm Body (rotates around pivot)
     canvas.save();
     canvas.translate(pivotX, pivotY);
     canvas.rotate(angle);
 
-    // Lift scale & offset for 3D raised height effect
-    final double armScale = 1.0 + 0.035 * lift;
-    final double shadowOffset = 4.0 + 8.0 * lift;
-    final double shadowBlur = 5.0 + 7.0 * lift;
-    canvas.scale(armScale);
+    // Shadow offset and blur scale dynamically with lift to represent 3D height,
+    // but the rigid arm itself is NEVER scaled/stretched (Rule 1 & 7).
+    final double shadowOffset = 3.5 + 8.5 * lift;
+    final double shadowBlur = 4.0 + 8.0 * lift;
 
-    // Rigid S-arm length = 230px. S-arm tube: starts at (0, 0), curves down-left, ends at (X=-80, Y=215)
+    // Rigid S-arm length = 230px. starts at (0, 0), curves down-left, ends at (X=-80, Y=215)
     final Path armPath = Path()
       ..moveTo(0, 0)
       ..cubicTo(0, 75, -55, 110, -80, 215);
 
-    // Draw Tonearm Shadow (rotates & translates dynamically with lift height)
+    // Draw Tonearm Shadow (only shadow translates with lift)
     final Paint armShadowPaint = Paint()
       ..color = Colors.black.withValues(alpha: 0.22)
       ..style = PaintingStyle.stroke
@@ -236,7 +261,7 @@ class _TonearmPainter extends CustomPainter {
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowBlur));
     canvas.restore();
 
-    // Draw Silver Metallic Tonearm Tube
+    // Draw Silver Metallic Rigid Tonearm Tube (Strict constant length and geometry)
     final Paint tubePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.5
@@ -260,7 +285,7 @@ class _TonearmPainter extends CustomPainter {
       ..color = Colors.white.withValues(alpha: 0.45);
     canvas.drawPath(armPath, tubeHighlightPaint);
 
-    // 4. Counterweight (back stub, opposite side of pivot center)
+    // 4. Counterweight (back stub, opposite side of rotation)
     final Paint weightPaint = Paint()
       ..shader = LinearGradient(
         colors: [
@@ -272,7 +297,7 @@ class _TonearmPainter extends CustomPainter {
     canvas.drawRect(Rect.fromCenter(center: const Offset(0, -22), width: 10, height: 14), weightPaint);
     canvas.drawRect(Rect.fromCenter(center: const Offset(0, -28), width: 14, height: 5), Paint()..color = Colors.black);
 
-    // 5. Headshell / Cartridge & Needle Stylus (at the end of tube: -80, 215)
+    // 5. Headshell / Cartridge & Stylus (at the end of tube: -80, 215)
     canvas.save();
     canvas.translate(-80, 215);
     canvas.rotate(-angle * 0.32); // Angled headshell offset
@@ -286,7 +311,6 @@ class _TonearmPainter extends CustomPainter {
         ],
       ).createShader(const Rect.fromLTWH(-7, 0, 14, 34));
     
-    // Draw Cartridge / Headshell
     canvas.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(-7, 0, 14, 32), const Radius.circular(2.0)), headshellPaint);
 
     // Finger Lift (metallic pin on the right)
@@ -297,7 +321,7 @@ class _TonearmPainter extends CustomPainter {
     canvas.drawLine(const Offset(7, 8), const Offset(13, 10), fingerLiftPaint);
     canvas.drawLine(const Offset(13, 10), const Offset(14, 7), fingerLiftPaint);
 
-    // Cartridge Brand Accent / Stylus (only this touches the record!)
+    // Cartridge Brand Accent / Stylus (only the needle tip touches the record)
     canvas.drawRect(const Rect.fromLTWH(-5, 23, 10, 5), Paint()..color = primaryColor);
 
     // Stylus Needle point
