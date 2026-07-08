@@ -26,27 +26,12 @@ class ImmersivePlayer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentSong = ref.watch(currentSongProvider);
 
-    final Widget leftTurntableSide = Center(
+    const Widget leftTurntableSide = Center(
       child: FittedBox(
-        child: Container(
+        child: SizedBox(
           width: 460.0,
           height: 380.0,
-          decoration: BoxDecoration(
-            color: context.daColors.surfaceCard.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(DATokens.radiusLarge),
-            border: Border.all(
-              color: context.daColors.border.withValues(alpha: 0.2),
-              width: 1.0,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 16.0,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: const Stack(
+          child: Stack(
             children: [
               // Platter / Record (left side: center at X=180, Y=190)
               Positioned(
@@ -122,7 +107,7 @@ class ImmersivePlayer extends ConsumerWidget {
                       // Desktop/Landscape side-by-side view
                       return Row(
                         children: [
-                          Expanded(
+                          const Expanded(
                             flex: 11,
                             child: leftTurntableSide,
                           ),
