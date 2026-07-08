@@ -88,8 +88,8 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
         child: AnimatedContainer(
           duration: DATokens.durationFast,
           curve: DATokens.curveHover,
-          width: 360.0,
-          height: 360.0,
+          width: 320.0,
+          height: 320.0,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             boxShadow: glowShadow,
@@ -99,10 +99,10 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Outer Vinyl Plate with Radial Gradient (Reflections)
+                // Outer Vinyl Platter with Radial Gradient (Reflections)
                 Container(
-                  width: 360.0,
-                  height: 360.0,
+                  width: 320.0,
+                  height: 320.0,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.black,
@@ -124,7 +124,7 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
                 ),
 
                 // Vinyl Grooves Details
-                for (double d in [320.0, 300.0, 280.0, 260.0, 240.0, 220.0, 200.0, 180.0])
+                for (double d in [280.0, 260.0, 240.0, 220.0, 200.0, 180.0, 160.0, 140.0])
                   Container(
                     width: d,
                     height: d,
@@ -139,8 +139,8 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
 
                 // High-fidelity Gloss / Shine overlay (Semi-transparent conic reflection simulation)
                 Container(
-                  width: 360.0,
-                  height: 360.0,
+                  width: 320.0,
+                  height: 320.0,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: SweepGradient(
@@ -158,14 +158,14 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
 
                 // Center Record Label (Album Artwork)
                 Container(
-                  width: 130.0,
-                  height: 130.0,
+                  width: 110.0,
+                  height: 110.0,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: colors.primary.withValues(alpha: 0.2),
                     border: Border.all(
                       color: Colors.black,
-                      width: 6.0,
+                      width: 5.0,
                     ),
                   ),
                   clipBehavior: Clip.antiAlias,

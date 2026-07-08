@@ -29,21 +29,39 @@ class ImmersivePlayer extends ConsumerWidget {
     final Widget leftTurntableSide = Center(
       child: FittedBox(
         child: Container(
-          width: 420.0,
-          height: 420.0,
-          alignment: Alignment.center,
+          width: 460.0,
+          height: 380.0,
+          decoration: BoxDecoration(
+            color: context.daColors.surfaceCard.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+            border: Border.all(
+              color: context.daColors.border.withValues(alpha: 0.2),
+              width: 1.0,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 16.0,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
           child: const Stack(
-            alignment: Alignment.center,
             children: [
-              VinylWidget(),
+              // Platter / Record (left side: center at X=180, Y=190)
               Positioned(
-                top: 10,
-                right: 10,
+                left: 20,
+                top: 30,
                 child: SizedBox(
-                  width: 400.0,
-                  height: 400.0,
-                  child: TonearmWidget(),
+                  width: 320.0,
+                  height: 320.0,
+                  child: VinylWidget(),
                 ),
+              ),
+
+              // Tonearm assembly mounted on the right (pivot at X=380, Y=90)
+              Positioned.fill(
+                child: TonearmWidget(),
               ),
             ],
           ),

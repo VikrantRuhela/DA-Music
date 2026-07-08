@@ -30,31 +30,29 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         (playbackState.status == PlaybackStatus.playing ||
             playbackState.status == PlaybackStatus.paused);
 
-    // REST: -20 degrees, PLAY: 15 (start) to 38 (end) degrees
+    // REST: -4 degrees, PLAY: 22 (start) to 42 (end) degrees
     final double targetAngle = isPlayingOrPaused
-        ? (15.0 + progress * 23.0) * (pi / 180.0)
-        : -20.0 * (pi / 180.0);
+        ? (22.0 + progress * 20.0) * (pi / 180.0)
+        : -4.0 * (pi / 180.0);
 
-    // Animate the lift based on playing state (lift is higher when moving, down when landed)
+    // Lift goes from 0.0 (landed on record) to 1.0 (raised on holder)
     final double targetLift = isPlayingOrPaused ? 0.0 : 1.0;
 
     return IgnorePointer(
       child: Stack(
         children: [
-          // Arm Angle Sweep Animation
           TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: -20.0 * (pi / 180.0), end: targetAngle),
-            duration: Duration(milliseconds: isPlayingOrPaused ? 1000 : 1200),
+            tween: Tween<double>(begin: -4.0 * (pi / 180.0), end: targetAngle),
+            duration: Duration(milliseconds: isPlayingOrPaused ? 800 : 1000),
             curve: Curves.easeInOutCubic,
             builder: (context, angle, child) {
-              // Lift Animation
               return TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 1.0, end: targetLift),
-                duration: const Duration(milliseconds: 600),
+                duration: const Duration(milliseconds: 500),
                 curve: Curves.easeInOut,
                 builder: (context, lift, child) {
                   return CustomPaint(
-                    size: const Size(400.0, 400.0),
+                    size: const Size(460.0, 380.0),
                     painter: _TonearmPainter(
                       angle: angle,
                       lift: lift,
@@ -74,7 +72,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
 
 class _TonearmPainter extends CustomPainter {
   final double angle;
-  final double lift; // 0.0 (down on vinyl) to 1.0 (raised on holder)
+  final double lift;
   final Color primaryColor;
   final Color accentColor;
 
@@ -87,17 +85,17 @@ class _TonearmPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Pivot Base Center point (top-right of turntable area)
-    const double pivotX = 300.0;
-    const double pivotY = 70.0;
+    // Pivot Base Center point (completely outside the record circle)
+    const double pivotX = 380.0;
+    const double pivotY = 90.0;
 
     // 1. Draw Pivot Base Shadow (stationary)
     final Paint shadowPaint = Paint()
       ..color = Colors.black.withValues(alpha: 0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12.0);
-    canvas.drawCircle(const Offset(pivotX, pivotY + 4.0), 30.0, shadowPaint);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
+    canvas.drawCircle(const Offset(pivotX, pivotY + 4.0), 24.0, shadowPaint);
 
-    // 2. Draw Pivot Base (metallic rings)
+    // 2. Draw Pivot Base circular housing
     final Paint basePaint = Paint()
       ..shader = RadialGradient(
         colors: [
@@ -106,8 +104,8 @@ class _TonearmPainter extends CustomPainter {
           Colors.grey.shade800,
           Colors.grey.shade600,
         ],
-      ).createShader(Rect.fromCircle(center: const Offset(pivotX, pivotY), radius: 30.0));
-    canvas.drawCircle(const Offset(pivotX, pivotY), 30.0, basePaint);
+      ).createShader(Rect.fromCircle(center: const Offset(pivotX, pivotY), radius: 24.0));
+    canvas.drawCircle(const Offset(pivotX, pivotY), 24.0, basePaint);
 
     final Paint innerBasePaint = Paint()
       ..shader = LinearGradient(
@@ -116,48 +114,47 @@ class _TonearmPainter extends CustomPainter {
           Colors.grey.shade800,
           Colors.grey.shade500,
         ],
-      ).createShader(Rect.fromCircle(center: const Offset(pivotX, pivotY), radius: 18.0));
-    canvas.drawCircle(const Offset(pivotX, pivotY), 18.0, innerBasePaint);
+      ).createShader(Rect.fromCircle(center: const Offset(pivotX, pivotY), radius: 14.0));
+    canvas.drawCircle(const Offset(pivotX, pivotY), 14.0, innerBasePaint);
 
     // 3. Draw Tonearm Body (rotates around pivot)
     canvas.save();
     canvas.translate(pivotX, pivotY);
     canvas.rotate(angle);
 
-    // The scale & offset for 3D lifting effect
-    final double armScale = 1.0 + 0.04 * lift;
-    final double shadowOffset = 8.0 + 10.0 * lift;
-    final double shadowBlur = 10.0 + 8.0 * lift;
+    // Lift scale & offset for 3D raised height effect
+    final double armScale = 1.0 + 0.03 * lift;
+    final double shadowOffset = 6.0 + 8.0 * lift;
+    final double shadowBlur = 8.0 + 6.0 * lift;
     canvas.scale(armScale);
 
-    // Local coordinates for Tonearm tube path
-    // Tube starts at pivot (0, 0), curves down-left, ends at headshell (e.g. at -110, 240)
+    // Rigid arm length = 250px. Tube curves down-left, ends at headshell (e.g. at -93, 231 when straight, curved path maps relative)
+    // S-arm tube: starts at (0, 0), curves down-left, ends at (X=-93, Y=231)
     final Path armPath = Path()
       ..moveTo(0, 0)
-      ..cubicTo(0, 100, -80, 140, -110, 250);
+      ..cubicTo(0, 80, -60, 120, -93, 231);
 
-    // Draw Tonearm Shadow (rotates & translates with lift)
+    // Draw Tonearm Shadow (rotates & translates dynamically with lift height)
     final Paint armShadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.3)
+      ..color = Colors.black.withValues(alpha: 0.25)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 6.0
+      ..strokeWidth = 5.0
       ..strokeCap = StrokeCap.round
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowBlur);
     
-    // Shadow offset translation (down-right relative to arm)
     canvas.save();
     canvas.translate(shadowOffset * 0.7, shadowOffset);
     canvas.drawPath(armPath, armShadowPaint);
     // Draw counterweight shadow
-    canvas.drawRect(Rect.fromCenter(center: const Offset(0, -32), width: 18, height: 24), Paint()
-      ..color = Colors.black.withValues(alpha: 0.3)
+    canvas.drawRect(Rect.fromCenter(center: const Offset(0, -28), width: 14, height: 20), Paint()
+      ..color = Colors.black.withValues(alpha: 0.25)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, shadowBlur));
     canvas.restore();
 
     // Draw Silver Metallic Tonearm Tube
     final Paint tubePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 5.0
+      ..strokeWidth = 4.0
       ..strokeCap = StrokeCap.round
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
@@ -168,18 +165,17 @@ class _TonearmPainter extends CustomPainter {
           Colors.grey.shade600,
           Colors.grey.shade400,
         ],
-      ).createShader(const Rect.fromLTWH(-110, 0, 110, 250));
+      ).createShader(const Rect.fromLTWH(-93, 0, 93, 231));
     canvas.drawPath(armPath, tubePaint);
 
-    // Highlight inside tube for metallic sheen
     final Paint tubeHighlightPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
+      ..strokeWidth = 1.2
       ..strokeCap = StrokeCap.round
-      ..color = Colors.white.withValues(alpha: 0.6);
+      ..color = Colors.white.withValues(alpha: 0.5);
     canvas.drawPath(armPath, tubeHighlightPaint);
 
-    // 4. Counterweight (back stub, opposite side of rotation)
+    // 4. Counterweight (back stub, opposite side of pivot center)
     final Paint weightPaint = Paint()
       ..shader = LinearGradient(
         colors: [
@@ -187,15 +183,14 @@ class _TonearmPainter extends CustomPainter {
           Colors.grey.shade700,
           Colors.grey.shade900,
         ],
-      ).createShader(const Rect.fromLTWH(-9, -40, 18, 24));
-    canvas.drawRect(Rect.fromCenter(center: const Offset(0, -28), width: 16, height: 20), weightPaint);
-    // Weight ring
-    canvas.drawRect(Rect.fromCenter(center: const Offset(0, -35), width: 20, height: 8), Paint()..color = Colors.black);
+      ).createShader(const Rect.fromLTWH(-7, -35, 14, 20));
+    canvas.drawRect(Rect.fromCenter(center: const Offset(0, -25), width: 12, height: 16), weightPaint);
+    canvas.drawRect(Rect.fromCenter(center: const Offset(0, -32), width: 16, height: 6), Paint()..color = Colors.black);
 
-    // 5. Headshell / Cartridge (at the end of tube: -110, 250)
+    // 5. Headshell / Cartridge & Needle Stylus (at the end of tube: -93, 231)
     canvas.save();
-    canvas.translate(-110, 250);
-    canvas.rotate(-angle * 0.4); // Angled headshell offset
+    canvas.translate(-93, 231);
+    canvas.rotate(-angle * 0.35); // Angled headshell offset
 
     // Cartridge plate
     final Paint headshellPaint = Paint()
@@ -204,24 +199,24 @@ class _TonearmPainter extends CustomPainter {
           Colors.grey.shade800,
           Colors.black,
         ],
-      ).createShader(const Rect.fromLTWH(-10, 0, 20, 45));
+      ).createShader(const Rect.fromLTWH(-8, 0, 16, 38));
     
     // Draw Cartridge / Headshell
-    canvas.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(-9, 0, 18, 42), const Radius.circular(3.0)), headshellPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(-8, 0, 16, 36), const Radius.circular(2.5)), headshellPaint);
 
     // Finger Lift (metallic pin on the right)
     final Paint fingerLiftPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
+      ..strokeWidth = 1.8
       ..color = Colors.grey.shade400;
-    canvas.drawLine(const Offset(9, 12), const Offset(18, 14), fingerLiftPaint);
-    canvas.drawLine(const Offset(18, 14), const Offset(19, 10), fingerLiftPaint);
+    canvas.drawLine(const Offset(8, 10), const Offset(15, 12), fingerLiftPaint);
+    canvas.drawLine(const Offset(15, 12), const Offset(16, 8), fingerLiftPaint);
 
-    // Cartridge Brand Accent / Stylus
-    canvas.drawRect(const Rect.fromLTWH(-7, 30, 14, 8), Paint()..color = primaryColor);
+    // Cartridge Brand Accent / Stylus (only this touches the record!)
+    canvas.drawRect(const Rect.fromLTWH(-6, 26, 12, 6), Paint()..color = primaryColor);
 
-    // Tiny needle light dot (high premium detail!)
-    canvas.drawCircle(const Offset(0, 36), 1.5, Paint()..color = Colors.white.withValues(alpha: 0.8));
+    // Stylus Needle point
+    canvas.drawCircle(const Offset(0, 32), 1.2, Paint()..color = Colors.white.withValues(alpha: 0.8));
 
     canvas.restore();
     canvas.restore();

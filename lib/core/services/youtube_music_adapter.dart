@@ -861,14 +861,20 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         audioStreams = manifest.audioOnly.toList();
       }
       final audioStreamInfo = audioStreams.withHighestBitrate();
+      final streamUrl = audioStreamInfo.url.toString();
+
+      final isPlayable = await _isStreamPlayable(streamUrl);
+      if (!isPlayable) {
+        throw Exception('Stream URL returned 403 Forbidden or is unplayable.');
+      }
 
       return AudioStream(
         id: id,
         providerId: this.id,
-        streamUrl: audioStreamInfo.url.toString(),
+        streamUrl: streamUrl,
         mimeType: 'audio/${audioStreamInfo.codec.subtype}',
         bitrate: audioStreamInfo.bitrate.bitsPerSecond,
-        duration: const Duration(minutes: 3),
+        duration: originalDuration,
         expiresAt: DateTime.now().add(const Duration(hours: 4)),
         headers: const {},
         quality: 'highest',
@@ -913,7 +919,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
               streamUrl: audioStreamInfo.url.toString(),
               mimeType: 'audio/${audioStreamInfo.codec.subtype}',
               bitrate: audioStreamInfo.bitrate.bitsPerSecond,
-              duration: const Duration(minutes: 3),
+              duration: originalDuration,
               expiresAt: DateTime.now().add(const Duration(hours: 4)),
               headers: const {},
               quality: 'highest',
@@ -929,6 +935,17 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       
       throw SourceException('Failed to resolve audio stream for ID "$id": $e', e.toString());
     }
+  }
+
+  Future<bool> _isStreamPlayable(String url) async {
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 2));
+      request.headers.set('Range', 'bytes=0-0');
+      final response = await request.close().timeout(const Duration(seconds: 2));
+      return response.statusCode == 200 || response.statusCode == 206;
+    } catch (_) {}
+    return false;
   }
 
   Future<({Playlist playlist, List<Song> songs})> _fetchPlaylistDetails(String id) async {
