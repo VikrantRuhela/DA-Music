@@ -9,9 +9,7 @@ A premium,  audio player application built with Flutter and Riverpod. Featuring 
 - 🎛️ **Decoupled Playback Engine**: Centralized event-driven controller coordinating volume, mute, repeat, shuffle, and queues..
 - 🏃‍♂️ **Premium Motion Tokens**: Fully integrated animation durations, curves, and accessibility scaling handlers (Reduced Motion, Disabled Motion).
 - 📦 **Windows Integration**: Frameless window client decorations, layout position persistence, and custom title bars.
-- 📱 **Android Customizations**: Pill-shaped floating Mini Player overlay supporting horizontal drag gestures.
-- 📂 **Local Library & Offline Mode**: Liked songs, playlists, recently played lists, statistics, and simulation downloaders.
-
+- 
 # THIS IS NOT A FINAL VERSION OF DA MUSIC I'LL DRAFT A RELEASE WHEN THE PROJECT GETS COMPLETED
 
 ## Getting Started
