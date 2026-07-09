@@ -17,6 +17,8 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   bool _isDragging = false;
   String? _lastSongId;
   bool _isNewSongStarting = false;
+  bool _lastIsPlaying = false;
+  DateTime? _playTransitionStartTime;
 
   void _handleDrag(Offset localPos) {
     final currentSong = ref.read(currentSongProvider);
@@ -32,14 +34,14 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     // Calculate angle in radians
     double draggedAngle = atan2(dx, dy);
 
-    // Clamp to valid physical travel limits (2 to 34 degrees)
-    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 34.0 * (pi / 180.0));
+    // Clamp to valid physical travel limits (2 to 32.5 degrees)
+    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 32.5 * (pi / 180.0));
 
     setState(() {
       _isDragging = true;
     });
 
-    const double startAngle = 24.0 * (pi / 180.0);
+    const double startAngle = 22.5 * (pi / 180.0);
     const double parkedAngle = 2.0 * (pi / 180.0);
     final controller = ref.read(playbackControllerProvider);
     final playbackState = ref.read(playbackStateProvider);
@@ -66,7 +68,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   void _endDrag() {
     if (!_isDragging) return;
 
-    const double startAngle = 24.0 * (pi / 180.0);
+    const double startAngle = 22.5 * (pi / 180.0);
     final double finalAngle = _dragAngle ?? (2.0 * (pi / 180.0));
 
     setState(() {
@@ -98,6 +100,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     if (songId != _lastSongId) {
       _lastSongId = songId;
       _isNewSongStarting = true;
+      _playTransitionStartTime = null;
     }
 
     // Unflag once the media player position has reset to the beginning of the new track
@@ -112,24 +115,59 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
 
     final isPlaying = currentSong != null && playbackState.status == PlaybackStatus.playing;
 
+    // Track play transition to use custom easing curve/duration when starting/resuming
+    if (isPlaying && !_lastIsPlaying) {
+      _playTransitionStartTime = DateTime.now();
+    }
+    _lastIsPlaying = isPlaying;
+
+    bool inPlayTransition = false;
+    if (isPlaying && _playTransitionStartTime != null) {
+      final elapsed = DateTime.now().difference(_playTransitionStartTime!).inMilliseconds;
+      if (elapsed < 200) {
+        inPlayTransition = true;
+        // Schedule a rebuild to transition to continuous tracking settings once 200ms is reached
+        Future.delayed(Duration(milliseconds: 200 - elapsed), () {
+          if (mounted) setState(() {});
+        });
+      } else {
+        _playTransitionStartTime = null;
+      }
+    }
+
     double targetAngle;
     double targetLift;
+    Duration animDuration;
+    Curve animCurve;
 
     if (_isDragging && _dragAngle != null) {
       // User is actively dragging: follows finger and lifts off vinyl
       targetAngle = _dragAngle!;
-      targetLift = 1.0; // Lifted off the record
+      targetLift = 1.0;
+      animDuration = const Duration(milliseconds: 40);
+      animCurve = Curves.linear;
     } else if (isPlaying) {
       // Playing: moves slowly across grooves strictly based on playback progress
-      // Calibrated Start Angle: 24.0 degrees (first playable groove near outermost edge, radius 153.2px)
-      // Calibrated End Angle: 34.0 degrees (last playable groove, radius 115.4px)
-      // Total travel sweep is a subtle 10.0 degrees, keeping headshell and stylus fully outside center label (55px radius)
-      targetAngle = (24.0 + progress * 10.0) * (pi / 180.0);
+      // Calibrated Start Angle: 22.5 degrees (first playable groove near outermost edge, radius 158.7px)
+      // Calibrated End Angle: 32.5 degrees (last playable groove, radius 121.1px)
+      targetAngle = (22.5 + progress * 10.0) * (pi / 180.0);
       targetLift = 0.0; // Lands gently on the record
+
+      if (inPlayTransition) {
+        // Transitioning onto record: smooth easeOut glide
+        animDuration = const Duration(milliseconds: 200);
+        animCurve = Curves.easeOut;
+      } else {
+        // Continuous tracking: linear 50ms steps to match player position updates
+        animDuration = const Duration(milliseconds: 50);
+        animCurve = Curves.linear;
+      }
     } else {
       // Stopped / Paused: always returns COMPLETELY to the predefined parked position beside the vinyl
       targetAngle = 2.0 * (pi / 180.0);
       targetLift = 1.0; // Fully raised/parked
+      animDuration = const Duration(milliseconds: 200);
+      animCurve = Curves.easeOut;
     }
 
     return GestureDetector(
@@ -142,9 +180,9 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         key: ValueKey(songId), // Reset stack state and key animations on track change
         children: [
           TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: isPlaying ? 24.0 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
-            duration: Duration(milliseconds: _isDragging ? 40 : 200),
-            curve: _isDragging ? Curves.linear : Curves.easeOut,
+            tween: Tween<double>(begin: isPlaying ? 22.5 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
+            duration: animDuration,
+            curve: animCurve,
             builder: (context, angle, child) {
               return TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 1.0, end: targetLift),
