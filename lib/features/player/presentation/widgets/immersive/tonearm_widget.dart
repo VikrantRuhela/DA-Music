@@ -16,6 +16,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   double? _dragAngle;
   bool _isDragging = false;
   String? _lastSongId;
+  bool _isNewSongStarting = false;
 
   void _handleDrag(Offset localPos) {
     final currentSong = ref.read(currentSongProvider);
@@ -31,14 +32,14 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     // Calculate angle in radians
     double draggedAngle = atan2(dx, dy);
 
-    // Clamp to valid physical travel limits (2 to 35 degrees)
-    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 35.0 * (pi / 180.0));
+    // Clamp to valid physical travel limits (2 to 40 degrees)
+    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 40.0 * (pi / 180.0));
 
     setState(() {
       _isDragging = true;
     });
 
-    const double startAngle = 24.0 * (pi / 180.0);
+    const double startAngle = 27.5 * (pi / 180.0);
     const double parkedAngle = 2.0 * (pi / 180.0);
     final controller = ref.read(playbackControllerProvider);
     final playbackState = ref.read(playbackStateProvider);
@@ -65,7 +66,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   void _endDrag() {
     if (!_isDragging) return;
 
-    const double startAngle = 24.0 * (pi / 180.0);
+    const double startAngle = 27.5 * (pi / 180.0);
     final double finalAngle = _dragAngle ?? (2.0 * (pi / 180.0));
 
     setState(() {
@@ -91,15 +92,23 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
 
     final duration = currentSong?.duration ?? Duration.zero;
     final position = controller.position;
-    final double progress = duration.inMilliseconds > 0
-        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
-
     final String? songId = currentSong?.id;
 
+    // Detect track change and flag it to reset positions instantly
     if (songId != _lastSongId) {
       _lastSongId = songId;
+      _isNewSongStarting = true;
     }
+
+    // Unflag once the media player position has reset to the beginning of the new track
+    if (_isNewSongStarting && position.inMilliseconds < 500) {
+      _isNewSongStarting = false;
+    }
+
+    // Force progress to 0% during track load/transition to avoid stale positions
+    final double progress = (_isNewSongStarting || duration.inMilliseconds == 0)
+        ? 0.0
+        : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
 
     final isPlaying = currentSong != null && playbackState.status == PlaybackStatus.playing;
 
@@ -112,7 +121,9 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       targetLift = 1.0; // Lifted off the record
     } else if (isPlaying) {
       // Playing: moves slowly across grooves strictly based on playback progress
-      targetAngle = (24.0 + progress * 11.0) * (pi / 180.0);
+      // Calibrated Start Angle: 27.5 degrees (outermost groove, radius 140px)
+      // Calibrated End Angle: 40.0 degrees (innermost groove, radius 92.4px)
+      targetAngle = (27.5 + progress * 12.5) * (pi / 180.0);
       targetLift = 0.0; // Lands gently on the record
     } else {
       // Stopped / Paused: always returns COMPLETELY to the predefined parked position beside the vinyl
@@ -130,7 +141,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         key: ValueKey(songId), // Reset stack state and key animations on track change
         children: [
           TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: isPlaying ? 24.0 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
+            tween: Tween<double>(begin: isPlaying ? 27.5 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
             duration: Duration(milliseconds: _isDragging ? 40 : 200),
             curve: _isDragging ? Curves.linear : Curves.easeOut,
             builder: (context, angle, child) {
