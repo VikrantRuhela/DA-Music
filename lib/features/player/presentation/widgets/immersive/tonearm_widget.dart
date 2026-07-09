@@ -34,14 +34,14 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     // Calculate angle in radians
     double draggedAngle = atan2(dx, dy);
 
-    // Clamp to valid physical travel limits (2 to 32.5 degrees)
-    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 32.5 * (pi / 180.0));
+    // Clamp to valid physical travel limits (2 to 27 degrees)
+    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 27.0 * (pi / 180.0));
 
     setState(() {
       _isDragging = true;
     });
 
-    const double startAngle = 22.5 * (pi / 180.0);
+    const double startAngle = 17.0 * (pi / 180.0);
     const double parkedAngle = 2.0 * (pi / 180.0);
     final controller = ref.read(playbackControllerProvider);
     final playbackState = ref.read(playbackStateProvider);
@@ -68,7 +68,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   void _endDrag() {
     if (!_isDragging) return;
 
-    const double startAngle = 22.5 * (pi / 180.0);
+    const double startAngle = 17.0 * (pi / 180.0);
     final double finalAngle = _dragAngle ?? (2.0 * (pi / 180.0));
 
     setState(() {
@@ -148,9 +148,9 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       animCurve = Curves.linear;
     } else if (isPlaying) {
       // Playing: moves slowly across grooves strictly based on playback progress
-      // Calibrated Start Angle: 22.5 degrees (first playable groove near outermost edge, radius 158.7px)
-      // Calibrated End Angle: 32.5 degrees (last playable groove, radius 121.1px)
-      targetAngle = (22.5 + progress * 10.0) * (pi / 180.0);
+      // Calibrated Start Angle: 17.0 degrees (first playable groove)
+      // Calibrated End Angle: 27.0 degrees (last playable groove, radius 141.9px)
+      targetAngle = (17.0 + progress * 10.0) * (pi / 180.0);
       targetLift = 0.0; // Lands gently on the record
 
       if (inPlayTransition) {
@@ -180,7 +180,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         key: ValueKey(songId), // Reset stack state and key animations on track change
         children: [
           TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: isPlaying ? 22.5 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
+            tween: Tween<double>(begin: isPlaying ? 17.0 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
             duration: animDuration,
             curve: animCurve,
             builder: (context, angle, child) {
@@ -341,10 +341,9 @@ class _TonearmPainter extends CustomPainter {
     // Finger Lift (metallic pin on the right)
     final Paint fingerLiftPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
-      ..color = Colors.grey.shade400;
-    canvas.drawLine(const Offset(7, 8), const Offset(13, 10), fingerLiftPaint);
-    canvas.drawLine(const Offset(13, 10), const Offset(14, 7), fingerLiftPaint);
+      ..strokeWidth = 1.6;
+    canvas.drawLine(const Offset(7, 8), const Offset(13, 10), fingerLiftPaint..color = Colors.grey.shade400);
+    canvas.drawLine(const Offset(13, 10), const Offset(14, 7), fingerLiftPaint..color = Colors.grey.shade400);
 
     // Cartridge Brand Accent / Stylus (only the needle tip touches the record)
     canvas.drawRect(const Rect.fromLTWH(-5, 23, 10, 5), Paint()..color = primaryColor);
