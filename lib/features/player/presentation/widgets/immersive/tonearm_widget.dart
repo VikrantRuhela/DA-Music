@@ -17,8 +17,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   bool _isDragging = false;
   String? _lastSongId;
   bool _isNewSongStarting = false;
-  bool _lastIsPlaying = false;
-  DateTime? _playTransitionStartTime;
+  double _lastTargetAngle = 2.0 * (pi / 180.0);
 
   void _handleDrag(Offset localPos) {
     final currentSong = ref.read(currentSongProvider);
@@ -100,7 +99,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     if (songId != _lastSongId) {
       _lastSongId = songId;
       _isNewSongStarting = true;
-      _playTransitionStartTime = null;
+      _lastTargetAngle = 2.0 * (pi / 180.0);
     }
 
     // Unflag once the media player position has reset to the beginning of the new track
@@ -115,59 +114,43 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
 
     final isPlaying = currentSong != null && playbackState.status == PlaybackStatus.playing;
 
-    // Track play transition to use custom easing curve/duration when starting/resuming
-    if (isPlaying && !_lastIsPlaying) {
-      _playTransitionStartTime = DateTime.now();
-    }
-    _lastIsPlaying = isPlaying;
-
-    bool inPlayTransition = false;
-    if (isPlaying && _playTransitionStartTime != null) {
-      final elapsed = DateTime.now().difference(_playTransitionStartTime!).inMilliseconds;
-      if (elapsed < 200) {
-        inPlayTransition = true;
-        // Schedule a rebuild to transition to continuous tracking settings once 200ms is reached
-        Future.delayed(Duration(milliseconds: 200 - elapsed), () {
-          if (mounted) setState(() {});
-        });
-      } else {
-        _playTransitionStartTime = null;
-      }
-    }
-
     double targetAngle;
     double targetLift;
-    Duration animDuration;
-    Curve animCurve;
 
     if (_isDragging && _dragAngle != null) {
       // User is actively dragging: follows finger and lifts off vinyl
       targetAngle = _dragAngle!;
       targetLift = 1.0;
-      animDuration = const Duration(milliseconds: 40);
-      animCurve = Curves.linear;
     } else if (isPlaying) {
       // Playing: moves slowly across grooves strictly based on playback progress
       // Calibrated Start Angle: 17.0 degrees (first playable groove)
       // Calibrated End Angle: 27.0 degrees (last playable groove, radius 141.9px)
       targetAngle = (17.0 + progress * 10.0) * (pi / 180.0);
       targetLift = 0.0; // Lands gently on the record
-
-      if (inPlayTransition) {
-        // Transitioning onto record: smooth easeOut glide
-        animDuration = const Duration(milliseconds: 200);
-        animCurve = Curves.easeOut;
-      } else {
-        // Continuous tracking: linear 50ms steps to match player position updates
-        animDuration = const Duration(milliseconds: 50);
-        animCurve = Curves.linear;
-      }
     } else {
       // Stopped / Paused: always returns COMPLETELY to the predefined parked position beside the vinyl
       targetAngle = 2.0 * (pi / 180.0);
       targetLift = 1.0; // Fully raised/parked
+    }
+
+    // Determine animation parameters based on reactive target angle difference (angleDiff)
+    final double angleDiff = (targetAngle - _lastTargetAngle).abs();
+    _lastTargetAngle = targetAngle;
+
+    Duration animDuration;
+    Curve animCurve;
+
+    if (_isDragging) {
+      animDuration = const Duration(milliseconds: 40);
+      animCurve = Curves.linear;
+    } else if (angleDiff > 1.0 * (pi / 180.0)) {
+      // Large change: Play, Pause, Resume, Seek, or Track Change Transition
       animDuration = const Duration(milliseconds: 200);
       animCurve = Curves.easeOut;
+    } else {
+      // Tiny change: Continuous progress tracking
+      animDuration = const Duration(milliseconds: 50);
+      animCurve = Curves.linear;
     }
 
     return GestureDetector(

@@ -25,7 +25,6 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
       vsync: this,
       duration: const Duration(seconds: 1),
     )..addListener(_tick);
-    _controller.repeat();
   }
 
   void _tick() {
@@ -45,6 +44,8 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
         // Continuous rotation step
         _angle += 0.035 * _currentSpeed;
       });
+    } else {
+      _controller.stop();
     }
   }
 
@@ -59,6 +60,12 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
   Widget build(BuildContext context) {
     final colors = context.daColors;
     final currentSong = ref.watch(currentSongProvider);
+    final playbackState = ref.watch(playbackStateProvider);
+    final isPlaying = playbackState.status == PlaybackStatus.playing;
+
+    if (isPlaying && !_controller.isAnimating) {
+      _controller.repeat();
+    }
 
     final glowShadow = _isHovered
         ? [
