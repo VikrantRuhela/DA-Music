@@ -6,6 +6,7 @@ import '../models/music_models.dart';
 import '../providers/library_providers.dart';
 import '../providers/player_providers.dart';
 import '../../core/extensions/context_extensions.dart';
+import '../../core/services/download_manager.dart';
 import 'artist_navigation.dart';
 
 void showSongOptionsMenu(BuildContext context, WidgetRef ref, Song song) {
@@ -82,6 +83,56 @@ void showSongOptionsMenu(BuildContext context, WidgetRef ref, Song song) {
                   onTap: () {
                     Navigator.pop(context);
                     _showAddToPlaylistDialog(context, ref, song);
+                  },
+                ),
+
+                // Download options
+                Builder(builder: (context) {
+                  final downloadManager = ref.watch(downloadManagerProvider);
+                  final task = downloadManager.getTask(song.id);
+                  final isDownloaded = task?.status == DownloadStatus.completed;
+                  final isDownloading = task != null &&
+                      (task.status == DownloadStatus.downloading ||
+                       task.status == DownloadStatus.queued ||
+                       task.status == DownloadStatus.paused);
+
+                  if (isDownloaded) {
+                    return ListTile(
+                      leading: const Icon(Icons.download_done, color: Colors.green),
+                      title: Text('Remove Download', style: TextStyle(color: colors.textPrimary)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        ref.read(downloadManagerProvider.notifier).removeDownload(song.id);
+                      },
+                    );
+                  } else if (isDownloading) {
+                    return ListTile(
+                      leading: const Icon(Icons.downloading, color: Colors.orangeAccent),
+                      title: Text('Cancel Download', style: TextStyle(color: colors.textPrimary)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        ref.read(downloadManagerProvider.notifier).cancelDownload(song.id);
+                      },
+                    );
+                  } else {
+                    return ListTile(
+                      leading: Icon(Icons.download, color: colors.textSecondary),
+                      title: Text('Download', style: TextStyle(color: colors.textPrimary)),
+                      onTap: () {
+                        Navigator.pop(context);
+                        ref.read(downloadManagerProvider.notifier).startDownload(song);
+                      },
+                    );
+                  }
+                }),
+
+                // Download Quality Preference Selection
+                ListTile(
+                  leading: Icon(Icons.high_quality, color: colors.textSecondary),
+                  title: Text('Download Quality (${ref.watch(downloadManagerProvider).preferredQuality})', style: TextStyle(color: colors.textPrimary)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showDownloadQualityDialog(context, ref);
                   },
                 ),
 
@@ -271,6 +322,44 @@ void _showAddToPlaylistDialog(BuildContext context, WidgetRef ref, Song song) {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+void _showDownloadQualityDialog(BuildContext context, WidgetRef ref) {
+  final downloadManager = ref.read(downloadManagerProvider);
+  final colors = context.daColors;
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        backgroundColor: colors.surfaceCard,
+        title: Text('Download Quality', style: TextStyle(color: colors.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: ['Auto', 'High', 'Medium', 'Low'].map((q) {
+            return RadioListTile<String>(
+              title: Text(q, style: TextStyle(color: colors.textPrimary)),
+              value: q,
+              groupValue: downloadManager.preferredQuality,
+              activeColor: colors.primary,
+              onChanged: (val) {
+                if (val != null) {
+                  ref.read(downloadManagerProvider.notifier).setPreferredQuality(val);
+                }
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: TextStyle(color: colors.primary)),
           ),
         ],
       );

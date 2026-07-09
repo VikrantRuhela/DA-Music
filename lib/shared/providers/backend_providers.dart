@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_config.dart';
+import 'library_providers.dart';
 import '../../domain/repositories/song_repository.dart';
 import '../../domain/repositories/album_repository.dart';
 import '../../domain/repositories/playlist_repository.dart';
@@ -201,7 +202,8 @@ final libraryServiceProvider = Provider<LibraryService>((ref) {
 });
 
 final downloadServiceProvider = Provider<DownloadService>((ref) {
-  return DownloadServiceImpl();
+  final manager = ref.watch(downloadManagerProvider);
+  return DownloadServiceImpl(manager);
 });
 
 final queueServiceProvider = Provider<QueueService>((ref) {
@@ -218,7 +220,8 @@ final sourceServiceProvider = Provider<SourceService>((ref) {
 
 final playbackEngineProvider = Provider<PlaybackEngine>((ref) {
   final backend = MediaKitAudioBackend();
-  return PlaybackEngineImpl(backend, ref.watch(streamResolverProvider));
+  final resolver = ref.watch(streamResolverProvider);
+  return PlaybackEngineImpl(backend, resolver);
 });
 
 final eventBusProvider = Provider<EventBus>((ref) {

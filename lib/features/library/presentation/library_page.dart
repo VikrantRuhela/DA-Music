@@ -6,6 +6,8 @@ import '../../../shared/providers/player_providers.dart';
 import '../../../shared/providers/library_providers.dart';
 import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/utils/song_options.dart';
+import '../../../core/services/download_manager.dart';
+import '../../../core/services/library_manager.dart';
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -16,6 +18,7 @@ class LibraryPage extends ConsumerStatefulWidget {
 
 class _LibraryPageState extends ConsumerState<LibraryPage> {
   String? _selectedPlaylistId;
+  int _selectedTab = 0; // 0 = Playlists, 1 = Downloads
 
   void _showCreatePlaylistDialog(BuildContext context) {
     final controller = TextEditingController();
@@ -217,46 +220,190 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           style: typography.title.copyWith(fontSize: 22.0, fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Create Playlist',
-            onPressed: () => _showCreatePlaylistDialog(context),
+          if (_selectedTab == 0)
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: 'Create Playlist',
+              onPressed: () => _showCreatePlaylistDialog(context),
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: DATokens.spacingMedium, vertical: DATokens.spacingSmall),
+            child: Row(
+              children: [
+                _buildTabButton('Playlists', 0, colors, typography),
+                const SizedBox(width: DATokens.spacingMedium * 1.5),
+                _buildTabButton('Downloads', 1, colors, typography),
+              ],
+            ),
+          ),
+          const SizedBox(height: DATokens.spacingSmall),
+          Expanded(
+            child: _selectedTab == 0
+                ? _buildPlaylistsTab(playlists, colors, typography)
+                : _buildDownloadsTab(colors, typography),
           ),
         ],
       ),
-      body: playlists.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const DAEmptyState(
-                    icon: Icons.my_library_music_outlined,
-                    title: 'Your Library is Empty',
-                    description: 'Create custom playlists to organize your music.',
-                  ),
-                  const SizedBox(height: DATokens.spacingMedium),
-                  ElevatedButton.icon(
-                    onPressed: () => _showCreatePlaylistDialog(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Create Playlist'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colors.primary,
-                      foregroundColor: colors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(
-                horizontal: DATokens.spacingMedium,
-                vertical: DATokens.spacingSmall,
-              ),
-              itemCount: playlists.length,
-              itemBuilder: (context, index) {
-                final pl = playlists[index];
+    );
+  }
 
+  Widget _buildTabButton(String text, int index, dynamic colors, dynamic typography) {
+    final isSelected = _selectedTab == index;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedTab = index),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            text,
+            style: typography.title.copyWith(
+              fontSize: 16.0,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected ? colors.textPrimary : colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4.0),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: 2.0,
+            width: isSelected ? 40.0 : 0.0,
+            color: colors.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaylistsTab(List<LibraryPlaylist> playlists, dynamic colors, dynamic typography) {
+    if (playlists.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const DAEmptyState(
+              icon: Icons.my_library_music_outlined,
+              title: 'Your Library is Empty',
+              description: 'Create custom playlists to organize your music.',
+            ),
+            const SizedBox(height: DATokens.spacingMedium),
+            ElevatedButton.icon(
+              onPressed: () => _showCreatePlaylistDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Create Playlist'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colors.primary,
+                foregroundColor: colors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(
+        horizontal: DATokens.spacingMedium,
+        vertical: DATokens.spacingSmall,
+      ),
+      itemCount: playlists.length,
+      itemBuilder: (context, index) {
+        final pl = playlists[index];
+
+        return Card(
+          color: colors.surfaceCard.withValues(alpha: 0.1),
+          margin: const EdgeInsets.only(bottom: DATokens.spacingSmall),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+            side: BorderSide(color: colors.border.withValues(alpha: 0.1)),
+          ),
+          child: ListTile(
+            onTap: () {
+              setState(() {
+                _selectedPlaylistId = pl.id;
+              });
+            },
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.surfaceHover,
+                borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+              ),
+              child: Icon(Icons.playlist_play, color: colors.primary),
+            ),
+            title: Text(
+              pl.name,
+              style: typography.title.copyWith(fontSize: 14.0, fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              '${pl.songs.length} songs',
+              style: typography.caption.copyWith(color: colors.textSecondary),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDownloadsTab(dynamic colors, dynamic typography) {
+    final downloadManager = ref.watch(downloadManagerProvider);
+    final allTasks = downloadManager.allTasks;
+    final activeTasks = allTasks.where((t) => 
+      t.status == DownloadStatus.downloading || 
+      t.status == DownloadStatus.queued || 
+      t.status == DownloadStatus.paused ||
+      t.status == DownloadStatus.failed
+    ).toList();
+
+    final downloadedSongsAsync = ref.watch(downloadedSongsProvider);
+
+    return downloadedSongsAsync.when(
+      loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
+      error: (err, stack) => Center(
+        child: Text('Error loading downloads: $err', style: TextStyle(color: colors.textPrimary)),
+      ),
+      data: (downloadedSongs) {
+        if (activeTasks.isEmpty && downloadedSongs.isEmpty) {
+          return const Center(
+            child: DAEmptyState(
+              icon: Icons.download_for_offline_outlined,
+              title: 'No Offline Music',
+              description: 'Download tracks using the options menu to listen offline.',
+            ),
+          );
+        }
+
+        return ListView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: DATokens.spacingMedium),
+          children: [
+            if (activeTasks.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: DATokens.spacingSmall),
+                child: Text(
+                  'Downloading (${activeTasks.length})',
+                  style: typography.title.copyWith(fontSize: 16.0, fontWeight: FontWeight.bold, color: colors.textPrimary),
+                ),
+              ),
+              ...activeTasks.map((t) => _buildActiveTaskCard(t, colors, typography)),
+              const Divider(color: Colors.white10, height: 24.0),
+            ],
+            if (downloadedSongs.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: DATokens.spacingSmall),
+                child: Text(
+                  'Downloaded Tracks',
+                  style: typography.title.copyWith(fontSize: 16.0, fontWeight: FontWeight.bold, color: colors.textPrimary),
+                ),
+              ),
+              ...List.generate(downloadedSongs.length, (index) {
+                final song = downloadedSongs[index];
                 return Card(
                   color: colors.surfaceCard.withValues(alpha: 0.1),
                   margin: const EdgeInsets.only(bottom: DATokens.spacingSmall),
@@ -266,32 +413,149 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   ),
                   child: ListTile(
                     onTap: () {
-                      setState(() {
-                        _selectedPlaylistId = pl.id;
-                      });
+                      ref.read(playbackControllerProvider).setQueue(
+                            downloadedSongs,
+                            startIndex: index,
+                            autoPlay: true,
+                          );
                     },
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: colors.surfaceHover,
-                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                      ),
-                      child: Icon(Icons.playlist_play, color: colors.primary),
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                      child: song.artworkUrl != null && song.artworkUrl!.isNotEmpty
+                          ? Image.network(
+                              song.artworkUrl!,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white24),
+                            )
+                          : const Icon(Icons.music_note, color: Colors.white24),
                     ),
                     title: Text(
-                      pl.name,
-                      style: typography.title.copyWith(fontSize: 14.0, fontWeight: FontWeight.w600),
+                      song.title,
+                      style: typography.title.copyWith(fontSize: 14.0),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      '${pl.songs.length} songs',
+                      song.artist,
                       style: typography.caption.copyWith(color: colors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: IconButton(
+                      icon: Icon(Icons.more_vert, color: colors.textSecondary),
+                      onPressed: () {
+                        showSongOptionsMenu(context, ref, song);
+                      },
+                    ),
                   ),
                 );
-              },
+              }),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildActiveTaskCard(DownloadTask t, dynamic colors, dynamic typography) {
+    String statusText = 'Queued';
+    if (t.status == DownloadStatus.downloading) {
+      final speedText = '${t.speedMb.toStringAsFixed(1)} MB/s';
+      final sizeText = '${(t.remainingBytes / (1024 * 1024)).toStringAsFixed(1)} MB left';
+      final etaText = t.etaSeconds > 0 ? '${t.etaSeconds}s left' : 'calculating...';
+      statusText = '$speedText  •  $sizeText  •  $etaText';
+    } else if (t.status == DownloadStatus.paused) {
+      statusText = 'Paused';
+    } else if (t.status == DownloadStatus.failed) {
+      statusText = 'Failed: ${t.error ?? "Unknown error"}';
+    }
+
+    return Card(
+      color: colors.surfaceCard.withValues(alpha: 0.15),
+      margin: const EdgeInsets.only(bottom: DATokens.spacingSmall),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+        side: BorderSide(color: colors.border.withValues(alpha: 0.15)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(DATokens.spacingMedium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.title,
+                        style: typography.title.copyWith(fontSize: 14.0, fontWeight: FontWeight.bold, color: colors.textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        t.artist,
+                        style: typography.caption.copyWith(color: colors.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (t.status == DownloadStatus.downloading)
+                      IconButton(
+                        icon: const Icon(Icons.pause, color: Colors.white70),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          ref.read(downloadManagerProvider.notifier).pauseDownload(t.songId);
+                        },
+                      )
+                    else if (t.status == DownloadStatus.paused)
+                      IconButton(
+                        icon: const Icon(Icons.play_arrow, color: Colors.white70),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          ref.read(downloadManagerProvider.notifier).resumeDownload(t.songId);
+                        },
+                      ),
+                    const SizedBox(width: DATokens.spacingMedium),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.redAccent),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        ref.read(downloadManagerProvider.notifier).cancelDownload(t.songId);
+                      },
+                    ),
+                  ],
+                ),
+              ],
             ),
+            const SizedBox(height: DATokens.spacingSmall),
+            LinearProgressIndicator(
+              value: t.progress,
+              backgroundColor: Colors.white12,
+              valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
+            ),
+            const SizedBox(height: 4.0),
+            Text(
+              statusText,
+              style: typography.caption.copyWith(color: t.status == DownloadStatus.failed ? Colors.redAccent : colors.textSecondary, fontSize: 11.0),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

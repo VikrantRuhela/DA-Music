@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../playback_engine.dart';
 import '../playback_result.dart';
 import '../platform_audio_backend.dart';
@@ -64,23 +67,22 @@ class PlaybackEngineImpl implements PlaybackEngine {
   Future<PlaybackResult<void>> load(Song song) =>
       _runSafe('load', () async {
         await _backend.stop();
-        final stream = await _streamResolver.resolve(
-          trackId: song.id,
-          providerId: song.sourceId,
-        );
-        // ignore: avoid_print
-        print('Resolved stream URL: ${stream.streamUrl}');
-        // ignore: avoid_print
-        print('Mime Type: ${stream.mimeType}');
-        // ignore: avoid_print
-        print('Codec: ${stream.codec}');
-        // ignore: avoid_print
-        print('Headers: ${stream.headers}');
-        // ignore: avoid_print
-        print('Provider ID: ${stream.providerId}');
-        // ignore: avoid_print
-        print('Track ID: ${stream.id}');
-        await _backend.load(stream.streamUrl);
+
+        final docDir = await getApplicationDocumentsDirectory();
+        final localFile = File(p.join(docDir.path, 'da_music_downloads', '${song.id}.mp3'));
+
+        if (localFile.existsSync()) {
+          DALogger.info('PlaybackEngine: Playing local offline file: ${localFile.path}');
+          await _backend.load(localFile.path);
+        } else {
+          final stream = await _streamResolver.resolve(
+            trackId: song.id,
+            providerId: song.sourceId,
+          );
+          // ignore: avoid_print
+          print('Resolved stream URL: ${stream.streamUrl}');
+          await _backend.load(stream.streamUrl);
+        }
       });
 
   @override

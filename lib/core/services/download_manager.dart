@@ -1,6 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/models/music_models.dart';
+import '../../data/repositories/download_repository.dart';
+import 'stream_resolver.dart';
+import 'logger_service.dart';
 
 enum DownloadStatus { queued, downloading, paused, completed, failed, cancelled }
 
@@ -12,6 +19,9 @@ class DownloadTask {
   final double progress; // 0.0 to 1.0
   final String? localFilePath;
   final String? error;
+  final double speedMb; // Speed in MB/s
+  final int remainingBytes; // Remaining size in bytes
+  final int etaSeconds; // Estimated time remaining in seconds
 
   const DownloadTask({
     required this.songId,
@@ -21,6 +31,9 @@ class DownloadTask {
     this.progress = 0.0,
     this.localFilePath,
     this.error,
+    this.speedMb = 0.0,
+    this.remainingBytes = 0,
+    this.etaSeconds = 0,
   });
 
   DownloadTask copyWith({
@@ -28,6 +41,9 @@ class DownloadTask {
     double? progress,
     String? localFilePath,
     String? error,
+    double? speedMb,
+    int? remainingBytes,
+    int? etaSeconds,
   }) {
     return DownloadTask(
       songId: songId,
@@ -37,17 +53,62 @@ class DownloadTask {
       progress: progress ?? this.progress,
       localFilePath: localFilePath ?? this.localFilePath,
       error: error ?? this.error,
+      speedMb: speedMb ?? this.speedMb,
+      remainingBytes: remainingBytes ?? this.remainingBytes,
+      etaSeconds: etaSeconds ?? this.etaSeconds,
     );
   }
 }
 
 class DownloadManager extends ChangeNotifier {
+  final StreamResolver _streamResolver;
+  final DownloadRepository _repository;
   final Map<String, DownloadTask> _tasks = {};
-  final Map<String, Timer?> _timers = {};
+  bool _isWorkerRunning = false;
+  String _preferredQuality = 'High';
+
+  DownloadManager(this._streamResolver, this._repository) {
+    _loadTasksFromDb();
+    _loadSettings();
+  }
 
   List<DownloadTask> get allTasks => _tasks.values.toList();
-
   DownloadTask? getTask(String songId) => _tasks[songId];
+  String get preferredQuality => _preferredQuality;
+
+  Future<void> _loadTasksFromDb() async {
+    try {
+      final tasks = await _repository.getAllTasks();
+      for (final t in tasks) {
+        _tasks[t.songId] = t;
+      }
+      notifyListeners();
+      _processQueue();
+    } catch (e) {
+      DALogger.error('DownloadManager: Failed to load tasks from DB', e);
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _preferredQuality = prefs.getString('download_quality') ?? 'High';
+      notifyListeners();
+    } catch (e) {
+      DALogger.error('DownloadManager: Failed to load settings', e);
+    }
+  }
+
+  Future<void> setPreferredQuality(String quality) async {
+    _preferredQuality = quality;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('download_quality', quality);
+    } catch (e) {
+      DALogger.error('DownloadManager: Failed to save quality setting', e);
+    }
+  }
 
   Future<void> startDownload(Song song) async {
     if (_tasks.containsKey(song.id)) {
@@ -59,92 +120,232 @@ class DownloadManager extends ChangeNotifier {
       }
     }
 
-    debugPrint(' [Download Manager] Queued download for: ${song.title}');
-    _updateTask(DownloadTask(
+    DALogger.info('DownloadManager: Queued download for: ${song.title}');
+    final task = DownloadTask(
       songId: song.id,
       title: song.title,
       artist: song.artist,
       status: DownloadStatus.queued,
       progress: 0.0,
-    ));
+    );
 
-    // Simulate small queue delay
-    await Future.delayed(const Duration(milliseconds: 600));
+    _updateTask(task);
+    await _repository.saveSongMetadata(song, downloaded: false);
+    await _repository.saveDownloadTask(song.id, DownloadStatus.queued, 0.0, null);
 
-    final currentTask = _tasks[song.id];
-    if (currentTask == null || currentTask.status == DownloadStatus.cancelled) return;
-
-    _runDownloadSimulation(song.id);
+    _processQueue();
   }
 
   void pauseDownload(String songId) {
     final task = _tasks[songId];
     if (task == null || task.status != DownloadStatus.downloading) return;
 
-    _timers[songId]?.cancel();
-    _timers[songId] = null;
-
-    debugPrint(' [Download Manager] Paused download for: ${task.title}');
-    _updateTask(task.copyWith(status: DownloadStatus.paused));
+    DALogger.info('DownloadManager: Pausing download for: ${task.title}');
+    _updateTask(task.copyWith(status: DownloadStatus.paused, speedMb: 0.0, etaSeconds: 0));
+    _repository.saveDownloadTask(songId, DownloadStatus.paused, task.progress, null);
   }
 
   void resumeDownload(String songId) {
     final task = _tasks[songId];
     if (task == null || task.status != DownloadStatus.paused) return;
 
-    debugPrint(' [Download Manager] Resumed download for: ${task.title}');
-    _runDownloadSimulation(songId);
+    DALogger.info('DownloadManager: Resuming download for: ${task.title}');
+    _updateTask(task.copyWith(status: DownloadStatus.queued));
+    _repository.saveDownloadTask(songId, DownloadStatus.queued, task.progress, null);
+
+    _processQueue();
   }
 
-  void cancelDownload(String songId) {
+  Future<void> cancelDownload(String songId) async {
     final task = _tasks[songId];
     if (task == null) return;
 
-    _timers[songId]?.cancel();
-    _timers[songId] = null;
+    DALogger.info('DownloadManager: Cancelling download for: ${task.title}');
+    _updateTask(task.copyWith(status: DownloadStatus.cancelled, speedMb: 0.0, etaSeconds: 0));
+    await _repository.deleteDownloadTask(songId);
 
-    debugPrint(' [Download Manager] Cancelled download for: ${task.title}');
-    _updateTask(task.copyWith(status: DownloadStatus.cancelled, progress: 0.0));
+    // Delete partial file
+    final docDir = await getApplicationDocumentsDirectory();
+    final file = File(p.join(docDir.path, 'da_music_downloads', '$songId.mp3'));
+    if (file.existsSync()) {
+      try {
+        file.deleteSync();
+      } catch (e) {
+        DALogger.error('DownloadManager: Failed to delete cancelled partial file', e);
+      }
+    }
+
+    _tasks.remove(songId);
+    notifyListeners();
+    _processQueue();
   }
 
-  void _runDownloadSimulation(String songId) {
+  Future<void> removeDownload(String songId) async {
+    await cancelDownload(songId);
+  }
+
+  void _processQueue() {
+    if (_isWorkerRunning) return;
+
+    final queuedTask = _tasks.values.firstWhere(
+      (t) => t.status == DownloadStatus.queued,
+      orElse: () => const DownloadTask(songId: '', title: '', artist: '', status: DownloadStatus.failed),
+    );
+
+    if (queuedTask.songId.isNotEmpty) {
+      _isWorkerRunning = true;
+      _downloadWorker(queuedTask.songId);
+    }
+  }
+
+  Future<void> _downloadWorker(String songId) async {
     final task = _tasks[songId];
-    if (task == null) return;
+    if (task == null) {
+      _isWorkerRunning = false;
+      return;
+    }
 
     _updateTask(task.copyWith(status: DownloadStatus.downloading));
+    await _repository.saveDownloadTask(songId, DownloadStatus.downloading, task.progress, null);
 
-    double currentProgress = task.progress;
-    _timers[songId] = Timer.periodic(const Duration(milliseconds: 300), (timer) {
-      final t = _tasks[songId];
-      if (t == null || t.status != DownloadStatus.downloading) {
-        timer.cancel();
-        return;
+    try {
+      final stream = await _streamResolver.resolve(
+        trackId: songId,
+        providerId: 'youtube_music',
+      );
+
+      final docDir = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory(p.join(docDir.path, 'da_music_downloads'));
+      if (!downloadsDir.existsSync()) {
+        downloadsDir.createSync(recursive: true);
       }
 
-      currentProgress += 0.15;
-      if (currentProgress >= 1.0) {
-        timer.cancel();
-        _timers[songId] = null;
+      final localFile = File(p.join(downloadsDir.path, '$songId.mp3'));
+      int existingBytes = 0;
+      bool isResume = false;
 
-        // Check for simulated download errors (e.g. title contains error/fail)
-        if (t.title.toLowerCase().contains('error') || t.title.toLowerCase().contains('fail')) {
-          debugPrint(' [Download Manager] Download FAILED for: ${t.title}');
-          _updateTask(t.copyWith(
-            status: DownloadStatus.failed,
-            error: 'Storage write failed: Corrupt stream packet or Storage full.',
-          ));
-        } else {
-          debugPrint(' [Download Manager] Download COMPLETED for: ${t.title}');
-          _updateTask(t.copyWith(
-            status: DownloadStatus.completed,
-            progress: 1.0,
-            localFilePath: 'C:/Users/vikrantrajput/.gemini/antigravity/scratch/da_music/downloads/${t.songId}.mp3',
-          ));
+      if (task.progress > 0.0 && localFile.existsSync()) {
+        existingBytes = localFile.lengthSync();
+        isResume = true;
+      }
+
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 15);
+      final request = await client.getUrl(Uri.parse(stream.streamUrl));
+
+      stream.headers.forEach((key, val) {
+        request.headers.set(key, val);
+      });
+
+      if (isResume && existingBytes > 0) {
+        request.headers.set('Range', 'bytes=$existingBytes-');
+      }
+
+      final response = await request.close();
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        throw Exception('Server returned status code ${response.statusCode}');
+      }
+
+      final bool rangeAccepted = response.statusCode == 206;
+      final int totalContentLength = response.contentLength;
+      final int totalBytes = rangeAccepted ? (totalContentLength + existingBytes) : totalContentLength;
+
+      final iosink = localFile.openWrite(mode: rangeAccepted ? FileMode.append : FileMode.write);
+
+      int downloadedBytes = rangeAccepted ? existingBytes : 0;
+      final stopwatch = Stopwatch()..start();
+      int lastCheckedBytes = downloadedBytes;
+      int lastCheckedTimeMs = stopwatch.elapsedMilliseconds;
+
+      await for (final chunk in response) {
+        final currentTaskState = _tasks[songId];
+        if (currentTaskState == null || currentTaskState.status != DownloadStatus.downloading) {
+          await iosink.close();
+          if (currentTaskState?.status == DownloadStatus.cancelled) {
+            if (localFile.existsSync()) {
+              localFile.deleteSync();
+            }
+          }
+          return;
         }
-      } else {
-        _updateTask(t.copyWith(progress: currentProgress.clamp(0.0, 1.0)));
+
+        iosink.add(chunk);
+        downloadedBytes += chunk.length;
+
+        final int nowMs = stopwatch.elapsedMilliseconds;
+        final int timeDiffMs = nowMs - lastCheckedTimeMs;
+
+        if (timeDiffMs >= 400) {
+          final double progress = totalBytes > 0 ? (downloadedBytes / totalBytes) : 0.0;
+          final int bytesInInterval = downloadedBytes - lastCheckedBytes;
+          
+          double speed = 0.0;
+          if (timeDiffMs > 0) {
+            speed = (bytesInInterval / (1024 * 1024)) / (timeDiffMs / 1000.0);
+          }
+
+          final int remaining = totalBytes - downloadedBytes;
+          int eta = 0;
+          if (speed > 0) {
+            final double speedBytesPerSec = speed * 1024 * 1024;
+            eta = (remaining / speedBytesPerSec).round();
+          }
+
+          _updateTask(currentTaskState.copyWith(
+            progress: progress.clamp(0.0, 1.0),
+            speedMb: speed,
+            remainingBytes: remaining,
+            etaSeconds: eta,
+          ));
+
+          await _repository.saveDownloadTask(songId, DownloadStatus.downloading, progress, null);
+
+          lastCheckedBytes = downloadedBytes;
+          lastCheckedTimeMs = nowMs;
+        }
       }
-    });
+
+      await iosink.flush();
+      await iosink.close();
+
+      final completedTask = _tasks[songId];
+      if (completedTask != null && completedTask.status == DownloadStatus.downloading) {
+        _updateTask(completedTask.copyWith(
+          status: DownloadStatus.completed,
+          progress: 1.0,
+          localFilePath: localFile.path,
+          speedMb: 0.0,
+          remainingBytes: 0,
+          etaSeconds: 0,
+        ));
+        await _repository.saveDownloadTask(songId, DownloadStatus.completed, 1.0, localFile.path);
+        
+        // Read full song info from DB to avoid loss of details
+        final song = await _repository.getSongById(songId);
+        if (song != null) {
+          await _repository.saveSongMetadata(
+            song,
+            downloaded: true,
+          );
+        }
+      }
+    } catch (e, stack) {
+      DALogger.error('DownloadWorker failed for songId: $songId', e, stack);
+      final currentTaskState = _tasks[songId];
+      if (currentTaskState != null && currentTaskState.status == DownloadStatus.downloading) {
+        _updateTask(currentTaskState.copyWith(
+          status: DownloadStatus.failed,
+          error: e.toString(),
+          speedMb: 0.0,
+          remainingBytes: 0,
+          etaSeconds: 0,
+        ));
+        await _repository.saveDownloadTask(songId, DownloadStatus.failed, currentTaskState.progress, null);
+      }
+    } finally {
+      _isWorkerRunning = false;
+      _processQueue();
+    }
   }
 
   void _updateTask(DownloadTask task) {
@@ -152,12 +353,4 @@ class DownloadManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    for (final timer in _timers.values) {
-      timer?.cancel();
-    }
-    _timers.clear();
-    super.dispose();
-  }
 }

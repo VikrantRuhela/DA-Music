@@ -24,6 +24,7 @@ import '../settings_service.dart';
 import '../lyrics_service.dart';
 import '../artwork_service.dart';
 import '../download_service.dart';
+import '../download_manager.dart';
 import '../queue_service.dart';
 import '../theme_service.dart';
 import '../source_service.dart';
@@ -187,19 +188,38 @@ class ArtworkServiceImpl implements ArtworkService {
 
 /// Concrete implementation of DownloadService.
 class DownloadServiceImpl implements DownloadService {
-  DownloadServiceImpl();
+  final DownloadManager _downloadManager;
+  DownloadServiceImpl(this._downloadManager);
 
   @override
-  Future<void> downloadSong(Song song) => _logAction('DownloadService.downloadSong', () async {});
+  Future<void> downloadSong(Song song) => _logAction('DownloadService.downloadSong', () async {
+    final sharedSong = shared.Song(
+      id: song.id,
+      title: song.title,
+      artist: song.artistId,
+      album: song.albumId,
+      duration: song.duration.value,
+      artworkUrl: song.artwork.url,
+      source: song.sourceId,
+      lyrics: null,
+    );
+    await _downloadManager.startDownload(sharedSong);
+  });
 
   @override
-  Future<void> pauseDownload(String songId) => _logAction('DownloadService.pauseDownload', () async {});
+  Future<void> pauseDownload(String songId) => _logAction('DownloadService.pauseDownload', () async {
+    _downloadManager.pauseDownload(songId);
+  });
 
   @override
-  Future<void> resumeDownload(String songId) => _logAction('DownloadService.resumeDownload', () async {});
+  Future<void> resumeDownload(String songId) => _logAction('DownloadService.resumeDownload', () async {
+    _downloadManager.resumeDownload(songId);
+  });
 
   @override
-  Future<void> cancelDownload(String songId) => _logAction('DownloadService.cancelDownload', () async {});
+  Future<void> cancelDownload(String songId) => _logAction('DownloadService.cancelDownload', () async {
+    await _downloadManager.cancelDownload(songId);
+  });
 }
 
 /// Concrete implementation of QueueService.
