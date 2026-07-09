@@ -39,7 +39,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       _isDragging = true;
     });
 
-    const double startAngle = 27.5 * (pi / 180.0);
+    const double startAngle = 24.0 * (pi / 180.0);
     const double parkedAngle = 2.0 * (pi / 180.0);
     final controller = ref.read(playbackControllerProvider);
     final playbackState = ref.read(playbackStateProvider);
@@ -66,7 +66,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
   void _endDrag() {
     if (!_isDragging) return;
 
-    const double startAngle = 27.5 * (pi / 180.0);
+    const double startAngle = 24.0 * (pi / 180.0);
     final double finalAngle = _dragAngle ?? (2.0 * (pi / 180.0));
 
     setState(() {
@@ -121,10 +121,10 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       targetLift = 1.0; // Lifted off the record
     } else if (isPlaying) {
       // Playing: moves slowly across grooves strictly based on playback progress
-      // Calibrated Start Angle: 27.5 degrees (outermost groove, radius 140px)
-      // Calibrated End Angle: 34.0 degrees (innermost groove, radius 115.4px)
-      // Total travel arc is a subtle 6.5 degrees, keeping headshell and stylus fully outside center label (55px radius)
-      targetAngle = (27.5 + progress * 6.5) * (pi / 180.0);
+      // Calibrated Start Angle: 24.0 degrees (first playable groove near outermost edge, radius 153.2px)
+      // Calibrated End Angle: 34.0 degrees (last playable groove, radius 115.4px)
+      // Total travel sweep is a subtle 10.0 degrees, keeping headshell and stylus fully outside center label (55px radius)
+      targetAngle = (24.0 + progress * 10.0) * (pi / 180.0);
       targetLift = 0.0; // Lands gently on the record
     } else {
       // Stopped / Paused: always returns COMPLETELY to the predefined parked position beside the vinyl
@@ -142,7 +142,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
         key: ValueKey(songId), // Reset stack state and key animations on track change
         children: [
           TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: isPlaying ? 27.5 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
+            tween: Tween<double>(begin: isPlaying ? 24.0 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
             duration: Duration(milliseconds: _isDragging ? 40 : 200),
             curve: _isDragging ? Curves.linear : Curves.easeOut,
             builder: (context, angle, child) {
