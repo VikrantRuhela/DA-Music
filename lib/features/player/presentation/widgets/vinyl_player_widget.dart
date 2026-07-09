@@ -14,9 +14,9 @@ class VinylPlayerWidget extends StatelessWidget {
           height: 380.0,
           child: Stack(
             children: [
-              // Platter / Record (left side: center at X=180, Y=190)
+              // Platter / Record (left side: center at X=230, Y=190)
               Positioned(
-                left: 20,
+                left: 70,
                 top: 30,
                 child: SizedBox(
                   width: 320.0,

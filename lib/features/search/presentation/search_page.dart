@@ -18,6 +18,7 @@ import '../../../shared/models/music_models.dart' as shared;
 import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/utils/artist_navigation.dart';
 import '../../../shared/utils/song_options.dart';
+import '../../taste_engine/presentation/providers/taste_engine_providers.dart';
 
 class SearchPageState {
   final String query;
@@ -49,9 +50,10 @@ class SearchPageState {
 
 class SearchPageNotifier extends StateNotifier<SearchPageState> {
   final SearchService _searchService;
+  final Ref _ref;
   Timer? _debounceTimer;
 
-  SearchPageNotifier(this._searchService)
+  SearchPageNotifier(this._searchService, this._ref)
       : super(const SearchPageState(query: '', isLoading: false));
 
   void onQueryChanged(String query) {
@@ -74,6 +76,8 @@ class SearchPageNotifier extends StateNotifier<SearchPageState> {
   Future<void> _performSearch(String query) async {
     final currentQuery = query;
     DALogger.info('SearchPage: Search Started for query "$query"');
+
+    _ref.read(tasteEngineNotifierProvider.notifier).recordSearch(query);
 
     try {
       final results = await _searchService.search(query);
@@ -111,7 +115,7 @@ class SearchPageNotifier extends StateNotifier<SearchPageState> {
 
 final searchPageProvider =
     StateNotifierProvider<SearchPageNotifier, SearchPageState>((ref) {
-  return SearchPageNotifier(ref.watch(searchServiceProvider));
+  return SearchPageNotifier(ref.watch(searchServiceProvider), ref);
 });
 
 class SearchPage extends ConsumerStatefulWidget {

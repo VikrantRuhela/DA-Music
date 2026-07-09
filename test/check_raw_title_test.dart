@@ -10,5 +10,5 @@ void main() {
     final video = await ytClient.videos.get('UNk6LTZYokk');
     print('Raw Title: ${video.title}');
     ytClient.close();
-  });
+  }, skip: 'YouTube rate limiting');
 }

@@ -54,7 +54,7 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> with TickerProvid
     final currentSong = ref.read(currentSongProvider);
     if (currentSong == null) return;
 
-    const double pivotX = 380.0;
+    const double pivotX = 430.0;
     const double pivotY = 90.0;
 
     // Calculate relative vector from fixed pivot
@@ -231,7 +231,7 @@ class _TonearmPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const double pivotX = 380.0;
+    const double pivotX = 430.0;
     const double pivotY = 90.0;
 
     // 1. Draw Pivot Base Shadow (stationary)

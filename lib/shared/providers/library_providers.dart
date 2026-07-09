@@ -33,3 +33,28 @@ final downloadedSongsProvider = FutureProvider<List<Song>>((ref) async {
 
 // 4. Expose Offline Mode state
 final offlineModeProvider = StateProvider<bool>((ref) => false);
+
+// 5. Expose Album Art Background setting state
+final showAlbumArtBackgroundProvider = StateNotifierProvider<ShowAlbumArtBackgroundNotifier, bool>((ref) {
+  final storage = ref.watch(storageServiceProvider);
+  return ShowAlbumArtBackgroundNotifier(storage);
+});
+
+class ShowAlbumArtBackgroundNotifier extends StateNotifier<bool> {
+  final StorageService _storage;
+  static const _key = 'show_album_art_background';
+
+  ShowAlbumArtBackgroundNotifier(this._storage) : super(false) {
+    _load();
+  }
+
+  void _load() async {
+    final val = await _storage.getString(_key);
+    state = val == 'true';
+  }
+
+  Future<void> toggle(bool val) async {
+    state = val;
+    await _storage.setString(_key, val.toString());
+  }
+}

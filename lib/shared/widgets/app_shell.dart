@@ -10,6 +10,7 @@ import '../animations/motion_system.dart';
 import 'custom_title_bar.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
 import 'ambient_background.dart';
+import '../../features/taste_engine/presentation/taste_playback_observer.dart';
 
 class AppShell extends ConsumerWidget {
   final Widget child;
@@ -24,8 +25,9 @@ class AppShell extends ConsumerWidget {
     final duration = ref.scaledDuration(isImmersive ? DAMotion.large : const Duration(milliseconds: 380));
     final curve = ref.scaledCurve(DAMotion.fastOutSlowIn);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
+    return TastePlaybackObserver(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
       body: AmbientBackground(
         child: SafeArea(
           child: Column(
@@ -119,6 +121,7 @@ class AppShell extends ConsumerWidget {
       bottomNavigationBar: MediaQuery.of(context).size.width < 700 && !isImmersive
           ? const _MobileBottomNavBar()
           : null,
+    ),
     );
   }
 }

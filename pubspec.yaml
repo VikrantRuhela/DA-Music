@@ -48,6 +48,8 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_libs_audio: ^1.0.7
   palette_generator: ^0.3.3+7
+  audio_service: ^0.18.12
+  audio_service_win: any
 
 dev_dependencies:
   flutter_test:

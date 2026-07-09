@@ -9,6 +9,8 @@ import 'core/services/windows_platform_service.dart';
 import 'core/services/default_platform_service.dart';
 import 'core/services/json_storage_service.dart';
 import 'shared/providers/library_providers.dart';
+import 'core/services/system_media_session_manager.dart';
+import 'shared/providers/player_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,11 +24,18 @@ void main() async {
   final storageService = JsonStorageService();
   await storageService.init();
 
+  final container = ProviderContainer(
+    overrides: [
+      storageServiceProvider.overrideWithValue(storageService),
+    ],
+  );
+
+  final controller = container.read(playbackControllerProvider);
+  await SystemMediaSessionManager.initialize(controller);
+
   runApp(
-    ProviderScope(
-      overrides: [
-        storageServiceProvider.overrideWithValue(storageService),
-      ],
+    UncontrolledProviderScope(
+      container: container,
       child: const DAMusicApp(),
     ),
   );

@@ -5,7 +5,10 @@ import '../../../core/extensions/context_extensions.dart';
 import '../../../core/services/logger_service.dart';
 import '../../../shared/animations/motion_system.dart';
 import '../../../shared/providers/source_providers.dart';
+import '../../../shared/providers/library_providers.dart';
 import '../../../shared/widgets/da_card.dart';
+import '../../taste_engine/presentation/music_dna_page.dart';
+import '../../taste_engine/presentation/taste_settings_page.dart';
 
 final diagnosticLoggingProvider = StateProvider<bool>((ref) {
   return DALogger.activeLevel == LogLevel.debug;
@@ -21,6 +24,7 @@ class SettingsPage extends ConsumerWidget {
 
     final motionMode = ref.watch(motionScaleModeProvider);
     final diagnosticLogging = ref.watch(diagnosticLoggingProvider);
+    final showAlbumArt = ref.watch(showAlbumArtBackgroundProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -90,6 +94,26 @@ class SettingsPage extends ConsumerWidget {
             ),
             const SizedBox(height: DATokens.spacingLarge),
 
+            // Section 1.5: Appearance
+            _buildSectionHeader(context, 'Appearance'),
+            DACard(
+              child: Column(
+                children: [
+                  _buildSwitchTile(
+                    context: context,
+                    icon: Icons.image_outlined,
+                    title: 'Show Album Art as Background',
+                    subtitle: 'Use blurred current playing album artwork as app background',
+                    value: showAlbumArt,
+                    onChanged: (val) {
+                      ref.read(showAlbumArtBackgroundProvider.notifier).toggle(val);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: DATokens.spacingLarge),
+
             // Section 2: Storage & Cache Management
             _buildSectionHeader(context, 'Cache & Local Storage'),
             DACard(
@@ -138,6 +162,39 @@ class SettingsPage extends ConsumerWidget {
                     onChanged: (val) {
                       ref.read(diagnosticLoggingProvider.notifier).state = val;
                       DALogger.activeLevel = val ? LogLevel.debug : LogLevel.error;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: DATokens.spacingLarge),
+            _buildSectionHeader(context, 'Music Taste & Privacy'),
+            DACard(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.bubble_chart_outlined, color: colors.primary),
+                    title: Text('Music DNA Insights', style: typography.title.copyWith(fontSize: 15.0)),
+                    subtitle: Text('View personalized listening habits and trends', style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary)),
+                    trailing: const Icon(Icons.chevron_right, size: 20.0),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const MusicDnaPage()),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1, color: Colors.white10),
+                  ListTile(
+                    leading: Icon(Icons.security_outlined, color: colors.primary),
+                    title: Text('Taste Engine & Privacy', style: typography.title.copyWith(fontSize: 15.0)),
+                    subtitle: Text('Manage listening logs and recommendation profile', style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary)),
+                    trailing: const Icon(Icons.chevron_right, size: 20.0),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const TasteSettingsPage()),
+                      );
                     },
                   ),
                 ],
