@@ -5,6 +5,7 @@ import '../../../app/theme/tokens.dart';
 import '../../../shared/providers/player_providers.dart';
 import '../../../shared/providers/library_providers.dart';
 import '../../../shared/widgets/da_empty_state.dart';
+import '../../../shared/widgets/da_image.dart';
 
 class FavoritesPage extends ConsumerWidget {
   const FavoritesPage({super.key});
@@ -62,15 +63,13 @@ class FavoritesPage extends ConsumerWidget {
                     },
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                      child: song.artworkUrl != null && song.artworkUrl!.isNotEmpty
-                          ? Image.network(
-                              song.artworkUrl!,
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white24),
-                            )
-                          : const Icon(Icons.music_note, color: Colors.white24),
+                      child: DAImage(
+                        url: song.artworkUrl,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        placeholder: const Icon(Icons.music_note, color: Colors.white24),
+                      ),
                     ),
                     title: Text(
                       song.title,

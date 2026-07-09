@@ -9,12 +9,22 @@ class RecommendationEngine {
     required SourceManager sourceManager,
     bool excludeDownloads = false,
     List<Song> downloadedSongs = const [],
+    List<Song> ytmRecommendations = const [],
   }) async {
     final List<Song> results = [];
     final Set<String> seenIds = {};
 
     if (excludeDownloads) {
       seenIds.addAll(downloadedSongs.map((s) => s.id));
+    }
+
+    if (ytmRecommendations.isNotEmpty) {
+      for (final song in ytmRecommendations) {
+        if (!seenIds.contains(song.id)) {
+          results.add(song);
+          seenIds.add(song.id);
+        }
+      }
     }
 
     try {

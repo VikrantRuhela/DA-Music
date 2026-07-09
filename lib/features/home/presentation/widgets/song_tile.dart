@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../app/theme/tokens.dart';
+import '../../../../shared/widgets/da_image.dart';
 
 class SongTile extends StatefulWidget {
   final String title;
@@ -70,13 +71,11 @@ class _SongTileState extends State<SongTile> {
                   borderRadius: BorderRadius.circular(DATokens.radiusMedium),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: widget.coverUrl != null && widget.coverUrl!.isNotEmpty
-                    ? Image.network(
-                        widget.coverUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(colors),
-                      )
-                    : _buildPlaceholder(colors),
+                child: DAImage(
+                  url: widget.coverUrl,
+                  fit: BoxFit.cover,
+                  placeholder: _buildPlaceholder(colors),
+                ),
               ),
               const SizedBox(width: DATokens.spacingMedium),
 

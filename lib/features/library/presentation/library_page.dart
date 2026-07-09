@@ -8,6 +8,8 @@ import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/utils/song_options.dart';
 import '../../../core/services/download_manager.dart';
 import '../../../core/services/library_manager.dart';
+import '../../local_library/presentation/local_library_tab.dart';
+import '../../../shared/widgets/da_image.dart';
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -164,15 +166,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                       },
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                        child: song.artworkUrl != null && song.artworkUrl!.isNotEmpty
-                            ? Image.network(
-                                song.artworkUrl!,
-                                width: 40,
-                                height: 40,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white24),
-                              )
-                            : const Icon(Icons.music_note, color: Colors.white24),
+                        child: DAImage(
+                          url: song.artworkUrl,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                          placeholder: const Icon(Icons.music_note, color: Colors.white24),
+                        ),
                       ),
                       title: Text(
                         song.title,
@@ -237,6 +237,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 _buildTabButton('Playlists', 0, colors, typography),
                 const SizedBox(width: DATokens.spacingMedium * 1.5),
                 _buildTabButton('Downloads', 1, colors, typography),
+                const SizedBox(width: DATokens.spacingMedium * 1.5),
+                _buildTabButton('Local Library', 2, colors, typography),
               ],
             ),
           ),
@@ -244,7 +246,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           Expanded(
             child: _selectedTab == 0
                 ? _buildPlaylistsTab(playlists, colors, typography)
-                : _buildDownloadsTab(colors, typography),
+                : _selectedTab == 1
+                    ? _buildDownloadsTab(colors, typography)
+                    : const LocalLibraryTab(),
           ),
         ],
       ),
@@ -421,15 +425,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     },
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                      child: song.artworkUrl != null && song.artworkUrl!.isNotEmpty
-                          ? Image.network(
-                              song.artworkUrl!,
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white24),
-                            )
-                          : const Icon(Icons.music_note, color: Colors.white24),
+                      child: DAImage(
+                        url: song.artworkUrl,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        placeholder: const Icon(Icons.music_note, color: Colors.white24),
+                      ),
                     ),
                     title: Text(
                       song.title,

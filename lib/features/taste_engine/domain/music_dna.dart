@@ -14,6 +14,12 @@ class MusicDNA {
   final int downloadCount;
   final int favoriteCount;
 
+  // Numerical affinity scores for granular updates and logs
+  final Map<String, double> artistAffinities;
+  final Map<String, double> genreAffinities;
+  final Map<String, double> songAffinities;
+  final Map<String, double> albumAffinities;
+
   const MusicDNA({
     this.topArtists = const [],
     this.topAlbums = const [],
@@ -29,9 +35,18 @@ class MusicDNA {
     this.completionRate = 0.0,
     this.downloadCount = 0,
     this.favoriteCount = 0,
+    this.artistAffinities = const {},
+    this.genreAffinities = const {},
+    this.songAffinities = const {},
+    this.albumAffinities = const {},
   });
 
   factory MusicDNA.fromJson(Map<String, dynamic> json) {
+    Map<String, double> parseAffinities(Map<String, dynamic>? data) {
+      if (data == null) return const {};
+      return data.map((key, value) => MapEntry(key, (value as num).toDouble()));
+    }
+
     return MusicDNA(
       topArtists: List<String>.from(json['topArtists'] ?? const []),
       topAlbums: List<String>.from(json['topAlbums'] ?? const []),
@@ -47,6 +62,10 @@ class MusicDNA {
       completionRate: (json['completionRate'] ?? 0.0).toDouble(),
       downloadCount: json['downloadCount'] ?? 0,
       favoriteCount: json['favoriteCount'] ?? 0,
+      artistAffinities: parseAffinities(json['artistAffinities']),
+      genreAffinities: parseAffinities(json['genreAffinities']),
+      songAffinities: parseAffinities(json['songAffinities']),
+      albumAffinities: parseAffinities(json['albumAffinities']),
     );
   }
 
@@ -66,6 +85,10 @@ class MusicDNA {
       'completionRate': completionRate,
       'downloadCount': downloadCount,
       'favoriteCount': favoriteCount,
+      'artistAffinities': artistAffinities,
+      'genreAffinities': genreAffinities,
+      'songAffinities': songAffinities,
+      'albumAffinities': albumAffinities,
     };
   }
 }

@@ -6,6 +6,10 @@ import 'package:da_music/features/home/presentation/home_page.dart';
 import 'package:da_music/domain/entities/home_feed.dart';
 import 'package:da_music/core/services/storage_service.dart';
 import 'package:da_music/shared/providers/library_providers.dart';
+import 'package:da_music/shared/providers/backend_providers.dart';
+import 'package:da_music/core/services/secure_credential_store.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeStorageService implements StorageService {
   final Map<String, String> _data = {};
@@ -34,14 +38,29 @@ class FakeStorageService implements StorageService {
     _data.clear();
   }
 }
+class FakeSecureCredentialStore extends SecureCredentialStore {
+  String? _cookies;
+  @override
+  Future<void> saveCookies(String cookies) async {
+    _cookies = cookies;
+  }
+  @override
+  Future<String?> readCookies() async => _cookies;
+  @override
+  Future<void> clearCookies() async {
+    _cookies = null;
+  }
+}
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'ytm_guest_mode': true});
     // Build our app and trigger a frame.
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           storageServiceProvider.overrideWithValue(FakeStorageService()),
+          secureStoreProvider.overrideWithValue(FakeSecureCredentialStore()),
           homeFeedProvider.overrideWith((ref) => HomeFeed(
             sections: [
               HomeFeedSection(title: 'Recommended for You', type: 'recommended', items: const []),

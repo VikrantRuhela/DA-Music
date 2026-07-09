@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,9 +40,12 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
     }
 
     try {
-      final ImageProvider imageProvider = NetworkImage(artworkUrl);
+      final ImageProvider imageProvider =
+          (artworkUrl.startsWith('http://') || artworkUrl.startsWith('https://'))
+              ? NetworkImage(artworkUrl)
+              : FileImage(File(artworkUrl)) as ImageProvider;
       final paletteGenerator = await PaletteGenerator.fromImageProvider(
-        imageProvider,
+        ResizeImage(imageProvider, width: 80, height: 80),
         maximumColorCount: 16,
         timeout: const Duration(seconds: 4),
       );

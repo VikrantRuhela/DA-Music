@@ -9,11 +9,21 @@ import 'core/services/windows_platform_service.dart';
 import 'core/services/default_platform_service.dart';
 import 'core/services/json_storage_service.dart';
 import 'shared/providers/library_providers.dart';
+import 'shared/providers/backend_providers.dart';
 import 'core/services/system_media_session_manager.dart';
+import 'core/services/session_manager.dart';
 import 'shared/providers/player_providers.dart';
 
-void main() async {
+import 'package:desktop_webview_window/desktop_webview_window.dart';
+
+void main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (runWebViewTitleBarWidget(args)) {
+      return;
+    }
+  }
 
   final PlatformService platformService = !kIsWeb && Platform.isWindows
       ? WindowsPlatformService()
@@ -33,6 +43,15 @@ void main() async {
   final controller = container.read(playbackControllerProvider);
   await SystemMediaSessionManager.initialize(controller);
 
+  final accountService = container.read(ytAccountServiceProvider);
+  await accountService.initialize();
+
+  final goRouter = container.read(goRouterProvider);
+  // Handle session expiry by routing back to the welcome/login page
+  container.read(sessionManagerProvider).onSessionExpired = () {
+    goRouter.go('/welcome');
+  };
+
   runApp(
     UncontrolledProviderScope(
       container: container,
@@ -47,6 +66,15 @@ class DAMusicApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeData = ref.watch(dynamicThemeProvider);
+    final goRouter = ref.watch(goRouterProvider);
+
+    // Watch session login transitions to automatically trigger initial library sync
+    ref.listen<SessionManager>(sessionManagerProvider, (previous, next) {
+      if (next.isLoggedIn && !(previous?.isLoggedIn ?? false)) {
+        final accountService = ref.read(ytAccountServiceProvider);
+        ref.read(libraryManagerProvider).syncWithYouTubeMusic(accountService);
+      }
+    });
 
     return MaterialApp.router(
       title: 'DA Music',

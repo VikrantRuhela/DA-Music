@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/youtube_music_account_service.dart';
+import '../../core/services/secure_credential_store.dart';
+import '../../core/services/session_manager.dart';
 import '../../core/config/app_config.dart';
 import 'library_providers.dart';
 import '../../domain/repositories/song_repository.dart';
@@ -242,4 +245,18 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
   ref.onDispose(() => db.close());
   return db;
+});
+
+final secureStoreProvider = Provider<SecureCredentialStore>((ref) {
+  return SecureCredentialStore();
+});
+
+final sessionManagerProvider = ChangeNotifierProvider<SessionManager>((ref) {
+  final secureStore = ref.watch(secureStoreProvider);
+  return SessionManager(secureStore);
+});
+
+final ytAccountServiceProvider = Provider<YouTubeMusicAccountService>((ref) {
+  final sessionManager = ref.watch(sessionManagerProvider);
+  return YouTubeMusicAccountService(sessionManager);
 });

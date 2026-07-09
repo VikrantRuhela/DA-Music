@@ -10,6 +10,7 @@ import '../../../../domain/entities/song.dart';
 import '../../../../shared/models/music_models.dart' as shared;
 import '../../../../shared/utils/artist_navigation.dart';
 import '../../../../shared/utils/song_options.dart';
+import '../../../../shared/widgets/da_image.dart';
 
 final albumDetailsProvider = FutureProvider.family<({Album album, List<Song> songs}), String>((ref, albumId) async {
   final albumRepo = ref.watch(albumRepositoryProvider);
@@ -88,12 +89,12 @@ class AlbumPage extends ConsumerWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(DATokens.radiusLarge),
-                  child: Image.network(
-                    album.cover.url,
+                  child: DAImage(
+                    url: album.cover.url,
                     width: 180.0,
                     height: 180.0,
                     fit: BoxFit.cover,
-                    errorBuilder: (ctx, err, st) => Container(
+                    placeholder: Container(
                       width: 180.0,
                       height: 180.0,
                       color: colors.surfaceHover,
@@ -187,12 +188,12 @@ class AlbumPage extends ConsumerWidget {
                     },
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                      child: Image.network(
-                        song.artwork.url,
+                      child: DAImage(
+                        url: song.artwork.url,
                         width: 48.0,
                         height: 48.0,
                         fit: BoxFit.cover,
-                        errorBuilder: (ctx, err, st) => Container(
+                        placeholder: Container(
                           width: 48.0,
                           height: 48.0,
                           color: colors.surfaceHover,

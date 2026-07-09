@@ -7,6 +7,7 @@ import '../../../app/theme/tokens.dart';
 import '../../../shared/providers/player_providers.dart';
 import '../../../core/services/lyrics_controller.dart';
 import '../../../shared/widgets/da_empty_state.dart';
+import '../../../shared/widgets/da_image.dart';
 
 class LyricsPage extends ConsumerStatefulWidget {
   const LyricsPage({super.key});
@@ -119,13 +120,11 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
         children: [
           // 1. Dynamic blurred album art background
           Positioned.fill(
-            child: artworkUrl.isNotEmpty
-                ? Image.network(
-                    artworkUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(color: colors.surface),
-                  )
-                : Container(color: colors.surface),
+            child: DAImage(
+              url: artworkUrl,
+              fit: BoxFit.cover,
+              placeholder: Container(color: colors.surface),
+            ),
           ),
           Positioned.fill(
             child: Container(
@@ -160,15 +159,13 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
                       const SizedBox(width: DATokens.spacingSmall),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                        child: artworkUrl.isNotEmpty
-                            ? Image.network(
-                                artworkUrl,
-                                width: 48,
-                                height: 48,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white),
-                              )
-                            : const Icon(Icons.music_note, color: Colors.white),
+                        child: DAImage(
+                          url: artworkUrl,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          placeholder: const Icon(Icons.music_note, color: Colors.white),
+                        ),
                       ),
                       const SizedBox(width: DATokens.spacingMedium),
                       Expanded(

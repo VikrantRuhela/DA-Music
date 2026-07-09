@@ -12,13 +12,16 @@ import '../../../domain/entities/artist.dart';
 import '../../../domain/entities/playlist.dart';
 import '../../../domain/entities/search_result.dart';
 import '../../../domain/entities/song.dart';
+import '../../../domain/entities/value_objects.dart';
 import '../../../shared/providers/backend_providers.dart';
 import '../../../shared/providers/player_providers.dart';
 import '../../../shared/models/music_models.dart' as shared;
 import '../../../shared/widgets/da_empty_state.dart';
+import '../../../shared/widgets/da_image.dart';
 import '../../../shared/utils/artist_navigation.dart';
 import '../../../shared/utils/song_options.dart';
 import '../../taste_engine/presentation/providers/taste_engine_providers.dart';
+import '../../local_library/data/local_library_repository.dart';
 
 class SearchPageState {
   final String query;
@@ -87,13 +90,68 @@ class SearchPageNotifier extends StateNotifier<SearchPageState> {
         return;
       }
 
-      final totalCount = results.songs.length +
-          results.albums.length +
-          results.artists.length +
-          results.playlists.length;
+      // Query and merge local search results
+      final localSongs = _ref.read(localLibraryRepositoryProvider.notifier).search(query);
+      
+      final domainLocalSongs = localSongs.map((s) => Song(
+        id: s.id,
+        title: '[Local] ${s.title}',
+        artistId: s.artist,
+        albumId: s.album,
+        duration: DurationValue(s.duration),
+        thumbnail: Artwork(s.artworkUrl),
+        artwork: Artwork(s.artworkUrl),
+        sourceId: s.source,
+      )).toList();
+
+      final Set<String> seenAlbums = {};
+      final List<Album> domainLocalAlbums = [];
+      final Set<String> seenArtists = {};
+      final List<Artist> domainLocalArtists = [];
+
+      for (final song in localSongs) {
+        if (song.album.isNotEmpty && !seenAlbums.contains(song.album)) {
+          seenAlbums.add(song.album);
+          domainLocalAlbums.add(Album(
+            id: song.album,
+            title: '[Local] ${song.album}',
+            artistId: song.artist,
+            cover: Artwork(song.artworkUrl),
+            year: 2026,
+            trackCount: 1,
+            duration: DurationValue(song.duration),
+          ));
+        }
+        if (song.artist.isNotEmpty && !seenArtists.contains(song.artist)) {
+          seenArtists.add(song.artist);
+          domainLocalArtists.add(Artist(
+            id: song.artist,
+            name: '[Local] ${song.artist}',
+            image: Artwork(song.artworkUrl),
+            subscriberCount: 0,
+            description: 'Local Artist',
+            genres: const ['Local'],
+          ));
+        }
+      }
+
+      final mergedSongs = [...domainLocalSongs, ...results.songs];
+      final mergedAlbums = [...domainLocalAlbums, ...results.albums];
+      final mergedArtists = [...domainLocalArtists, ...results.artists];
+
+      final mergedResult = results.copyWith(
+        songs: mergedSongs,
+        albums: mergedAlbums,
+        artists: mergedArtists,
+      );
+
+      final totalCount = mergedResult.songs.length +
+          mergedResult.albums.length +
+          mergedResult.artists.length +
+          mergedResult.playlists.length;
 
       DALogger.info('SearchPage: Search Finished for query "$query". Results count: $totalCount');
-      state = state.copyWith(isLoading: false, result: results);
+      state = state.copyWith(isLoading: false, result: mergedResult);
     } catch (e, stack) {
       if (state.query != currentQuery) return;
       DALogger.error('SearchPage: Search Failed for query "$query"', e, stack);
@@ -409,12 +467,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(DATokens.radiusMedium),
-                    child: Image.network(
-                      top.artwork.url,
+                    child: DAImage(
+                      url: top.artwork.url,
                       width: 80,
                       height: 80,
                       fit: BoxFit.cover,
-                      errorBuilder: (ctx, err, st) => Container(
+                      placeholder: Container(
                         width: 80,
                         height: 80,
                         color: theme.surfaceHover,
@@ -493,12 +551,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(DATokens.radiusMedium),
-        child: Image.network(
-          song.thumbnail.url,
+        child: DAImage(
+          url: song.thumbnail.url,
           width: 48,
           height: 48,
           fit: BoxFit.cover,
-          errorBuilder: (ctx, err, st) => Container(
+          placeholder: Container(
             width: 48,
             height: 48,
             color: theme.surfaceHover,

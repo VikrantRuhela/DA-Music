@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../models/music_models.dart';
 import '../providers/library_providers.dart';
+import '../widgets/da_image.dart';
 import '../providers/player_providers.dart';
 import '../../core/extensions/context_extensions.dart';
 import '../../core/services/download_manager.dart';
@@ -35,15 +36,13 @@ void showSongOptionsMenu(BuildContext context, WidgetRef ref, Song song) {
                 ListTile(
                   leading: ClipRRect(
                     borderRadius: BorderRadius.circular(8.0),
-                    child: song.artworkUrl != null && song.artworkUrl!.isNotEmpty
-                        ? Image.network(
-                            song.artworkUrl!,
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Icon(Icons.music_note, color: colors.textSecondary),
-                          )
-                        : Icon(Icons.music_note, color: colors.textSecondary),
+                    child: DAImage(
+                      url: song.artworkUrl,
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      placeholder: Icon(Icons.music_note, color: colors.textSecondary),
+                    ),
                   ),
                   title: Text(
                     song.title,

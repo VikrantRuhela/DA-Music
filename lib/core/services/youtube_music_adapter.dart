@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import 'source_adapter.dart';
+import 'youtube_music_account_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../exceptions/playback_exceptions.dart';
 import '../../domain/entities/song.dart';
 import '../../domain/entities/album.dart';
@@ -62,9 +64,21 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   @override
   Future<void> initialize() async {
     if (_isInitialized) return;
-    _ytClient = yt.YoutubeExplode();
+    
+    final prefs = await SharedPreferences.getInstance();
+    final cookies = prefs.getString('ytm_cookies');
+    final isLoggedIn = prefs.getBool('ytm_logged_in') ?? false;
+
+    if (isLoggedIn && cookies != null && cookies.isNotEmpty) {
+      final authClient = AuthenticatedClient(cookies);
+      final ytHttpClient = yt.YoutubeHttpClient(authClient);
+      _ytClient = yt.YoutubeExplode(httpClient: ytHttpClient);
+      DALogger.info('YouTubeMusicAdapter: YoutubeExplode initialized with authenticated user session.');
+    } else {
+      _ytClient = yt.YoutubeExplode();
+      DALogger.info('YouTubeMusicAdapter: YoutubeExplode client initialized.');
+    }
     _isInitialized = true;
-    DALogger.info('YouTubeMusicAdapter: YoutubeExplode client initialized.');
   }
 
   @override

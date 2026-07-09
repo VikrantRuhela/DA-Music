@@ -4,6 +4,7 @@ import '../../../../../core/extensions/context_extensions.dart';
 import '../../../../../app/theme/tokens.dart';
 import '../../../../../shared/providers/player_providers.dart';
 import '../../../../../shared/models/playback_state.dart';
+import '../../../../../shared/widgets/da_image.dart';
 
 class VinylWidget extends ConsumerStatefulWidget {
   const VinylWidget({super.key});
@@ -181,15 +182,13 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
                     ),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: currentSong?.artworkUrl != null && currentSong!.artworkUrl!.isNotEmpty
-                      ? ClipOval(
-                          child: Image.network(
-                            currentSong.artworkUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildDefaultCenter(colors),
-                          ),
-                        )
-                      : _buildDefaultCenter(colors),
+                  child: ClipOval(
+                    child: DAImage(
+                      url: currentSong?.artworkUrl,
+                      fit: BoxFit.cover,
+                      placeholder: _buildDefaultCenter(colors),
+                    ),
+                  ),
                 ),
 
                 // Spindle Hole

@@ -13,10 +13,49 @@ import 'widgets/search_widget.dart';
 import 'widgets/recently_played_widget.dart';
 import 'widgets/favorites_grid.dart';
 import 'widgets/recommended_section.dart';
+import '../../taste_engine/presentation/providers/taste_engine_providers.dart';
+import '../../../domain/entities/value_objects.dart';
 
 final homeFeedProvider = FutureProvider<HomeFeed>((ref) async {
   final sourceManager = ref.watch(sourceManagerProvider);
-  return await sourceManager.getHome();
+  ref.watch(tasteEngineNotifierProvider);
+
+  final genericFeed = await sourceManager.getHome();
+  final accountService = ref.watch(ytAccountServiceProvider);
+
+  if (accountService.isLoggedIn) {
+    try {
+      final ytmSongs = await accountService.fetchPersonalizedRecommendations();
+      if (ytmSongs.isNotEmpty) {
+        final domainSongs = ytmSongs.map((s) => Song(
+          id: s.id,
+          title: s.title,
+          artistId: s.artist,
+          albumId: s.album,
+          duration: DurationValue(s.duration),
+          thumbnail: Artwork(s.artworkUrl),
+          artwork: Artwork(s.artworkUrl),
+          sourceId: s.source,
+        )).toList();
+
+        // Replace only the recommended songs section
+        final sections = genericFeed.sections.map((section) {
+          if (section.type == 'recommended') {
+            return HomeFeedSection(
+              title: 'Recommended for You',
+              type: 'recommended',
+              items: domainSongs,
+            );
+          }
+          return section;
+        }).toList();
+
+        return HomeFeed(sections: sections);
+      }
+    } catch (_) {}
+  }
+
+  return genericFeed;
 });
 
 class HomePage extends ConsumerWidget {
@@ -26,6 +65,7 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scaleMode = ref.watch(motionScaleModeProvider);
     final homeFeedAsync = ref.watch(homeFeedProvider);
+    final recommendationsAsync = ref.watch(personalizedRecommendationsProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -57,11 +97,27 @@ class HomePage extends ConsumerWidget {
           final albumsSection = feed.sections.firstWhere((s) => s.type == 'albums');
           final playlistsSection = feed.sections.firstWhere((s) => s.type == 'playlists');
 
+          final List<Song> recommendedSongs = recommendationsAsync.maybeWhen(
+            data: (songs) => songs.isNotEmpty
+                ? songs.map((s) => Song(
+                    id: s.id,
+                    title: s.title,
+                    artistId: s.artist,
+                    albumId: s.album,
+                    duration: DurationValue(s.duration),
+                    thumbnail: Artwork(s.artworkUrl),
+                    artwork: Artwork(s.artworkUrl),
+                    sourceId: s.source,
+                  )).toList()
+                : recommendedSection.items.cast<Song>(),
+            orElse: () => recommendedSection.items.cast<Song>(),
+          );
+
           final children = [
             const GreetingWidget(),
             const SearchWidget(),
             RecommendedSection(albums: albumsSection.items.cast<Album>()),
-            RecentlyPlayedWidget(songs: recommendedSection.items.cast<Song>()),
+            RecentlyPlayedWidget(songs: recommendedSongs),
             FavoritesGrid(playlists: playlistsSection.items.cast<Playlist>()),
           ];
 

@@ -35,6 +35,25 @@ class StreamResolver {
     final startTime = DateTime.now();
     DALogger.info('StreamResolver: Resolving stream for track "$trackId" (quality: ${quality.name})');
 
+    if (providerId == 'local') {
+      final localStream = AudioStream(
+        id: trackId,
+        providerId: providerId,
+        streamUrl: trackId,
+        mimeType: 'audio/mpeg',
+        bitrate: 320,
+        duration: const Duration(minutes: 3),
+        expiresAt: DateTime.now().add(const Duration(days: 365)),
+        headers: const {},
+        quality: quality.name,
+        codec: 'MP3',
+        isLive: false,
+        isCached: true,
+      );
+      lastResolvedUrl = trackId;
+      return localStream;
+    }
+
     // Return cache if valid
     final cached = _streamCache[trackId];
     if (cached != null && !cached.isExpired) {

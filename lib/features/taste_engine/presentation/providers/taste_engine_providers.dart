@@ -54,6 +54,40 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
     _init();
   }
 
+  static String detectGenre(String artist, String songTitle) {
+    final artistLower = artist.toLowerCase();
+    final titleLower = songTitle.toLowerCase();
+    if (artistLower.contains('aujla') ||
+        artistLower.contains('dosanjh') ||
+        artistLower.contains('sidhu') ||
+        artistLower.contains('maan') ||
+        artistLower.contains('singh') ||
+        artistLower.contains('amrit')) {
+      return 'Punjabi';
+    }
+    if (artistLower.contains('eminem') ||
+        artistLower.contains('drake') ||
+        artistLower.contains('tupac') ||
+        artistLower.contains('kanye') ||
+        artistLower.contains('wayne') ||
+        artistLower.contains('snoop')) {
+      return 'Hip-Hop';
+    }
+    if (artistLower.contains('beatles') ||
+        artistLower.contains('queen') ||
+        artistLower.contains('pink floyd') ||
+        artistLower.contains('led zeppelin')) {
+      return 'Rock';
+    }
+    if (artistLower.contains('lo-fi') ||
+        titleLower.contains('lofi') ||
+        titleLower.contains('relax') ||
+        titleLower.contains('study')) {
+      return 'Lo-fi';
+    }
+    return 'Pop'; // default fallback
+  }
+
   Future<void> _init() async {
     state = state.copyWith(isLoading: true);
     final prefs = await SharedPreferences.getInstance();
@@ -69,8 +103,8 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
 
     final dna = TasteAnalyzer.analyze(
       logs,
-      downloadCount: downloadedSongs.length,
-      favoriteCount: likes.length,
+      downloadedSongs: downloadedSongs,
+      likedSongs: likes,
     );
 
     state = TasteEngineState(
@@ -104,6 +138,8 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
         ? (position.inMilliseconds / duration.inMilliseconds) * 100.0
         : 0.0;
 
+    final detectedGenre = genre ?? detectGenre(artist, title);
+
     final log = {
       'songId': songId,
       'videoId': videoId ?? songId,
@@ -112,7 +148,7 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
       'songTitle': title,
       'artist': artist,
       'album': album,
-      'genre': genre ?? 'Pop',
+      'genre': detectedGenre,
       'language': 'English',
       'durationMs': duration.inMilliseconds,
       'playbackPositionMs': position.inMilliseconds,
@@ -126,6 +162,63 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
 
     await _historyRepo.appendLog(log);
     await _init(); // refresh DNA profile
+
+    // Print Taste Engine log diagnostics
+    final isFavorite = _ref.read(libraryManagerProvider).isSongLiked(songId);
+    final downloadedList = await _downloadRepo.getDownloadedSongs();
+    final isDownloaded = downloadedList.any((s) => s.id == songId);
+    final isSkip = completionPercentage < 15.0;
+    
+    // Check replay status (more than 1 play of this song in history logs)
+    final playsCount = state.logs.where((l) => l['songId'] == songId).length;
+    final isReplay = playsCount > 1;
+
+    final updatedArtistScore = state.dna.artistAffinities[artist] ?? 0.0;
+    final updatedGenreScore = state.dna.genreAffinities[detectedGenre] ?? 0.0;
+    final updatedSongScore = state.dna.songAffinities[title] ?? 0.0;
+
+    final recommendations = await RecommendationEngine.generateRecommendations(
+      dna: state.dna,
+      sourceManager: _ref.read(sourceManagerProvider),
+      excludeDownloads: state.excludeDownloads,
+      downloadedSongs: downloadedList,
+    );
+
+    // ignore: avoid_print
+    print('''
+=== TASTE ENGINE PLAYBACK SESSION LOG ===
+- Song ID: $songId
+- Artist: $artist
+- Genre: $detectedGenre
+- Play Duration: ${position.inSeconds}s / ${duration.inSeconds}s
+- Completion %: ${completionPercentage.toStringAsFixed(1)}%
+- Skip: ${isSkip ? "Yes" : "No"}
+- Replay: ${isReplay ? "Yes" : "No"}
+- Favorite: ${isFavorite ? "Yes" : "No"}
+- Download: ${isDownloaded ? "Yes" : "No"}
+
+=== UPDATED AFFINITY SCORES ===
+- Artist Affinity Score ($artist): ${updatedArtistScore.toStringAsFixed(2)}
+- Genre Affinity Score ($detectedGenre): ${updatedGenreScore.toStringAsFixed(2)}
+- Song Affinity Score ($title): ${updatedSongScore.toStringAsFixed(2)}
+
+=== PERSONALIZED RECOMMENDATIONS ===''');
+
+    for (int i = 0; i < recommendations.length; i++) {
+      final rec = recommendations[i];
+      String reason = 'Popular trending track';
+      if (rec.artist == artist) {
+        reason = 'Recommended based on your high affinity for artist "$artist"';
+      } else if (state.dna.topArtists.contains(rec.artist)) {
+        reason = 'Matches one of your top artists "${rec.artist}"';
+      } else {
+        reason = 'Matches your preference for the "$detectedGenre" genre';
+      }
+      // ignore: avoid_print
+      print('${i + 1}. ${rec.title} by ${rec.artist} (Reason: $reason)');
+    }
+    // ignore: avoid_print
+    print('========================================');
   }
 
   Future<void> recordSearch(String query) async {
@@ -194,10 +287,19 @@ final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) asy
   final downloadRepo = ref.watch(downloadRepositoryProvider);
   final downloadedSongs = await downloadRepo.getDownloadedSongs();
 
+  List<Song> ytmRecs = [];
+  final accountService = ref.watch(ytAccountServiceProvider);
+  if (accountService.isLoggedIn) {
+    try {
+      ytmRecs = await accountService.fetchPersonalizedRecommendations();
+    } catch (_) {}
+  }
+
   return RecommendationEngine.generateRecommendations(
     dna: tasteState.dna,
     sourceManager: sourceManager,
     excludeDownloads: tasteState.excludeDownloads,
     downloadedSongs: downloadedSongs,
+    ytmRecommendations: ytmRecs,
   );
 });

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 /// Value object wrapper representing checked duration lengths.
 class DurationValue {
   final Duration value;
@@ -32,10 +34,23 @@ class Artwork {
     final trimmed = rawUrl.trim();
     if (trimmed.isEmpty) return defaultArtwork;
 
+    // Check if it is a local file path that exists, or looks like a local file path
+    // (e.g. starts with '/' or has a Windows drive prefix like 'C:\' or 'c:\')
+    final file = File(trimmed);
+    if (file.existsSync() ||
+        trimmed.startsWith('/') ||
+        trimmed.startsWith(r'\') ||
+        (trimmed.length > 2 && trimmed[1] == ':' && (trimmed[2] == '/' || trimmed[2] == r'\'))) {
+      return trimmed;
+    }
+
     final uri = Uri.tryParse(trimmed);
     if (uri == null) return defaultArtwork;
 
     final scheme = uri.scheme.toLowerCase();
+    if (scheme == 'file') {
+      return trimmed;
+    }
     if ((scheme == 'http' || scheme == 'https') && uri.hasAuthority) {
       return trimmed;
     }

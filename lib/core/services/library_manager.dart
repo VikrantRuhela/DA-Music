@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'storage_service.dart';
+import 'youtube_music_account_service.dart';
 import '../../shared/models/music_models.dart';
 
 class LibraryPlaylist {
@@ -264,5 +265,68 @@ class LibraryManager extends ChangeNotifier {
     }
 
     return results.toList();
+  }
+
+  Future<void> syncWithYouTubeMusic(YouTubeMusicAccountService accountService) async {
+    if (!accountService.isLoggedIn) return;
+
+    try {
+      // 1. Sync Liked Songs
+      final remoteLikes = await accountService.fetchLikedSongs();
+      if (remoteLikes.isNotEmpty) {
+        final Set<String> existingIds = _likedSongs.map((s) => s.id).toSet();
+        for (final song in remoteLikes) {
+          if (!existingIds.contains(song.id)) {
+            _likedSongs.add(song);
+            existingIds.add(song.id);
+          }
+        }
+      }
+
+      // 2. Sync Playlists
+      final remotePlaylists = await accountService.fetchLibraryPlaylists();
+      if (remotePlaylists.isNotEmpty) {
+        final Set<String> existingNames = _playlists.map((p) => p.name.toLowerCase()).toSet();
+        for (final p in remotePlaylists) {
+          if (!existingNames.contains(p.name.toLowerCase())) {
+            _playlists.add(LibraryPlaylist(
+              id: p.id,
+              name: p.name,
+              songs: const [],
+            ));
+          }
+        }
+      }
+
+      // 3. Sync Artists
+      final remoteArtists = await accountService.fetchLibraryArtists();
+      if (remoteArtists.isNotEmpty) {
+        final Set<String> existingNames = _likedArtists.map((a) => a.name.toLowerCase()).toSet();
+        for (final a in remoteArtists) {
+          if (!existingNames.contains(a.name.toLowerCase())) {
+            _likedArtists.add(Artist(
+              id: a.id,
+              name: a.name,
+              artworkUrl: a.artworkUrl,
+            ));
+          }
+        }
+      }
+
+      // 4. Sync History
+      final remoteHistory = await accountService.fetchHistory();
+      if (remoteHistory.isNotEmpty) {
+        final Set<String> existingIds = _history.map((s) => s.id).toSet();
+        for (final song in remoteHistory) {
+          if (!existingIds.contains(song.id)) {
+            _history.insert(0, song);
+            existingIds.add(song.id);
+          }
+        }
+      }
+
+      await _save();
+      notifyListeners();
+    } catch (_) {}
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,13 +33,19 @@ class BlurredBackground extends StatelessWidget {
           opacity: 0.8,
           child: ImageFiltered(
             imageFilter: ImageFilter.blur(sigmaX: 45.0, sigmaY: 45.0, tileMode: TileMode.mirror),
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              // Resize image for blur performance optimization
-              cacheWidth: 150,
-              errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
-            ),
+            child: imageUrl.startsWith('http://') || imageUrl.startsWith('https://')
+                ? Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    cacheWidth: 150,
+                    errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+                  )
+                : Image.file(
+                    File(imageUrl),
+                    fit: BoxFit.cover,
+                    cacheWidth: 150,
+                    errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+                  ),
           ),
         ),
         // 3. Slight dark overlay

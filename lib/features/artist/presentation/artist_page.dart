@@ -12,6 +12,7 @@ import '../../../shared/providers/player_providers.dart';
 import '../../../shared/models/music_models.dart' as shared;
 import '../../../shared/utils/song_options.dart';
 import '../../home/presentation/widgets/album_card.dart';
+import '../../../shared/widgets/da_image.dart';
 
 /// FutureProvider that loads the artist details and all associated shelves.
 final artistDetailsProvider = FutureProvider.family<
@@ -133,10 +134,10 @@ class ArtistPage extends ConsumerWidget {
                     fit: StackFit.expand,
                     children: [
                       if (artist.image.url.isNotEmpty)
-                        Image.network(
-                          artist.image.url,
+                        DAImage(
+                          url: artist.image.url,
                           fit: BoxFit.cover,
-                          errorBuilder: (ctx, err, st) => Container(
+                          placeholder: Container(
                             color: colors.surfaceHover,
                             child: Icon(
                               Icons.person_outline,
@@ -287,22 +288,21 @@ class ArtistPage extends ConsumerWidget {
                                 },
                                 leading: ClipRRect(
                                   borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                                  child: song.artwork.url.isNotEmpty
-                                      ? Image.network(
-                                          song.artwork.url,
-                                          width: 48,
-                                          height: 48,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Container(
-                                          width: 48,
-                                          height: 48,
-                                          color: colors.surfaceHover,
-                                          child: Icon(
-                                            Icons.music_note,
-                                            color: colors.textSecondary,
-                                          ),
-                                        ),
+                                  child: DAImage(
+                                    url: song.artwork.url,
+                                    width: 48,
+                                    height: 48,
+                                    fit: BoxFit.cover,
+                                    placeholder: Container(
+                                      width: 48,
+                                      height: 48,
+                                      color: colors.surfaceHover,
+                                      child: Icon(
+                                        Icons.music_note,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                                 title: Text(
                                   song.title,

@@ -6,6 +6,7 @@ import '../../../../shared/providers/player_providers.dart';
 import '../../../../shared/models/playback_state.dart';
 import '../../../../shared/animations/interactive_scale.dart';
 import '../../../../shared/utils/song_options.dart';
+import '../../../../shared/widgets/da_image.dart';
 
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
@@ -83,14 +84,11 @@ class MiniPlayer extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(DATokens.radiusMedium),
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: currentSong.artworkUrl != null && currentSong.artworkUrl!.isNotEmpty
-                            ? Image.network(
-                                currentSong.artworkUrl!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Icon(Icons.music_note, color: colors.textSecondary),
-                              )
-                            : Icon(Icons.music_note, color: colors.textSecondary),
+                        child: DAImage(
+                          url: currentSong.artworkUrl,
+                          fit: BoxFit.cover,
+                          placeholder: Icon(Icons.music_note, color: colors.textSecondary),
+                        ),
                       ),
                       const SizedBox(width: DATokens.spacingMedium),
                       // Text Info

@@ -6,6 +6,7 @@ import '../../../shared/providers/player_providers.dart';
 import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/utils/song_options.dart';
 import '../../../shared/models/music_models.dart';
+import '../../../shared/widgets/da_image.dart';
 
 class QueuePage extends ConsumerWidget {
   const QueuePage({super.key});
@@ -89,15 +90,13 @@ class QueuePage extends ConsumerWidget {
                     },
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                      child: song.artworkUrl != null && song.artworkUrl!.isNotEmpty
-                          ? Image.network(
-                              song.artworkUrl!,
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white24),
-                            )
-                          : const Icon(Icons.music_note, color: Colors.white24),
+                      child: DAImage(
+                        url: song.artworkUrl,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        placeholder: const Icon(Icons.music_note, color: Colors.white24),
+                      ),
                     ),
                     title: Text(
                       song.title,
