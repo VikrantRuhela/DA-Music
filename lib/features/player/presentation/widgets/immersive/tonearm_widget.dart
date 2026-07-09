@@ -32,8 +32,8 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     // Calculate angle in radians
     double draggedAngle = atan2(dx, dy);
 
-    // Clamp to valid physical travel limits (2 to 40 degrees)
-    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 40.0 * (pi / 180.0));
+    // Clamp to valid physical travel limits (2 to 34 degrees)
+    draggedAngle = draggedAngle.clamp(2.0 * (pi / 180.0), 34.0 * (pi / 180.0));
 
     setState(() {
       _isDragging = true;
@@ -122,8 +122,9 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     } else if (isPlaying) {
       // Playing: moves slowly across grooves strictly based on playback progress
       // Calibrated Start Angle: 27.5 degrees (outermost groove, radius 140px)
-      // Calibrated End Angle: 40.0 degrees (innermost groove, radius 92.4px)
-      targetAngle = (27.5 + progress * 12.5) * (pi / 180.0);
+      // Calibrated End Angle: 34.0 degrees (innermost groove, radius 115.4px)
+      // Total travel arc is a subtle 6.5 degrees, keeping headshell and stylus fully outside center label (55px radius)
+      targetAngle = (27.5 + progress * 6.5) * (pi / 180.0);
       targetLift = 0.0; // Lands gently on the record
     } else {
       // Stopped / Paused: always returns COMPLETELY to the predefined parked position beside the vinyl
