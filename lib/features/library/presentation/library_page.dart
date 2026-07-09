@@ -462,7 +462,17 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   Widget _buildActiveTaskCard(DownloadTask t, dynamic colors, dynamic typography) {
     String statusText = 'Queued';
     if (t.status == DownloadStatus.downloading) {
-      final speedText = '${t.speedMb.toStringAsFixed(1)} MB/s';
+      final double speedBytesPerSec = t.speedMb * 1024 * 1024;
+      String speedText;
+      if (speedBytesPerSec <= 0) {
+        speedText = '0 KB/s';
+      } else if (speedBytesPerSec >= 1024 * 1024) {
+        speedText = '${(speedBytesPerSec / (1024 * 1024)).toStringAsFixed(1)} MB/s';
+      } else if (speedBytesPerSec >= 1024) {
+        speedText = '${(speedBytesPerSec / 1024).toStringAsFixed(0)} KB/s';
+      } else {
+        speedText = '1 KB/s';
+      }
       final sizeText = '${(t.remainingBytes / (1024 * 1024)).toStringAsFixed(1)} MB left';
       final etaText = t.etaSeconds > 0 ? '${t.etaSeconds}s left' : 'calculating...';
       statusText = '$speedText  •  $sizeText  •  $etaText';

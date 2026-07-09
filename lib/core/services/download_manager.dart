@@ -310,6 +310,18 @@ class DownloadManager extends ChangeNotifier {
 
       final completedTask = _tasks[songId];
       if (completedTask != null && completedTask.status == DownloadStatus.downloading) {
+        // Update database first to avoid race conditions with reactive providers
+        await _repository.saveDownloadTask(songId, DownloadStatus.completed, 1.0, localFile.path);
+        
+        final song = await _repository.getSongById(songId);
+        if (song != null) {
+          await _repository.saveSongMetadata(
+            song,
+            downloaded: true,
+          );
+        }
+
+        // Notify listeners after database is fully synchronized
         _updateTask(completedTask.copyWith(
           status: DownloadStatus.completed,
           progress: 1.0,
@@ -318,16 +330,6 @@ class DownloadManager extends ChangeNotifier {
           remainingBytes: 0,
           etaSeconds: 0,
         ));
-        await _repository.saveDownloadTask(songId, DownloadStatus.completed, 1.0, localFile.path);
-        
-        // Read full song info from DB to avoid loss of details
-        final song = await _repository.getSongById(songId);
-        if (song != null) {
-          await _repository.saveSongMetadata(
-            song,
-            downloaded: true,
-          );
-        }
       }
     } catch (e, stack) {
       DALogger.error('DownloadWorker failed for songId: $songId', e, stack);
