@@ -45,9 +45,16 @@ class PlayerBackground extends ConsumerWidget {
       curve: curve,
       height: double.infinity,
       decoration: BoxDecoration(
-        color: colors.surface,
+        color: isImmersive ? Colors.transparent : colors.surface.withValues(alpha: 0.55),
         borderRadius: borderRadius,
-        border: border,
+        border: isImmersive
+            ? border
+            : Border(
+                left: BorderSide(
+                  color: colors.border.withValues(alpha: 0.4),
+                  width: 1.0,
+                ),
+              ),
       ),
       child: child,
     );

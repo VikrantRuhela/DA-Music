@@ -166,37 +166,52 @@ class _AudioVisualizer extends ConsumerStatefulWidget {
 
 class _AudioVisualizerState extends ConsumerState<_AudioVisualizer> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  final List<double> _heights = List.filled(7, 2.0);
+  final int _barCount = 11; // 11 bars (4 additional bars for fuller look)
+  late final List<double> _currentHeights;
+  late final List<double> _targetHeights;
   final Random _random = Random();
+  int _tickCount = 0;
 
   @override
   void initState() {
     super.initState();
+    _currentHeights = List.filled(_barCount, 3.0);
+    _targetHeights = List.filled(_barCount, 3.0);
+
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 100),
-    )..addListener(_updateHeights);
+      duration: const Duration(seconds: 1),
+    )..addListener(_onTick);
     _controller.repeat();
   }
 
-  void _updateHeights() {
+  void _onTick() {
     final playbackState = ref.read(playbackStateProvider);
     final isPlaying = playbackState.status == PlaybackStatus.playing;
 
+    _tickCount++;
+
+    // Periodically update target heights (slower rate) to reduce rapid fluctuations
+    if (isPlaying && _tickCount % 10 == 0) {
+      for (int i = 0; i < _barCount; i++) {
+        _targetHeights[i] = 3.0 + _random.nextDouble() * 15.0; // Reduced sensitivity
+      }
+    } else if (!isPlaying) {
+      for (int i = 0; i < _barCount; i++) {
+        _targetHeights[i] = 3.0;
+      }
+    }
+
     setState(() {
-      for (int i = 0; i < _heights.length; i++) {
-        if (isPlaying) {
-          _heights[i] = 4.0 + _random.nextDouble() * 18.0;
-        } else {
-          _heights[i] = _heights[i] * 0.8 + 0.4;
-        }
+      for (int i = 0; i < _barCount; i++) {
+        // Slow interpolation (lerp) towards target heights to smooth spikes
+        _currentHeights[i] = _currentHeights[i] + (_targetHeights[i] - _currentHeights[i]) * 0.12;
       }
     });
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_updateHeights);
     _controller.dispose();
     super.dispose();
   }
@@ -211,10 +226,10 @@ class _AudioVisualizerState extends ConsumerState<_AudioVisualizer> with SingleT
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: List.generate(_heights.length, (index) {
+        children: List.generate(_barCount, (index) {
           return Container(
             width: 3.0,
-            height: _heights[index],
+            height: _currentHeights[index],
             margin: const EdgeInsets.symmetric(horizontal: 1.5),
             decoration: BoxDecoration(
               color: colors.primary,

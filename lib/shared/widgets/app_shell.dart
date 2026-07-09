@@ -9,6 +9,7 @@ import '../providers/player_providers.dart';
 import '../animations/motion_system.dart';
 import 'custom_title_bar.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
+import 'ambient_background.dart';
 
 class AppShell extends ConsumerWidget {
   final Widget child;
@@ -23,14 +24,13 @@ class AppShell extends ConsumerWidget {
     final duration = ref.scaledDuration(isImmersive ? DAMotion.large : const Duration(milliseconds: 380));
     final curve = ref.scaledCurve(DAMotion.fastOutSlowIn);
 
-
-
     return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const CustomTitleBar(),
+      backgroundColor: Colors.transparent,
+      body: AmbientBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              const CustomTitleBar(),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -74,10 +74,10 @@ class AppShell extends ConsumerWidget {
                       child: Container(
                         margin: isImmersive ? EdgeInsets.zero : const EdgeInsets.all(DATokens.spacingSmall),
                         decoration: BoxDecoration(
-                          color: colors.surface,
+                          color: isImmersive ? Colors.transparent : colors.surface.withValues(alpha: 0.65),
                           borderRadius: BorderRadius.circular(isImmersive ? 0.0 : DATokens.radiusXXLarge),
                           border: Border.all(
-                            color: isImmersive ? Colors.transparent : colors.border,
+                            color: isImmersive ? Colors.transparent : colors.border.withValues(alpha: 0.4),
                             width: 1.0,
                           ),
                         ),
@@ -115,6 +115,7 @@ class AppShell extends ConsumerWidget {
     ],
   ),
 ),
+),
       bottomNavigationBar: MediaQuery.of(context).size.width < 700 && !isImmersive
           ? const _MobileBottomNavBar()
           : null,
@@ -133,10 +134,10 @@ class _MobileBottomNavBar extends StatelessWidget {
     return Container(
       height: 64.0,
       decoration: BoxDecoration(
-        color: colors.surface,
+        color: colors.surface.withValues(alpha: 0.65),
         border: Border(
           top: BorderSide(
-            color: colors.border,
+            color: colors.border.withValues(alpha: 0.4),
             width: 1.0,
           ),
         ),

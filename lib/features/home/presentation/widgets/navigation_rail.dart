@@ -15,10 +15,10 @@ class NavigationRailWidget extends StatelessWidget {
       width: 72.0,
       margin: const EdgeInsets.all(DATokens.spacingSmall),
       decoration: BoxDecoration(
-        color: colors.surface,
+        color: colors.surface.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(DATokens.radiusXXLarge),
         border: Border.all(
-          color: colors.border,
+          color: colors.border.withValues(alpha: 0.4),
           width: 1.0,
         ),
       ),
