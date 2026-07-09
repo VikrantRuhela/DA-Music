@@ -12,12 +12,43 @@ class TonearmWidget extends ConsumerStatefulWidget {
   ConsumerState<TonearmWidget> createState() => _TonearmWidgetState();
 }
 
-class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
+class _TonearmWidgetState extends ConsumerState<TonearmWidget> with TickerProviderStateMixin {
+  late final AnimationController _rotationController;
+  late final AnimationController _liftController;
+  
   double? _dragAngle;
   bool _isDragging = false;
   String? _lastSongId;
-  bool _isNewSongStarting = false;
-  double _lastTargetAngle = 2.0 * (pi / 180.0);
+  bool _lastIsPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      lowerBound: 2.0 * (pi / 180.0),
+      upperBound: 27.0 * (pi / 180.0),
+      value: 2.0 * (pi / 180.0),
+    )..addListener(() {
+        setState(() {});
+      });
+
+    _liftController = AnimationController(
+      vsync: this,
+      lowerBound: 0.0,
+      upperBound: 1.0,
+      value: 1.0,
+    )..addListener(() {
+        setState(() {});
+      });
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    _liftController.dispose();
+    super.dispose();
+  }
 
   void _handleDrag(Offset localPos) {
     final currentSong = ref.read(currentSongProvider);
@@ -95,63 +126,71 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
     final position = controller.position;
     final String? songId = currentSong?.id;
 
-    // Detect track change and flag it to reset positions instantly
+    final isPlaying = currentSong != null && playbackState.status == PlaybackStatus.playing;
+
+    // Detect song change and reset state instantly
     if (songId != _lastSongId) {
       _lastSongId = songId;
-      _isNewSongStarting = true;
-      _lastTargetAngle = 2.0 * (pi / 180.0);
+      _rotationController.value = 17.0 * (pi / 180.0);
+      _liftController.value = isPlaying ? 0.0 : 1.0;
     }
 
-    // Unflag once the media player position has reset to the beginning of the new track
-    if (_isNewSongStarting && position.inMilliseconds < 500) {
-      _isNewSongStarting = false;
-    }
-
-    // Force progress to 0% during track load/transition to avoid stale positions
-    final double progress = (_isNewSongStarting || duration.inMilliseconds == 0)
+    final double progress = (duration.inMilliseconds == 0)
         ? 0.0
         : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
-
-    final isPlaying = currentSong != null && playbackState.status == PlaybackStatus.playing;
 
     double targetAngle;
     double targetLift;
 
     if (_isDragging && _dragAngle != null) {
-      // User is actively dragging: follows finger and lifts off vinyl
       targetAngle = _dragAngle!;
       targetLift = 1.0;
+      _rotationController.value = targetAngle;
+      _liftController.value = targetLift;
     } else if (isPlaying) {
-      // Playing: moves slowly across grooves strictly based on playback progress
-      // Calibrated Start Angle: 17.0 degrees (first playable groove)
-      // Calibrated End Angle: 27.0 degrees (last playable groove, radius 141.9px)
       targetAngle = (17.0 + progress * 10.0) * (pi / 180.0);
-      targetLift = 0.0; // Lands gently on the record
+      
+      // Detect transitions or seeking (large difference)
+      final double diff = (_rotationController.value - targetAngle).abs();
+      final bool statusChanged = isPlaying != _lastIsPlaying;
+      
+      if (statusChanged || diff > 1.0 * (pi / 180.0)) {
+        _rotationController.animateTo(
+          targetAngle,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+        _liftController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      } else if (!_rotationController.isAnimating) {
+        _rotationController.value = targetAngle;
+        _liftController.value = 0.0;
+      }
     } else {
-      // Stopped / Paused: always returns COMPLETELY to the predefined parked position beside the vinyl
       targetAngle = 2.0 * (pi / 180.0);
-      targetLift = 1.0; // Fully raised/parked
+      final bool statusChanged = isPlaying != _lastIsPlaying;
+      
+      if (statusChanged) {
+        _rotationController.animateTo(
+          targetAngle,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+        _liftController.animateTo(
+          1.0,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      } else if (!_rotationController.isAnimating) {
+        _rotationController.value = targetAngle;
+        _liftController.value = 1.0;
+      }
     }
 
-    // Determine animation parameters based on reactive target angle difference (angleDiff)
-    final double angleDiff = (targetAngle - _lastTargetAngle).abs();
-    _lastTargetAngle = targetAngle;
-
-    Duration animDuration;
-    Curve animCurve;
-
-    if (_isDragging) {
-      animDuration = const Duration(milliseconds: 40);
-      animCurve = Curves.linear;
-    } else if (angleDiff > 1.0 * (pi / 180.0)) {
-      // Large change: Play, Pause, Resume, Seek, or Track Change Transition
-      animDuration = const Duration(milliseconds: 200);
-      animCurve = Curves.easeOut;
-    } else {
-      // Tiny change: Continuous progress tracking
-      animDuration = const Duration(milliseconds: 50);
-      animCurve = Curves.linear;
-    }
+    _lastIsPlaying = isPlaying;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -160,30 +199,16 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> {
       onPanEnd: (_) => _endDrag(),
       onPanCancel: () => _endDrag(),
       child: Stack(
-        key: ValueKey(songId), // Reset stack state and key animations on track change
+        key: ValueKey(songId), // Reset stack state on track change
         children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: isPlaying ? 17.0 * (pi / 180.0) : 2.0 * (pi / 180.0), end: targetAngle),
-            duration: animDuration,
-            curve: animCurve,
-            builder: (context, angle, child) {
-              return TweenAnimationBuilder<double>(
-                tween: Tween<double>(begin: 1.0, end: targetLift),
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                builder: (context, lift, child) {
-                  return CustomPaint(
-                    size: const Size(460.0, 380.0),
-                    painter: _TonearmPainter(
-                      angle: angle,
-                      lift: lift,
-                      primaryColor: colors.primary,
-                      accentColor: colors.accent,
-                    ),
-                  );
-                },
-              );
-            },
+          CustomPaint(
+            size: const Size(460.0, 380.0),
+            painter: _TonearmPainter(
+              angle: _rotationController.value,
+              lift: _liftController.value,
+              primaryColor: colors.primary,
+              accentColor: colors.accent,
+            ),
           ),
         ],
       ),
