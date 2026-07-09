@@ -158,12 +158,13 @@ class _ControlButtonState extends State<_ControlButton> {
                   ? colors.primary
                   : (_isHovered ? colors.surfaceHover : Colors.transparent),
               shape: BoxShape.circle,
-              boxShadow: widget.isPrimary && _isHovered
+              boxShadow: widget.isPrimary
                   ? [
                       BoxShadow(
-                        color: colors.primary.withValues(alpha: 0.35),
-                        blurRadius: 12.0,
-                        offset: const Offset(0, 4),
+                        color: colors.primary.withValues(alpha: _isHovered ? 0.45 : 0.22),
+                        blurRadius: _isHovered ? 16.0 : 8.0,
+                        spreadRadius: _isHovered ? 2.0 : 0.0,
+                        offset: Offset(0, _isHovered ? 6 : 3),
                       )
                     ]
                   : [],

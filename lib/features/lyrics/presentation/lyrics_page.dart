@@ -274,7 +274,7 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
                             
                             // Dim lines that are not currently active
                             final color = isSynced
-                                ? (isActive ? Colors.white : Colors.white.withValues(alpha: 0.35))
+                                ? (isActive ? colors.primary : Colors.white.withValues(alpha: 0.35))
                                 : Colors.white;
 
                             final style = typography.title.copyWith(

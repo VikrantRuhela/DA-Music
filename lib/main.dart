@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/router/router.dart';
-import 'app/theme/theme.dart';
+import 'app/theme/dynamic_theme_provider.dart';
 import 'core/services/platform_service.dart';
 import 'core/services/windows_platform_service.dart';
 import 'core/services/default_platform_service.dart';
@@ -32,18 +32,28 @@ void main() async {
   );
 }
 
-class DAMusicApp extends StatelessWidget {
+class DAMusicApp extends ConsumerWidget {
   const DAMusicApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeData = ref.watch(dynamicThemeProvider);
+
     return MaterialApp.router(
       title: 'DA Music',
       debugShowCheckedModeBanner: false,
-      theme: DATheme.lightTheme,
-      darkTheme: DATheme.darkTheme,
-      themeMode: ThemeMode.dark, // Default to a sleek premium dark theme
+      theme: themeData,
+      darkTheme: themeData,
+      themeMode: ThemeMode.dark,
       routerConfig: goRouter,
+      builder: (context, child) {
+        return AnimatedTheme(
+          data: themeData,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }

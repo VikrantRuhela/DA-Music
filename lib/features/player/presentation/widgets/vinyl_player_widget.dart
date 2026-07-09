@@ -27,8 +27,8 @@ class _VinylPlayerWidgetState extends ConsumerState<VinylPlayerWidget> {
     final glowShadow = _isHovered
         ? [
             BoxShadow(
-              color: colors.primary.withValues(alpha: 0.25),
-              blurRadius: 24.0,
+              color: colors.primary.withValues(alpha: 0.35),
+              blurRadius: 32.0,
               spreadRadius: 4.0,
             ),
             BoxShadow(
@@ -38,6 +38,11 @@ class _VinylPlayerWidgetState extends ConsumerState<VinylPlayerWidget> {
             )
           ]
         : [
+            BoxShadow(
+              color: colors.primary.withValues(alpha: 0.12),
+              blurRadius: 20.0,
+              spreadRadius: 1.0,
+            ),
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.35),
               blurRadius: 16.0,
