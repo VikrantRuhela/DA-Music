@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../../core/extensions/context_extensions.dart';
 import '../../../../../app/theme/tokens.dart';
-import '../../../../../shared/widgets/da_icon_button.dart';
 import 'immersive_background.dart';
 import '../vinyl_player_widget.dart';
 import 'song_info.dart';
@@ -24,8 +23,6 @@ class ImmersivePlayer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentSong = ref.watch(currentSongProvider);
-    final libraryManager = ref.watch(libraryManagerProvider);
-    final isLiked = currentSong != null && libraryManager.isSongLiked(currentSong.id);
 
     const Widget leftTurntableSide = VinylPlayerWidget();
 
@@ -59,27 +56,10 @@ class ImmersivePlayer extends ConsumerWidget {
           child: Column(
             children: [
               // Top Actions Row
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  DAIconButton(
-                    icon: isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: isLiked ? Colors.redAccent : null,
-                    tooltip: isLiked ? 'Remove from Favorites' : 'Add to Favorites',
-                    onPressed: currentSong != null
-                        ? () => ref.read(libraryManagerProvider.notifier).toggleLikeSong(currentSong)
-                        : () {},
-                  ),
-                  const SizedBox(width: DATokens.spacingSmall),
-                  DAIconButton(
-                    icon: Icons.more_vert_outlined,
-                    tooltip: 'More Options',
-                    onPressed: currentSong != null
-                        ? () => showSongOptionsMenu(context, ref, currentSong)
-                        : () {},
-                  ),
-                  const SizedBox(width: DATokens.spacingSmall),
-                  const CollapseButton(),
+                  CollapseButton(),
                 ],
               ),
 
