@@ -91,21 +91,57 @@ class YouTubeMusicAccountService {
   }
 
   Future<List<Playlist>> fetchLibraryPlaylists() async {
-    final data = await _postBrowse("FEmusic_liked_playlists");
-    if (data == null) return const [];
-    return _parsePlaylistsFromInnerTube(data);
+    final corpusData = await _postBrowse("FEmusic_library_corpus_playlists");
+    final likedData = await _postBrowse("FEmusic_liked_playlists");
+
+    final List<Playlist> playlists = [];
+    if (corpusData != null) {
+      playlists.addAll(_parsePlaylistsFromInnerTube(corpusData));
+    }
+    if (likedData != null) {
+      playlists.addAll(_parsePlaylistsFromInnerTube(likedData));
+    }
+
+    final Set<String> seenIds = {};
+    final deduped = playlists.where((p) => seenIds.add(p.id)).toList();
+    DALogger.info('YTM API Sync: Library Playlists merged. Created/Saved corpus + Liked. Total Count: ${deduped.length}');
+    return deduped;
   }
 
   Future<List<Artist>> fetchLibraryArtists() async {
-    final data = await _postBrowse("FEmusic_library_corpus_track_artists");
-    if (data == null) return const [];
-    return _parseArtistsFromInnerTube(data);
+    final trackArtistsData = await _postBrowse("FEmusic_library_corpus_track_artists");
+    final artistsData = await _postBrowse("FEmusic_library_corpus_artists");
+
+    final List<Artist> artists = [];
+    if (trackArtistsData != null) {
+      artists.addAll(_parseArtistsFromInnerTube(trackArtistsData));
+    }
+    if (artistsData != null) {
+      artists.addAll(_parseArtistsFromInnerTube(artistsData));
+    }
+
+    final Set<String> seenIds = {};
+    final deduped = artists.where((a) => seenIds.add(a.id)).toList();
+    DALogger.info('YTM API Sync: Library Artists merged. Total Count: ${deduped.length}');
+    return deduped;
   }
 
   Future<List<Album>> fetchLibraryAlbums() async {
-    final data = await _postBrowse("FEmusic_liked_albums");
-    if (data == null) return const [];
-    return _parseAlbumsFromInnerTube(data);
+    final corpusData = await _postBrowse("FEmusic_library_corpus_albums");
+    final likedData = await _postBrowse("FEmusic_liked_albums");
+
+    final List<Album> albums = [];
+    if (corpusData != null) {
+      albums.addAll(_parseAlbumsFromInnerTube(corpusData));
+    }
+    if (likedData != null) {
+      albums.addAll(_parseAlbumsFromInnerTube(likedData));
+    }
+
+    final Set<String> seenIds = {};
+    final deduped = albums.where((a) => seenIds.add(a.id)).toList();
+    DALogger.info('YTM API Sync: Library Albums merged. Total Count: ${deduped.length}');
+    return deduped;
   }
 
   Future<List<Song>> fetchHistory() async {
@@ -238,12 +274,32 @@ class YouTubeMusicAccountService {
             final String? playlistId = renderer['playlistId'] ?? 
                 renderer['navigationEndpoint']?['browseEndpoint']?['browseId'];
             
-            if (playlistId != null && playlistId.isNotEmpty && (playlistId.startsWith('PL') || playlistId.startsWith('VL'))) {
+            if (playlistId != null && playlistId.isNotEmpty && (playlistId.startsWith('PL') || playlistId.startsWith('VL') || playlistId.startsWith('RD'))) {
               final titleText = renderer['title']?['runs']?[0]?['text'] ??
                   renderer['title']?['simpleText'] ?? 'Library Playlist';
 
               playlists.add(Playlist(
                 id: playlistId,
+                name: titleText,
+                songs: const [],
+              ));
+            }
+          } catch (_) {}
+        } else if (node.containsKey('musicResponsiveListItemRenderer')) {
+          try {
+            final renderer = node['musicResponsiveListItemRenderer'];
+            final browseId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] as String?;
+            if (browseId != null && (browseId.startsWith('PL') || browseId.startsWith('VL') || browseId.startsWith('RD'))) {
+              String titleText = 'Library Playlist';
+              final flexColumns = renderer['flexColumns'] as List?;
+              if (flexColumns != null && flexColumns.isNotEmpty) {
+                final runs = flexColumns[0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                if (runs != null && runs.isNotEmpty) {
+                  titleText = runs[0]['text'] as String? ?? 'Library Playlist';
+                }
+              }
+              playlists.add(Playlist(
+                id: browseId,
                 name: titleText,
                 songs: const [],
               ));
@@ -275,15 +331,40 @@ class YouTubeMusicAccountService {
                   renderer['title']?['simpleText'] ?? 'Library Artist';
 
               String cover = '';
-              final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
-                  renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'];
-              if (thumbnails is List && thumbnails.isNotEmpty) {
+              final thumbnails = (renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                  renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List?;
+              if (thumbnails != null && thumbnails.isNotEmpty) {
                 cover = thumbnails.last['url'] as String? ?? '';
               }
 
               artists.add(Artist(
                 id: artistId,
                 name: titleText,
+                artworkUrl: cover,
+              ));
+            }
+          } catch (_) {}
+        } else if (node.containsKey('musicResponsiveListItemRenderer')) {
+          try {
+            final renderer = node['musicResponsiveListItemRenderer'];
+            final browseId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] as String?;
+            if (browseId != null && (browseId.startsWith('UC') || browseId.contains('FEmusic_library_corpus_artist'))) {
+              String name = 'Library Artist';
+              final flexColumns = renderer['flexColumns'] as List?;
+              if (flexColumns != null && flexColumns.isNotEmpty) {
+                final runs = flexColumns[0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                if (runs != null && runs.isNotEmpty) {
+                  name = runs[0]['text'] as String? ?? 'Library Artist';
+                }
+              }
+              String cover = '';
+              final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+              if (thumbnails != null && thumbnails.isNotEmpty) {
+                cover = thumbnails.last['url'] as String? ?? '';
+              }
+              artists.add(Artist(
+                id: browseId,
+                name: name,
                 artworkUrl: cover,
               ));
             }
@@ -304,9 +385,9 @@ class YouTubeMusicAccountService {
 
     void findAlbums(dynamic node) {
       if (node is Map) {
-        if (node.containsKey('albumRenderer') || node.containsKey('musicTwoRowItemRenderer') || node.containsKey('musicResponsiveListItemRenderer')) {
+        if (node.containsKey('albumRenderer') || node.containsKey('musicTwoRowItemRenderer')) {
           try {
-            final renderer = node['albumRenderer'] ?? node['musicTwoRowItemRenderer'] ?? node['musicResponsiveListItemRenderer'];
+            final renderer = node['albumRenderer'] ?? node['musicTwoRowItemRenderer'];
             final String? albumId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] ??
                 renderer['title']?['runs']?[0]?['navigationEndpoint']?['browseEndpoint']?['browseId'];
             
@@ -318,25 +399,54 @@ class YouTubeMusicAccountService {
               final subtitleRuns = renderer['subtitle']?['runs'] as List?;
               if (subtitleRuns != null && subtitleRuns.isNotEmpty) {
                 artist = subtitleRuns[0]['text'] as String? ?? 'Unknown Artist';
-              } else {
-                final flexColumns = renderer['flexColumns'] as List?;
-                if (flexColumns != null && flexColumns.length > 1) {
-                  final runs = flexColumns[1]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
-                  if (runs != null && runs.isNotEmpty) {
-                    artist = runs[0]['text'] as String? ?? 'Unknown Artist';
-                  }
-                }
               }
 
               String cover = '';
-              final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
-                  renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'];
-              if (thumbnails is List && thumbnails.isNotEmpty) {
+              final thumbnails = (renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                  renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List?;
+              if (thumbnails != null && thumbnails.isNotEmpty) {
                 cover = thumbnails.last['url'] as String? ?? '';
               }
 
               albums.add(Album(
                 id: albumId,
+                name: titleText,
+                artist: artist,
+                artworkUrl: cover,
+                songs: const [],
+              ));
+            }
+          } catch (_) {}
+        } else if (node.containsKey('musicResponsiveListItemRenderer')) {
+          try {
+            final renderer = node['musicResponsiveListItemRenderer'];
+            final browseId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] as String?;
+            if (browseId != null && (browseId.startsWith('MPREb_') || browseId.contains('album') || browseId.contains('release') || browseId.contains('FEmusic_library_corpus_album'))) {
+              String titleText = 'Library Album';
+              String artist = 'Unknown Artist';
+              
+              final flexColumns = renderer['flexColumns'] as List?;
+              if (flexColumns != null && flexColumns.isNotEmpty) {
+                final runs = flexColumns[0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                if (runs != null && runs.isNotEmpty) {
+                  titleText = runs[0]['text'] as String? ?? 'Library Album';
+                }
+                if (flexColumns.length > 1) {
+                  final runs2 = flexColumns[1]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                  if (runs2 != null && runs2.isNotEmpty) {
+                    artist = runs2[0]['text'] as String? ?? 'Unknown Artist';
+                  }
+                }
+              }
+
+              String cover = '';
+              final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+              if (thumbnails != null && thumbnails.isNotEmpty) {
+                cover = thumbnails.last['url'] as String? ?? '';
+              }
+
+              albums.add(Album(
+                id: browseId,
                 name: titleText,
                 artist: artist,
                 artworkUrl: cover,
@@ -385,32 +495,70 @@ class YouTubeMusicAccountService {
     final data = await _postBrowse("FEmusic_home");
     if (data == null) return sections;
 
-    void parseShelf(dynamic shelf) {
-      if (shelf is! Map) return;
+    int shelfCount = 0;
+    int recommendationsShelvesCount = 0;
 
-      final title = shelf['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text'] as String? ?? 
-                    shelf['header']?['musicShelfRenderer']?['title']?['runs']?[0]?['text'] as String? ?? '';
-      
-      final contents = shelf['contents'] as List?;
-      if (contents == null) return;
+    void processContainer(Map container, String shelfTitle) {
+      final items = container['contents'] ?? container['items'];
+      if (items is! List) return;
 
-      final titleLower = title.toLowerCase();
+      shelfCount++;
+      final titleLower = shelfTitle.toLowerCase();
+      final isRecShelf = titleLower.contains('recommend') || titleLower.contains('mix') || titleLower.contains('similar') || titleLower.contains('for you') || titleLower.contains('quick pick') || titleLower.contains('listen again');
+      if (isRecShelf) {
+        recommendationsShelvesCount++;
+      }
 
-      for (final itemContainer in contents) {
-        if (itemContainer is! Map) continue;
+      for (final item in items) {
+        if (item is! Map) continue;
 
-        if (itemContainer.containsKey('musicResponsiveListItemRenderer')) {
-          final songsList = _parseSongsFromInnerTube({'contents': [itemContainer]});
+        if (item.containsKey('musicResponsiveListItemRenderer')) {
+          final songsList = _parseSongsFromInnerTube({'contents': [item]});
           if (songsList.isNotEmpty) {
             sections['songs']!.addAll(songsList);
           }
         }
-        else if (itemContainer.containsKey('musicTwoRowItemRenderer')) {
-          final renderer = itemContainer['musicTwoRowItemRenderer'];
-          final String? browseId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] ??
-                                   renderer['title']?['runs']?[0]?['navigationEndpoint']?['browseEndpoint']?['browseId'];
+        else {
+          final renderer = item['musicTwoRowItemRenderer'] ?? 
+                           item['musicMultiRowListItemRenderer'] ?? 
+                           item['playlistRenderer'] ?? 
+                           item['albumRenderer'] ?? 
+                           item;
           
-          if (browseId != null && browseId.isNotEmpty) {
+          if (renderer is! Map) continue;
+
+          final String? browseId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] ??
+                                   renderer['title']?['runs']?[0]?['navigationEndpoint']?['browseEndpoint']?['browseId'] ??
+                                   renderer['playlistId'] ??
+                                   renderer['navigationEndpoint']?['watchEndpoint']?['playlistId'];
+
+          final videoId = renderer['navigationEndpoint']?['watchEndpoint']?['videoId'] as String?;
+
+          if (videoId != null && videoId.isNotEmpty) {
+            final titleText = renderer['title']?['runs']?[0]?['text'] ??
+                              renderer['title']?['simpleText'] ?? 'Unknown Song';
+            String artist = 'Unknown Artist';
+            final subtitleRuns = renderer['subtitle']?['runs'] as List?;
+            if (subtitleRuns != null && subtitleRuns.isNotEmpty) {
+              artist = subtitleRuns[0]['text'] as String? ?? 'Unknown Artist';
+            }
+            String thumbnail = '';
+            final thumbnails = renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+            if (thumbnails != null && thumbnails.isNotEmpty) {
+              thumbnail = thumbnails.last['url'] as String? ?? '';
+            }
+
+            sections['songs']!.add(Song(
+              id: videoId,
+              title: titleText,
+              artist: artist,
+              album: 'Single',
+              duration: const Duration(minutes: 3),
+              artworkUrl: thumbnail,
+              source: 'youtube_music',
+              lyrics: null,
+            ));
+          } else if (browseId != null && browseId.isNotEmpty) {
             final titleText = renderer['title']?['runs']?[0]?['text'] ??
                               renderer['title']?['simpleText'] ?? 'Item';
             
@@ -421,7 +569,8 @@ class YouTubeMusicAccountService {
             }
 
             String thumbnail = '';
-            final thumbnails = renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+            final thumbnails = (renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                                renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List?;
             if (thumbnails != null && thumbnails.isNotEmpty) {
               thumbnail = thumbnails.last['url'] as String? ?? '';
             }
@@ -434,7 +583,7 @@ class YouTubeMusicAccountService {
                 artworkUrl: thumbnail,
                 songs: const [],
               ));
-            } else if (browseId.startsWith('PL') || browseId.startsWith('VL') || browseId.startsWith('RD') || browseId.contains('playlist') || titleLower.contains('mix') || titleLower.contains('playlist') || titleLower.contains('radio')) {
+            } else {
               sections['playlists']!.add(Playlist(
                 id: browseId,
                 name: titleText,
@@ -446,22 +595,27 @@ class YouTubeMusicAccountService {
       }
     }
 
-    void findShelves(dynamic node) {
+    void findContainers(dynamic node) {
       if (node is Map) {
-        if (node.containsKey('musicCarouselShelfRenderer')) {
-          parseShelf(node['musicCarouselShelfRenderer']);
-        } else if (node.containsKey('musicShelfRenderer')) {
-          parseShelf(node['musicShelfRenderer']);
-        } else {
-          node.values.forEach(findShelves);
+        final title = node['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text'] as String? ??
+                      node['header']?['musicShelfRenderer']?['title']?['runs']?[0]?['text'] as String? ??
+                      node['title']?['runs']?[0]?['text'] as String? ??
+                      node['title']?['simpleText'] as String? ?? '';
+
+        if (node.containsKey('contents') && node['contents'] is List) {
+          processContainer(node, title);
+        } else if (node.containsKey('items') && node['items'] is List) {
+          processContainer(node, title);
         }
+        
+        node.values.forEach(findContainers);
       } else if (node is List) {
-        node.forEach(findShelves);
+        node.forEach(findContainers);
       }
     }
 
-    findShelves(data);
-    DALogger.info('YTM API Sync: Parsed personalized home sections. Songs: ${sections['songs']!.length}, Albums: ${sections['albums']!.length}, Playlists: ${sections['playlists']!.length}');
+    findContainers(data);
+    DALogger.info('YTM API Sync: Parsed personalized home sections. Total Shelves Returned: $shelfCount, Recommendations Shelves: $recommendationsShelvesCount, Songs: ${sections['songs']!.length}, Albums: ${sections['albums']!.length}, Playlists: ${sections['playlists']!.length}');
     return sections;
   }
 }

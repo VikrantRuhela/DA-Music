@@ -12,6 +12,7 @@ import '../../../core/services/download_manager.dart';
 import '../../../shared/models/music_models.dart';
 import '../../local_library/presentation/local_library_tab.dart';
 import '../../../shared/widgets/da_image.dart';
+import '../../../core/services/logger_service.dart';
 
 final playlistDetailProvider = FutureProvider.family<Playlist, String>((ref, id) async {
   final sourceManager = ref.read(sourceManagerProvider);
@@ -210,28 +211,40 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         return playlistsAsync.when(
           loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
           error: (err, _) => Center(child: Text('Error: $err', style: TextStyle(color: colors.textPrimary))),
-          data: (playlists) => _buildPlaylistsTab(playlists, colors, typography),
+          data: (playlists) {
+            DALogger.info('UI Rendering: Rendered ${playlists.length} playlists in library view');
+            return _buildPlaylistsTab(playlists, colors, typography);
+          },
         );
       case 1:
         final songsAsync = ref.watch(unifiedSongsProvider);
         return songsAsync.when(
           loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
           error: (err, _) => Center(child: Text('Error: $err', style: TextStyle(color: colors.textPrimary))),
-          data: (songs) => _buildSongsTab(songs, colors, typography),
+          data: (songs) {
+            DALogger.info('UI Rendering: Rendered ${songs.length} songs in library view');
+            return _buildSongsTab(songs, colors, typography);
+          },
         );
       case 2:
         final albumsAsync = ref.watch(unifiedAlbumsProvider);
         return albumsAsync.when(
           loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
           error: (err, _) => Center(child: Text('Error: $err', style: TextStyle(color: colors.textPrimary))),
-          data: (albums) => _buildAlbumsTab(albums, colors, typography),
+          data: (albums) {
+            DALogger.info('UI Rendering: Rendered ${albums.length} albums in library view');
+            return _buildAlbumsTab(albums, colors, typography);
+          },
         );
       case 3:
         final artistsAsync = ref.watch(unifiedArtistsProvider);
         return artistsAsync.when(
           loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
           error: (err, _) => Center(child: Text('Error: $err', style: TextStyle(color: colors.textPrimary))),
-          data: (artists) => _buildArtistsTab(artists, colors, typography),
+          data: (artists) {
+            DALogger.info('UI Rendering: Rendered ${artists.length} artists in library view');
+            return _buildArtistsTab(artists, colors, typography);
+          },
         );
       case 4:
         return _buildDownloadsTab(colors, typography);

@@ -17,6 +17,7 @@ import 'widgets/favorites_grid.dart';
 import 'widgets/recommended_section.dart';
 import '../../taste_engine/presentation/providers/taste_engine_providers.dart';
 import '../../../domain/entities/value_objects.dart';
+import '../../../core/services/logger_service.dart';
 
 final homeFeedProvider = FutureProvider<HomeFeed>((ref) async {
   final storage = ref.watch(storageServiceProvider);
@@ -173,6 +174,8 @@ class HomePage extends ConsumerWidget {
                 : recommendedSection.items.cast<Song>(),
             orElse: () => recommendedSection.items.cast<Song>(),
           );
+
+          DALogger.info('UI Rendering: Rendered ${recommendedSongs.length} songs, ${albumsSection.items.length} albums, and ${playlistsSection.items.length} playlists/mixes on the Home Page');
 
           final children = [
             const GreetingWidget(),
