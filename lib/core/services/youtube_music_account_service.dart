@@ -4,6 +4,7 @@
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
 import '../../shared/models/music_models.dart';
 import 'session_manager.dart';
 import 'logger_service.dart';
@@ -20,6 +21,31 @@ class AuthenticatedClient extends http.BaseClient {
     request.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     request.headers['x-youtube-client-name'] = '67';
     request.headers['x-youtube-client-version'] = '1.20250709.01.00';
+    request.headers['x-origin'] = 'https://music.youtube.com';
+
+    try {
+      final Map<String, String> cookiesMap = {};
+      for (final part in cookies.split(';')) {
+        final idx = part.indexOf('=');
+        if (idx == -1) continue;
+        final key = part.substring(0, idx).trim();
+        final val = part.substring(idx + 1).trim();
+        cookiesMap[key] = val;
+      }
+      final sapisid = cookiesMap['SAPISID'] ?? cookiesMap['__Secure-3PAPISID'];
+      if (sapisid != null) {
+        final timestamp = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+        const origin = 'https://music.youtube.com';
+        final input = '$timestamp $sapisid $origin';
+        
+        final bytes = utf8.encode(input);
+        final digest = sha1.convert(bytes);
+        final sha1Hex = digest.toString();
+        
+        request.headers['Authorization'] = 'SAPISIDHASH ${timestamp}_$sha1Hex';
+      }
+    } catch (_) {}
+
     return _inner.send(request);
   }
 
