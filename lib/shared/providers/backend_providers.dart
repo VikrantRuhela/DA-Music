@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/youtube_music_account_service.dart';
 import '../../core/services/secure_credential_store.dart';
 import '../../core/services/session_manager.dart';
+import '../../core/services/ytm_sync_manager.dart';
 import '../../core/config/app_config.dart';
 import 'library_providers.dart';
 import '../../domain/repositories/song_repository.dart';
@@ -259,4 +260,10 @@ final sessionManagerProvider = ChangeNotifierProvider<SessionManager>((ref) {
 final ytAccountServiceProvider = Provider<YouTubeMusicAccountService>((ref) {
   final sessionManager = ref.watch(sessionManagerProvider);
   return YouTubeMusicAccountService(sessionManager);
+});
+
+final ytmSyncManagerProvider = ChangeNotifierProvider<YtmSyncManager>((ref) {
+  final storage = ref.watch(storageServiceProvider);
+  final accountService = ref.watch(ytAccountServiceProvider);
+  return YtmSyncManager(storage, accountService);
 });

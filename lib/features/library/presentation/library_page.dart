@@ -1,15 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/extensions/context_extensions.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../shared/providers/player_providers.dart';
 import '../../../shared/providers/library_providers.dart';
+import '../../../shared/providers/backend_providers.dart';
 import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/utils/song_options.dart';
 import '../../../core/services/download_manager.dart';
-import '../../../core/services/library_manager.dart';
+import '../../../shared/models/music_models.dart';
 import '../../local_library/presentation/local_library_tab.dart';
 import '../../../shared/widgets/da_image.dart';
+
+final playlistDetailProvider = FutureProvider.family<Playlist, String>((ref, id) async {
+  final sourceManager = ref.read(sourceManagerProvider);
+  final playlistEntity = await sourceManager.getPlaylist(id);
+
+  final songs = await Future.wait(
+    playlistEntity.songIds.map((songId) async {
+      final s = await sourceManager.getSong(songId);
+      return Song(
+        id: s.id,
+        title: s.title,
+        artist: s.artistId,
+        album: s.albumId,
+        duration: s.duration.value,
+        artworkUrl: s.artwork.url,
+        source: s.sourceId,
+        lyrics: null,
+      );
+    }),
+  );
+
+  return Playlist(
+    id: playlistEntity.id,
+    name: playlistEntity.title,
+    songs: songs,
+  );
+});
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -20,7 +49,7 @@ class LibraryPage extends ConsumerStatefulWidget {
 
 class _LibraryPageState extends ConsumerState<LibraryPage> {
   String? _selectedPlaylistId;
-  int _selectedTab = 0; // 0 = Playlists, 1 = Downloads
+  int _selectedTab = 0; // 0 = Playlists, 1 = Songs, 2 = Albums, 3 = Artists, 4 = Downloads, 5 = Local Library
 
   void _showCreatePlaylistDialog(BuildContext context) {
     final controller = TextEditingController();
@@ -63,151 +92,64 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     final colors = context.daColors;
     final typography = context.daTypography;
 
-    final libraryManager = ref.watch(libraryManagerProvider);
-    final playlists = libraryManager.playlists;
-
     if (_selectedPlaylistId != null) {
-      final playlistIndex = playlists.indexWhere((p) => p.id == _selectedPlaylistId);
-      if (playlistIndex < 0) {
-        // Selected playlist was deleted
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          setState(() {
-            _selectedPlaylistId = null;
+      final isRemote = _selectedPlaylistId!.startsWith('PL') || _selectedPlaylistId!.startsWith('VL');
+      
+      if (!isRemote) {
+        final localPlaylists = ref.watch(libraryManagerProvider).playlists;
+        final playlistIndex = localPlaylists.indexWhere((p) => p.id == _selectedPlaylistId);
+        if (playlistIndex < 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            setState(() {
+              _selectedPlaylistId = null;
+            });
           });
-        });
-        return const SizedBox.shrink();
-      }
+          return const SizedBox.shrink();
+        }
 
-      final playlist = playlists[playlistIndex];
-
-      return Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            color: colors.textPrimary,
-            onPressed: () {
-              setState(() {
-                _selectedPlaylistId = null;
-              });
-            },
+        final playlist = localPlaylists[playlistIndex];
+        return _buildPlaylistDetailsView(
+          title: playlist.name,
+          songs: playlist.songs,
+          isRemote: false,
+          colors: colors,
+          typography: typography,
+        );
+      } else {
+        // Remote YTM Playlist Detail Loader
+        final playlistAsync = ref.watch(playlistDetailProvider(_selectedPlaylistId!));
+        return playlistAsync.when(
+          loading: () => Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+            body: Center(child: CircularProgressIndicator(color: colors.primary)),
           ),
-          title: Text(
-            playlist.name,
-            style: typography.title.copyWith(fontSize: 20.0, fontWeight: FontWeight.bold),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-              tooltip: 'Delete Playlist',
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Delete Playlist'),
-                    content: Text('Are you sure you want to delete "${playlist.name}"?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                        onPressed: () {
-                          ref.read(libraryManagerProvider.notifier).deletePlaylist(playlist.id);
-                          Navigator.pop(context);
-                          setState(() {
-                            _selectedPlaylistId = null;
-                          });
-                        },
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-        body: playlist.songs.isEmpty
-            ? const Center(
-                child: DAEmptyState(
-                  icon: Icons.playlist_play,
-                  title: 'Playlist is Empty',
-                  description: 'Add songs to this playlist using song overflow menus.',
-                ),
-              )
-            : ListView.builder(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: DATokens.spacingMedium,
-                  vertical: DATokens.spacingSmall,
-                ),
-                itemCount: playlist.songs.length,
-                itemBuilder: (context, index) {
-                  final song = playlist.songs[index];
-
-                  return Card(
-                    color: colors.surfaceCard.withValues(alpha: 0.1),
-                    margin: const EdgeInsets.only(bottom: DATokens.spacingSmall),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(DATokens.radiusMedium),
-                      side: BorderSide(color: colors.border.withValues(alpha: 0.1)),
-                    ),
-                    child: ListTile(
-                      onTap: () {
-                        ref.read(playbackControllerProvider).setQueue(
-                              playlist.songs,
-                              startIndex: index,
-                              autoPlay: true,
-                            );
-                      },
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                        child: DAImage(
-                          url: song.artworkUrl,
-                          width: 40,
-                          height: 40,
-                          fit: BoxFit.cover,
-                          placeholder: const Icon(Icons.music_note, color: Colors.white24),
-                        ),
-                      ),
-                      title: Text(
-                        song.title,
-                        style: typography.title.copyWith(fontSize: 14.0),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        song.artist,
-                        style: typography.caption.copyWith(color: colors.textSecondary),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
-                            onPressed: () {
-                              ref.read(libraryManagerProvider.notifier).removeSongFromPlaylist(playlist.id, song.id);
-                            },
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.more_vert, color: colors.textSecondary),
-                            onPressed: () {
-                              showSongOptionsMenu(context, ref, song);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+          error: (err, stack) => Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => setState(() => _selectedPlaylistId = null),
               ),
-      );
+            ),
+            body: Center(
+              child: Text(
+                'Failed to load playlist: $err',
+                style: TextStyle(color: colors.textPrimary),
+              ),
+            ),
+          ),
+          data: (playlist) => _buildPlaylistDetailsView(
+            title: playlist.name,
+            songs: playlist.songs,
+            isRemote: true,
+            colors: colors,
+            typography: typography,
+          ),
+        );
+      }
     }
 
     return Scaffold(
@@ -232,27 +174,72 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: DATokens.spacingMedium, vertical: DATokens.spacingSmall),
-            child: Row(
-              children: [
-                _buildTabButton('Playlists', 0, colors, typography),
-                const SizedBox(width: DATokens.spacingMedium * 1.5),
-                _buildTabButton('Downloads', 1, colors, typography),
-                const SizedBox(width: DATokens.spacingMedium * 1.5),
-                _buildTabButton('Local Library', 2, colors, typography),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  _buildTabButton('Playlists', 0, colors, typography),
+                  const SizedBox(width: DATokens.spacingMedium * 1.5),
+                  _buildTabButton('Songs', 1, colors, typography),
+                  const SizedBox(width: DATokens.spacingMedium * 1.5),
+                  _buildTabButton('Albums', 2, colors, typography),
+                  const SizedBox(width: DATokens.spacingMedium * 1.5),
+                  _buildTabButton('Artists', 3, colors, typography),
+                  const SizedBox(width: DATokens.spacingMedium * 1.5),
+                  _buildTabButton('Downloads', 4, colors, typography),
+                  const SizedBox(width: DATokens.spacingMedium * 1.5),
+                  _buildTabButton('Local Library', 5, colors, typography),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: DATokens.spacingSmall),
           Expanded(
-            child: _selectedTab == 0
-                ? _buildPlaylistsTab(playlists, colors, typography)
-                : _selectedTab == 1
-                    ? _buildDownloadsTab(colors, typography)
-                    : const LocalLibraryTab(),
+            child: _buildSelectedTabContent(colors, typography),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildSelectedTabContent(dynamic colors, dynamic typography) {
+    switch (_selectedTab) {
+      case 0:
+        final playlistsAsync = ref.watch(unifiedPlaylistsProvider);
+        return playlistsAsync.when(
+          loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
+          error: (err, _) => Center(child: Text('Error: $err', style: TextStyle(color: colors.textPrimary))),
+          data: (playlists) => _buildPlaylistsTab(playlists, colors, typography),
+        );
+      case 1:
+        final songsAsync = ref.watch(unifiedSongsProvider);
+        return songsAsync.when(
+          loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
+          error: (err, _) => Center(child: Text('Error: $err', style: TextStyle(color: colors.textPrimary))),
+          data: (songs) => _buildSongsTab(songs, colors, typography),
+        );
+      case 2:
+        final albumsAsync = ref.watch(unifiedAlbumsProvider);
+        return albumsAsync.when(
+          loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
+          error: (err, _) => Center(child: Text('Error: $err', style: TextStyle(color: colors.textPrimary))),
+          data: (albums) => _buildAlbumsTab(albums, colors, typography),
+        );
+      case 3:
+        final artistsAsync = ref.watch(unifiedArtistsProvider);
+        return artistsAsync.when(
+          loading: () => Center(child: CircularProgressIndicator(color: colors.primary)),
+          error: (err, _) => Center(child: Text('Error: $err', style: TextStyle(color: colors.textPrimary))),
+          data: (artists) => _buildArtistsTab(artists, colors, typography),
+        );
+      case 4:
+        return _buildDownloadsTab(colors, typography);
+      case 5:
+        return const LocalLibraryTab();
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _buildTabButton(String text, int index, dynamic colors, dynamic typography) {
@@ -282,7 +269,146 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     );
   }
 
-  Widget _buildPlaylistsTab(List<LibraryPlaylist> playlists, dynamic colors, dynamic typography) {
+  Widget _buildPlaylistDetailsView({
+    required String title,
+    required List<Song> songs,
+    required bool isRemote,
+    required dynamic colors,
+    required dynamic typography,
+  }) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          color: colors.textPrimary,
+          onPressed: () {
+            setState(() {
+              _selectedPlaylistId = null;
+            });
+          },
+        ),
+        title: Text(
+          title,
+          style: typography.title.copyWith(fontSize: 20.0, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          if (!isRemote)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              tooltip: 'Delete Playlist',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Delete Playlist'),
+                    content: Text('Are you sure you want to delete "$title"?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                        onPressed: () {
+                          ref.read(libraryManagerProvider.notifier).deletePlaylist(_selectedPlaylistId!);
+                          Navigator.pop(context);
+                          setState(() {
+                            _selectedPlaylistId = null;
+                          });
+                        },
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+      body: songs.isEmpty
+          ? const Center(
+              child: DAEmptyState(
+                icon: Icons.playlist_play,
+                title: 'Playlist is Empty',
+                description: 'Add songs to this playlist using song overflow menus.',
+              ),
+            )
+          : ListView.builder(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(
+                horizontal: DATokens.spacingMedium,
+                vertical: DATokens.spacingSmall,
+              ),
+              itemCount: songs.length,
+              itemBuilder: (context, index) {
+                final song = songs[index];
+
+                return Card(
+                  color: colors.surfaceCard.withValues(alpha: 0.1),
+                  margin: const EdgeInsets.only(bottom: DATokens.spacingSmall),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                    side: BorderSide(color: colors.border.withValues(alpha: 0.1)),
+                  ),
+                  child: ListTile(
+                    onTap: () {
+                      ref.read(playbackControllerProvider).setQueue(
+                            songs,
+                            startIndex: index,
+                            autoPlay: true,
+                          );
+                    },
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                      child: DAImage(
+                        url: song.artworkUrl,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        placeholder: const Icon(Icons.music_note, color: Colors.white24),
+                      ),
+                    ),
+                    title: Text(
+                      song.title,
+                      style: typography.title.copyWith(fontSize: 14.0),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      song.artist,
+                      style: typography.caption.copyWith(color: colors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!isRemote)
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+                            onPressed: () {
+                              ref.read(libraryManagerProvider.notifier).removeSongFromPlaylist(_selectedPlaylistId!, song.id);
+                            },
+                          ),
+                        IconButton(
+                          icon: Icon(Icons.more_vert, color: colors.textSecondary),
+                          onPressed: () {
+                            showSongOptionsMenu(context, ref, song);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildPlaylistsTab(List<Playlist> playlists, dynamic colors, dynamic typography) {
     if (playlists.isEmpty) {
       return Center(
         child: Column(
@@ -290,8 +416,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           children: [
             const DAEmptyState(
               icon: Icons.my_library_music_outlined,
-              title: 'Your Library is Empty',
-              description: 'Create custom playlists to organize your music.',
+              title: 'No Playlists Found',
+              description: 'Create custom playlists or synchronize your account.',
             ),
             const SizedBox(height: DATokens.spacingMedium),
             ElevatedButton.icon(
@@ -317,6 +443,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       itemCount: playlists.length,
       itemBuilder: (context, index) {
         final pl = playlists[index];
+        final isRemote = pl.id.startsWith('PL') || pl.id.startsWith('VL');
 
         return Card(
           color: colors.surfaceCard.withValues(alpha: 0.1),
@@ -338,17 +465,243 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 color: colors.surfaceHover,
                 borderRadius: BorderRadius.circular(DATokens.radiusSmall),
               ),
-              child: Icon(Icons.playlist_play, color: colors.primary),
+              child: Icon(
+                isRemote ? Icons.language_outlined : Icons.playlist_play,
+                color: colors.primary,
+              ),
             ),
             title: Text(
               pl.name,
               style: typography.title.copyWith(fontSize: 14.0, fontWeight: FontWeight.w600),
             ),
             subtitle: Text(
-              '${pl.songs.length} songs',
+              isRemote ? 'YouTube Music Playlist' : '${pl.songs.length} songs',
               style: typography.caption.copyWith(color: colors.textSecondary),
             ),
             trailing: const Icon(Icons.chevron_right),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSongsTab(List<Song> songs, dynamic colors, dynamic typography) {
+    if (songs.isEmpty) {
+      return const Center(
+        child: DAEmptyState(
+          icon: Icons.music_note_outlined,
+          title: 'No Songs Found',
+          description: 'Your unified songs library is empty.',
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(
+        horizontal: DATokens.spacingMedium,
+        vertical: DATokens.spacingSmall,
+      ),
+      itemCount: songs.length,
+      itemBuilder: (context, index) {
+        final song = songs[index];
+
+        return Card(
+          color: colors.surfaceCard.withValues(alpha: 0.1),
+          margin: const EdgeInsets.only(bottom: DATokens.spacingSmall),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+            side: BorderSide(color: colors.border.withValues(alpha: 0.1)),
+          ),
+          child: ListTile(
+            onTap: () {
+              ref.read(playbackControllerProvider).setQueue(
+                    songs,
+                    startIndex: index,
+                    autoPlay: true,
+                  );
+            },
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+              child: DAImage(
+                url: song.artworkUrl,
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                placeholder: const Icon(Icons.music_note, color: Colors.white24),
+              ),
+            ),
+            title: Text(
+              song.title,
+              style: typography.title.copyWith(fontSize: 14.0),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              song.artist,
+              style: typography.caption.copyWith(color: colors.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: IconButton(
+              icon: Icon(Icons.more_vert, color: colors.textSecondary),
+              onPressed: () {
+                showSongOptionsMenu(context, ref, song);
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAlbumsTab(List<Album> albums, dynamic colors, dynamic typography) {
+    if (albums.isEmpty) {
+      return const Center(
+        child: DAEmptyState(
+          icon: Icons.album_outlined,
+          title: 'No Albums Found',
+          description: 'Your unified albums library is empty.',
+        ),
+      );
+    }
+
+    return GridView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(DATokens.spacingMedium),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: DATokens.spacingMedium,
+        mainAxisSpacing: DATokens.spacingMedium,
+        childAspectRatio: 0.8,
+      ),
+      itemCount: albums.length,
+      itemBuilder: (context, index) {
+        final album = albums[index];
+
+        return GestureDetector(
+          onTap: () {
+            context.push('/album/${album.id}');
+          },
+          child: Card(
+            color: colors.surfaceCard.withValues(alpha: 0.1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+              side: BorderSide(color: colors.border.withValues(alpha: 0.1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(DATokens.radiusMedium)),
+                    child: DAImage(
+                      url: album.artworkUrl,
+                      fit: BoxFit.cover,
+                      placeholder: const Icon(Icons.album, size: 48, color: Colors.white24),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(DATokens.spacingSmall),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        album.name,
+                        style: typography.title.copyWith(fontSize: 13.0, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2.0),
+                      Text(
+                        album.artist,
+                        style: typography.caption.copyWith(color: colors.textSecondary, fontSize: 11.0),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildArtistsTab(List<Artist> artists, dynamic colors, dynamic typography) {
+    if (artists.isEmpty) {
+      return const Center(
+        child: DAEmptyState(
+          icon: Icons.people_outline,
+          title: 'No Artists Found',
+          description: 'Your unified artists library is empty.',
+        ),
+      );
+    }
+
+    return GridView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(DATokens.spacingMedium),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: DATokens.spacingMedium,
+        mainAxisSpacing: DATokens.spacingMedium,
+        childAspectRatio: 0.8,
+      ),
+      itemCount: artists.length,
+      itemBuilder: (context, index) {
+        final artist = artists[index];
+
+        return GestureDetector(
+          onTap: () {
+            context.push('/artist/${artist.id}');
+          },
+          child: Card(
+            color: colors.surfaceCard.withValues(alpha: 0.1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+              side: BorderSide(color: colors.border.withValues(alpha: 0.1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(DATokens.spacingMedium),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
+                        )
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: DAImage(
+                        url: artist.artworkUrl,
+                        fit: BoxFit.cover,
+                        placeholder: const Icon(Icons.person, size: 48, color: Colors.white24),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: DATokens.spacingSmall, left: DATokens.spacingSmall, right: DATokens.spacingSmall),
+                  child: Text(
+                    artist.name,
+                    style: typography.title.copyWith(fontSize: 13.0, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -462,37 +815,33 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   Widget _buildActiveTaskCard(DownloadTask t, dynamic colors, dynamic typography) {
-    String statusText = 'Queued';
-    if (t.status == DownloadStatus.downloading) {
-      final double speedBytesPerSec = t.speedMb * 1024 * 1024;
-      String speedText;
-      if (speedBytesPerSec <= 0) {
-        speedText = '0 KB/s';
-      } else if (speedBytesPerSec >= 1024 * 1024) {
-        speedText = '${(speedBytesPerSec / (1024 * 1024)).toStringAsFixed(1)} MB/s';
-      } else if (speedBytesPerSec >= 1024) {
-        speedText = '${(speedBytesPerSec / 1024).toStringAsFixed(0)} KB/s';
-      } else {
-        speedText = '1 KB/s';
-      }
-      final sizeText = '${(t.remainingBytes / (1024 * 1024)).toStringAsFixed(1)} MB left';
-      final etaText = t.etaSeconds > 0 ? '${t.etaSeconds}s left' : 'calculating...';
-      statusText = '$speedText  •  $sizeText  •  $etaText';
-    } else if (t.status == DownloadStatus.paused) {
-      statusText = 'Paused';
-    } else if (t.status == DownloadStatus.failed) {
-      statusText = 'Failed: ${t.error ?? "Unknown error"}';
+    String statusText = '';
+    switch (t.status) {
+      case DownloadStatus.queued:
+        statusText = 'Queued...';
+        break;
+      case DownloadStatus.downloading:
+        statusText = '${(t.progress * 100).toStringAsFixed(0)}% downloading...';
+        break;
+      case DownloadStatus.paused:
+        statusText = 'Paused';
+        break;
+      case DownloadStatus.failed:
+        statusText = 'Failed: ${t.error ?? "Unknown error"}';
+        break;
+      default:
+        break;
     }
 
     return Card(
-      color: colors.surfaceCard.withValues(alpha: 0.15),
+      color: colors.surfaceCard.withValues(alpha: 0.1),
       margin: const EdgeInsets.only(bottom: DATokens.spacingSmall),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(DATokens.radiusMedium),
-        side: BorderSide(color: colors.border.withValues(alpha: 0.15)),
+        side: BorderSide(color: colors.border.withValues(alpha: 0.1)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(DATokens.spacingMedium),
+        padding: const EdgeInsets.all(DATokens.spacingSmall),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

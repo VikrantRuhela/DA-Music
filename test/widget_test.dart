@@ -8,6 +8,7 @@ import 'package:da_music/core/services/storage_service.dart';
 import 'package:da_music/shared/providers/library_providers.dart';
 import 'package:da_music/shared/providers/backend_providers.dart';
 import 'package:da_music/core/services/secure_credential_store.dart';
+import 'package:da_music/core/services/session_manager.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -54,13 +55,14 @@ class FakeSecureCredentialStore extends SecureCredentialStore {
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({'ytm_guest_mode': true});
-    // Build our app and trigger a frame.
+    final sessionManager = SessionManager(FakeSecureCredentialStore());
+    sessionManager.setGuestMode(true);
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           storageServiceProvider.overrideWithValue(FakeStorageService()),
-          secureStoreProvider.overrideWithValue(FakeSecureCredentialStore()),
+          sessionManagerProvider.overrideWith((ref) => sessionManager),
           homeFeedProvider.overrideWith((ref) => HomeFeed(
             sections: [
               HomeFeedSection(title: 'Recommended for You', type: 'recommended', items: const []),

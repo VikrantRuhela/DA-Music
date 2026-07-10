@@ -46,6 +46,11 @@ void main([List<String> args = const []]) async {
   final accountService = container.read(ytAccountServiceProvider);
   await accountService.initialize();
 
+  // If already logged in on startup, trigger background synchronization
+  if (accountService.isLoggedIn) {
+    container.read(ytmSyncManagerProvider.notifier).startSync();
+  }
+
   final goRouter = container.read(goRouterProvider);
   // Handle session expiry by routing back to the welcome/login page
   container.read(sessionManagerProvider).onSessionExpired = () {
@@ -71,8 +76,7 @@ class DAMusicApp extends ConsumerWidget {
     // Watch session login transitions to automatically trigger initial library sync
     ref.listen<SessionManager>(sessionManagerProvider, (previous, next) {
       if (next.isLoggedIn && !(previous?.isLoggedIn ?? false)) {
-        final accountService = ref.read(ytAccountServiceProvider);
-        ref.read(libraryManagerProvider).syncWithYouTubeMusic(accountService);
+        ref.read(ytmSyncManagerProvider.notifier).startSync();
       }
     });
 

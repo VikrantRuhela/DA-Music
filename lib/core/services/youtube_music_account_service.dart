@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 DA Music Contributors
+// Licensed under GPL-3.0.
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../shared/models/music_models.dart';
@@ -93,6 +97,12 @@ class YouTubeMusicAccountService {
     final data = await _postBrowse("FEmusic_library_corpus_track_artists");
     if (data == null) return const [];
     return _parseArtistsFromInnerTube(data);
+  }
+
+  Future<List<Album>> fetchLibraryAlbums() async {
+    final data = await _postBrowse("FEmusic_liked_albums");
+    if (data == null) return const [];
+    return _parseAlbumsFromInnerTube(data);
   }
 
   Future<List<Song>> fetchHistory() async {
@@ -249,6 +259,62 @@ class YouTubeMusicAccountService {
 
     findArtists(json);
     return artists;
+  }
+
+  List<Album> _parseAlbumsFromInnerTube(Map<String, dynamic> json) {
+    final List<Album> albums = [];
+
+    void findAlbums(dynamic node) {
+      if (node is Map) {
+        if (node.containsKey('albumRenderer') || node.containsKey('musicTwoRowItemRenderer') || node.containsKey('musicResponsiveListItemRenderer')) {
+          try {
+            final renderer = node['albumRenderer'] ?? node['musicTwoRowItemRenderer'] ?? node['musicResponsiveListItemRenderer'];
+            final String? albumId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] ??
+                renderer['title']?['runs']?[0]?['navigationEndpoint']?['browseEndpoint']?['browseId'];
+            
+            if (albumId != null && albumId.isNotEmpty && (albumId.startsWith('MPREb_') || albumId.contains('album') || albumId.contains('release') || albumId.contains('FEmusic_library_corpus_album'))) {
+              final titleText = renderer['title']?['runs']?[0]?['text'] ??
+                  renderer['title']?['simpleText'] ?? 'Library Album';
+
+              String artist = 'Unknown Artist';
+              final subtitleRuns = renderer['subtitle']?['runs'] as List?;
+              if (subtitleRuns != null && subtitleRuns.isNotEmpty) {
+                artist = subtitleRuns[0]['text'] as String? ?? 'Unknown Artist';
+              } else {
+                final flexColumns = renderer['flexColumns'] as List?;
+                if (flexColumns != null && flexColumns.length > 1) {
+                  final runs = flexColumns[1]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                  if (runs != null && runs.isNotEmpty) {
+                    artist = runs[0]['text'] as String? ?? 'Unknown Artist';
+                  }
+                }
+              }
+
+              String cover = '';
+              final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                  renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'];
+              if (thumbnails is List && thumbnails.isNotEmpty) {
+                cover = thumbnails.last['url'] as String? ?? '';
+              }
+
+              albums.add(Album(
+                id: albumId,
+                name: titleText,
+                artist: artist,
+                artworkUrl: cover,
+                songs: const [],
+              ));
+            }
+          } catch (_) {}
+        }
+        node.values.forEach(findAlbums);
+      } else if (node is List) {
+        node.forEach(findAlbums);
+      }
+    }
+
+    findAlbums(json);
+    return albums;
   }
 
   Duration _parseDurationString(String durationStr) {
