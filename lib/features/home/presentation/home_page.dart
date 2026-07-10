@@ -30,7 +30,10 @@ final homeFeedProvider = FutureProvider<HomeFeed>((ref) async {
 
     if (accountService.isLoggedIn) {
       try {
-        final ytmSongs = await accountService.fetchPersonalizedRecommendations();
+        final ytmSections = await accountService.fetchPersonalizedHomeSections();
+        final List<HomeFeedSection> newSections = [];
+
+        final ytmSongs = ytmSections['songs'] ?? [];
         if (ytmSongs.isNotEmpty) {
           final domainSongs = ytmSongs.map((s) => Song(
             id: s.id,
@@ -38,25 +41,61 @@ final homeFeedProvider = FutureProvider<HomeFeed>((ref) async {
             artistId: s.artist,
             albumId: s.album,
             duration: DurationValue(s.duration),
-            thumbnail: Artwork(s.artworkUrl),
-            artwork: Artwork(s.artworkUrl),
+            thumbnail: Artwork(s.artworkUrl ?? ''),
+            artwork: Artwork(s.artworkUrl ?? ''),
             sourceId: s.source,
           )).toList();
-
-          // Replace only the recommended songs section
-          final sections = genericFeed.sections.map((section) {
-            if (section.type == 'recommended') {
-              return HomeFeedSection(
-                title: 'Recommended for You',
-                type: 'recommended',
-                items: domainSongs,
-              );
-            }
-            return section;
-          }).toList();
-
-          finalFeed = HomeFeed(sections: sections);
+          newSections.add(HomeFeedSection(
+            title: 'Recommended for You',
+            type: 'recommended',
+            items: domainSongs,
+          ));
+        } else {
+          newSections.add(genericFeed.sections.firstWhere((s) => s.type == 'recommended'));
         }
+
+        final ytmAlbums = ytmSections['albums'] ?? [];
+        if (ytmAlbums.isNotEmpty) {
+          final domainAlbums = ytmAlbums.map((a) => Album(
+            id: a.id,
+            title: a.name,
+            artistId: a.artist,
+            cover: Artwork(a.artworkUrl ?? ''),
+            year: 2026,
+            trackCount: 10,
+            duration: DurationValue(const Duration(minutes: 40)),
+          )).toList();
+          newSections.add(HomeFeedSection(
+            title: 'Recommended Albums',
+            type: 'albums',
+            items: domainAlbums,
+          ));
+        } else {
+          newSections.add(genericFeed.sections.firstWhere((s) => s.type == 'albums'));
+        }
+
+        final ytmPlaylists = ytmSections['playlists'] ?? [];
+        if (ytmPlaylists.isNotEmpty) {
+          final domainPlaylists = ytmPlaylists.map((p) => Playlist(
+            id: p.id,
+            title: p.name,
+            description: 'YouTube Music Mix',
+            cover: Artwork(p.artworkUrl ?? ''),
+            owner: 'YouTube Music',
+            songIds: const [],
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          )).toList();
+          newSections.add(HomeFeedSection(
+            title: 'Daily Mixes & Playlists',
+            type: 'playlists',
+            items: domainPlaylists,
+          ));
+        } else {
+          newSections.add(genericFeed.sections.firstWhere((s) => s.type == 'playlists'));
+        }
+
+        finalFeed = HomeFeed(sections: newSections);
       } catch (_) {}
     }
 

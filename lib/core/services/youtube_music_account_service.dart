@@ -374,4 +374,94 @@ class YouTubeMusicAccountService {
     } catch (_) {}
     return const Duration(minutes: 3);
   }
+
+  Future<Map<String, List<dynamic>>> fetchPersonalizedHomeSections() async {
+    final Map<String, List<dynamic>> sections = {
+      'songs': <Song>[],
+      'albums': <Album>[],
+      'playlists': <Playlist>[],
+    };
+
+    final data = await _postBrowse("FEmusic_home");
+    if (data == null) return sections;
+
+    void parseShelf(dynamic shelf) {
+      if (shelf is! Map) return;
+
+      final title = shelf['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text'] as String? ?? 
+                    shelf['header']?['musicShelfRenderer']?['title']?['runs']?[0]?['text'] as String? ?? '';
+      
+      final contents = shelf['contents'] as List?;
+      if (contents == null) return;
+
+      final titleLower = title.toLowerCase();
+
+      for (final itemContainer in contents) {
+        if (itemContainer is! Map) continue;
+
+        if (itemContainer.containsKey('musicResponsiveListItemRenderer')) {
+          final songsList = _parseSongsFromInnerTube({'contents': [itemContainer]});
+          if (songsList.isNotEmpty) {
+            sections['songs']!.addAll(songsList);
+          }
+        }
+        else if (itemContainer.containsKey('musicTwoRowItemRenderer')) {
+          final renderer = itemContainer['musicTwoRowItemRenderer'];
+          final String? browseId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] ??
+                                   renderer['title']?['runs']?[0]?['navigationEndpoint']?['browseEndpoint']?['browseId'];
+          
+          if (browseId != null && browseId.isNotEmpty) {
+            final titleText = renderer['title']?['runs']?[0]?['text'] ??
+                              renderer['title']?['simpleText'] ?? 'Item';
+            
+            String subtitle = 'YouTube Music';
+            final subtitleRuns = renderer['subtitle']?['runs'] as List?;
+            if (subtitleRuns != null && subtitleRuns.isNotEmpty) {
+              subtitle = subtitleRuns[0]['text'] as String? ?? 'YouTube Music';
+            }
+
+            String thumbnail = '';
+            final thumbnails = renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+            if (thumbnails != null && thumbnails.isNotEmpty) {
+              thumbnail = thumbnails.last['url'] as String? ?? '';
+            }
+
+            if (browseId.startsWith('MPREb_') || browseId.contains('album') || browseId.contains('release') || titleLower.contains('album')) {
+              sections['albums']!.add(Album(
+                id: browseId,
+                name: titleText,
+                artist: subtitle,
+                artworkUrl: thumbnail,
+                songs: const [],
+              ));
+            } else if (browseId.startsWith('PL') || browseId.startsWith('VL') || browseId.startsWith('RD') || browseId.contains('playlist') || titleLower.contains('mix') || titleLower.contains('playlist') || titleLower.contains('radio')) {
+              sections['playlists']!.add(Playlist(
+                id: browseId,
+                name: titleText,
+                songs: const [],
+              ));
+            }
+          }
+        }
+      }
+    }
+
+    void findShelves(dynamic node) {
+      if (node is Map) {
+        if (node.containsKey('musicCarouselShelfRenderer')) {
+          parseShelf(node['musicCarouselShelfRenderer']);
+        } else if (node.containsKey('musicShelfRenderer')) {
+          parseShelf(node['musicShelfRenderer']);
+        } else {
+          node.values.forEach(findShelves);
+        }
+      } else if (node is List) {
+        node.forEach(findShelves);
+      }
+    }
+
+    findShelves(data);
+    DALogger.info('YTM API Sync: Parsed personalized home sections. Songs: ${sections['songs']!.length}, Albums: ${sections['albums']!.length}, Playlists: ${sections['playlists']!.length}');
+    return sections;
+  }
 }
