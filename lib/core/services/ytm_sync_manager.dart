@@ -32,6 +32,7 @@ class YtmSyncManager extends ChangeNotifier {
   static const String keyAlbums = 'ytm_cache_albums';
   static const String keyArtists = 'ytm_cache_artists';
   static const String keyHistory = 'ytm_cache_history';
+  static const String keyRecommendations = 'ytm_cache_recommendations';
 
   YtmSyncManager(this._storage, this._accountService) {
     _loadSyncMetadata();
@@ -75,10 +76,22 @@ class YtmSyncManager extends ChangeNotifier {
 
         // 1. Fetch from remote
         final remoteLikedSongs = await _accountService.fetchLikedSongs();
+        DALogger.info('YtmSyncManager: Fetched remote Liked Songs. Parsed Count: ${remoteLikedSongs.length}');
+
         final remotePlaylists = await _accountService.fetchLibraryPlaylists();
+        DALogger.info('YtmSyncManager: Fetched remote Playlists. Parsed Count: ${remotePlaylists.length}');
+
         final remoteAlbums = await _accountService.fetchLibraryAlbums();
+        DALogger.info('YtmSyncManager: Fetched remote Albums. Parsed Count: ${remoteAlbums.length}');
+
         final remoteArtists = await _accountService.fetchLibraryArtists();
+        DALogger.info('YtmSyncManager: Fetched remote Artists. Parsed Count: ${remoteArtists.length}');
+
         final remoteHistory = await _accountService.fetchHistory();
+        DALogger.info('YtmSyncManager: Fetched remote History. Parsed Count: ${remoteHistory.length}');
+
+        final remoteRecs = await _accountService.fetchPersonalizedRecommendations();
+        DALogger.info('YtmSyncManager: Fetched remote Personalized Recommendations. Parsed Count: ${remoteRecs.length}');
 
         // 2. Incremental comparison and cache updates
         await _updateCacheIfChanged(keyLikedSongs, remoteLikedSongs.map((s) => s.toJson()).toList());
@@ -86,6 +99,7 @@ class YtmSyncManager extends ChangeNotifier {
         await _updateCacheIfChanged(keyAlbums, remoteAlbums.map((a) => a.toJson()).toList());
         await _updateCacheIfChanged(keyArtists, remoteArtists.map((a) => a.toJson()).toList());
         await _updateCacheIfChanged(keyHistory, remoteHistory.map((s) => s.toJson()).toList());
+        await _updateCacheIfChanged(keyRecommendations, remoteRecs.map((s) => s.toJson()).toList());
 
         success = true;
       } catch (e) {
@@ -107,7 +121,9 @@ class YtmSyncManager extends ChangeNotifier {
       DALogger.error('YtmSyncManager: Synchronization failed after $maxAttempts attempts.');
     }
 
+    DALogger.info('YtmSyncManager: Dispatching UI Refresh Event via notifyListeners().');
     notifyListeners();
+    
     // Return status back to idle after a short delay
     Future.delayed(const Duration(seconds: 3), () {
       _status = YtmSyncStatus.idle;
@@ -174,6 +190,17 @@ class YtmSyncManager extends ChangeNotifier {
 
   Future<List<Song>> getCachedHistory() async {
     final cached = await _storage.getString(keyHistory);
+    if (cached == null) return const [];
+    try {
+      final List<dynamic> list = jsonDecode(cached);
+      return list.map((s) => Song.fromJson(s)).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<Song>> getCachedRecommendations() async {
+    final cached = await _storage.getString(keyRecommendations);
     if (cached == null) return const [];
     try {
       final List<dynamic> list = jsonDecode(cached);

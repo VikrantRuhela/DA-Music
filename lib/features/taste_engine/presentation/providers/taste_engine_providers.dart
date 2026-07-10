@@ -292,7 +292,12 @@ final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) asy
   if (accountService.isLoggedIn) {
     try {
       ytmRecs = await accountService.fetchPersonalizedRecommendations();
-    } catch (_) {}
+    } catch (_) {
+      try {
+        final syncManager = ref.read(ytmSyncManagerProvider);
+        ytmRecs = await syncManager.getCachedRecommendations();
+      } catch (_) {}
+    }
   }
 
   return RecommendationEngine.generateRecommendations(

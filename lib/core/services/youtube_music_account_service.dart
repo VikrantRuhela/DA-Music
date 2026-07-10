@@ -72,6 +72,9 @@ class YouTubeMusicAccountService {
         }),
       );
 
+      final bodyPreview = response.body.substring(0, response.body.length > 100 ? 100 : response.body.length);
+      DALogger.info('YTM API Sync Request: browseId=$browseId, status=${response.statusCode}, size=${response.body.length} bytes, body_preview="$bodyPreview"');
+
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>?;
       }
@@ -126,7 +129,10 @@ class YouTubeMusicAccountService {
           try {
             final renderer = node['musicResponsiveListItemRenderer'];
             final playlistItemData = renderer['playlistItemData'];
-            final videoId = playlistItemData?['videoId'] as String?;
+            String? videoId = playlistItemData?['videoId'] as String?;
+            videoId ??= renderer['navigationEndpoint']?['watchEndpoint']?['videoId'] as String?;
+            videoId ??= renderer['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId'] as String?;
+
             if (videoId != null && videoId.isNotEmpty) {
               final flexColumns = renderer['flexColumns'] as List?;
               String title = 'Unknown Title';
@@ -177,9 +183,41 @@ class YouTubeMusicAccountService {
               ));
             }
           } catch (_) {}
-        } else {
-          node.values.forEach(findSongs);
+        } else if (node.containsKey('musicTwoRowItemRenderer')) {
+          try {
+            final renderer = node['musicTwoRowItemRenderer'];
+            final videoId = renderer['navigationEndpoint']?['watchEndpoint']?['videoId'] as String?;
+            if (videoId != null && videoId.isNotEmpty) {
+              final titleText = renderer['title']?['runs']?[0]?['text'] ??
+                                renderer['title']?['simpleText'];
+              final title = titleText as String? ?? 'Unknown Title';
+              
+              String artist = 'Unknown Artist';
+              final subtitleRuns = renderer['subtitle']?['runs'] as List?;
+              if (subtitleRuns != null && subtitleRuns.isNotEmpty) {
+                artist = subtitleRuns[0]['text'] as String? ?? 'Unknown Artist';
+              }
+
+              String thumbnail = '';
+              final thumbnails = renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+              if (thumbnails != null && thumbnails.isNotEmpty) {
+                thumbnail = thumbnails.last['url'] as String? ?? '';
+              }
+
+              songs.add(Song(
+                id: videoId,
+                title: title,
+                artist: artist,
+                album: 'Single',
+                duration: const Duration(minutes: 3),
+                artworkUrl: thumbnail,
+                source: 'youtube_music',
+                lyrics: null,
+              ));
+            }
+          } catch (_) {}
         }
+        node.values.forEach(findSongs);
       } else if (node is List) {
         node.forEach(findSongs);
       }
