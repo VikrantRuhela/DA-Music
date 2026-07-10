@@ -18,10 +18,15 @@ class SessionManager extends ChangeNotifier {
   AuthenticatedClient? _client;
   VoidCallback? onSessionExpired;
 
+  String? _accountName;
+  String? _accountEmail;
+
   bool get isLoggedIn => _isLoggedIn;
   bool get isGuestMode => _isGuestMode;
   String? get cookies => _cookies;
   AuthenticatedClient? get client => _client;
+  String? get accountName => _accountName;
+  String? get accountEmail => _accountEmail;
 
   SessionManager(this._secureStore);
 
@@ -29,6 +34,8 @@ class SessionManager extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _isGuestMode = prefs.getBool('ytm_guest_mode') ?? false;
+      _accountName = prefs.getString('ytm_account_name');
+      _accountEmail = prefs.getString('ytm_account_email');
 
       final savedCookies = await _secureStore.readCookies();
       if (savedCookies != null && savedCookies.isNotEmpty) {
@@ -68,6 +75,8 @@ class SessionManager extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('ytm_logged_in', true);
       await prefs.setBool('ytm_guest_mode', false);
+      if (_accountName != null) await prefs.setString('ytm_account_name', _accountName!);
+      if (_accountEmail != null) await prefs.setString('ytm_account_email', _accountEmail!);
 
       notifyListeners();
       DALogger.info('SessionManager: Session successfully validated and saved to secure storage.');
@@ -100,9 +109,14 @@ class SessionManager extends ChangeNotifier {
     _client?.close();
     _client = null;
 
+    _accountName = null;
+    _accountEmail = null;
+
     await _secureStore.clearCookies();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('ytm_logged_in', false);
+    await prefs.remove('ytm_account_name');
+    await prefs.remove('ytm_account_email');
 
     notifyListeners();
 
@@ -142,6 +156,17 @@ class SessionManager extends ChangeNotifier {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         if (body is Map && !body.containsKey('error')) {
+          final accountMenu = body['accountMenu']?['musicAccountMenuRenderer'];
+          if (accountMenu != null) {
+            final nameText = accountMenu['userName']?['runs']?[0]?['text'] ?? 
+                             accountMenu['userName']?['simpleText'] ?? 
+                             accountMenu['name']?['runs']?[0]?['text'];
+            final emailText = accountMenu['email']?['runs']?[0]?['text'] ?? 
+                              accountMenu['email']?['simpleText'];
+            _accountName = nameText as String?;
+            _accountEmail = emailText as String?;
+            DALogger.info('SessionManager: Extracted profile name: $_accountName, email: $_accountEmail');
+          }
           return true;
         }
       }

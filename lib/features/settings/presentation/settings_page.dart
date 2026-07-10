@@ -1,14 +1,19 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/extensions/context_extensions.dart';
 import '../../../core/services/logger_service.dart';
+import '../../../core/services/ytm_sync_manager.dart';
 import '../../../shared/animations/motion_system.dart';
 import '../../../shared/providers/source_providers.dart';
 import '../../../shared/providers/library_providers.dart';
+import '../../../shared/providers/backend_providers.dart' hide sourceManagerProvider;
 import '../../../shared/widgets/da_card.dart';
 import '../../taste_engine/presentation/music_dna_page.dart';
 import '../../taste_engine/presentation/taste_settings_page.dart';
+import '../../onboarding/presentation/widgets/auth_webview_page.dart';
+import '../../onboarding/presentation/desktop_auth_helper.dart';
 
 final diagnosticLoggingProvider = StateProvider<bool>((ref) {
   return DALogger.activeLevel == LogLevel.debug;
@@ -45,6 +50,11 @@ class SettingsPage extends ConsumerWidget {
                 style: typography.title.copyWith(fontSize: 28.0),
               ),
             ),
+
+            // Section 0: YouTube Music Account Management
+            _buildSectionHeader(context, 'YouTube Music'),
+            _buildYtmAccountSection(context, ref, colors, typography),
+            const SizedBox(height: DATokens.spacingLarge),
 
             // Section 1: Animations & Motion System
             _buildSectionHeader(context, 'Motion & Accessibility'),
@@ -269,5 +279,224 @@ class SettingsPage extends ConsumerWidget {
         style: typography.body.copyWith(fontSize: 14.0, color: colors.textPrimary),
       ),
     );
+  }
+
+  Widget _buildYtmAccountSection(
+    BuildContext context,
+    WidgetRef ref,
+    dynamic colors,
+    dynamic typography,
+  ) {
+    final session = ref.watch(sessionManagerProvider);
+    final syncManager = ref.watch(ytmSyncManagerProvider);
+
+    if (!session.isLoggedIn) {
+      return DACard(
+        child: Padding(
+          padding: const EdgeInsets.all(DATokens.spacingMedium),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'YouTube Music Account',
+                style: typography.title.copyWith(fontSize: 15.0, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4.0),
+              Text(
+                'Status: Not Logged In',
+                style: typography.body.copyWith(fontSize: 13.0, color: Colors.redAccent),
+              ),
+              const SizedBox(height: 8.0),
+              Text(
+                'Login to your YouTube Music account to synchronize your personalized home feed, history, recommendations, and playlists.',
+                style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary),
+              ),
+              const SizedBox(height: DATokens.spacingMedium),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton.icon(
+                  onPressed: () => _handleLogin(context, ref),
+                  icon: const Icon(Icons.login),
+                  label: const Text('Sign in to YouTube Music'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colors.primary,
+                    foregroundColor: colors.textPrimary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final displayName = session.accountName ?? session.accountEmail ?? "YouTube Music Member";
+    final lastSyncText = syncManager.lastSuccessfulSync != null
+        ? 'Last Synced: ${_formatDateTime(syncManager.lastSuccessfulSync!)}'
+        : 'Never Synced';
+
+    return DACard(
+      child: Padding(
+        padding: const EdgeInsets.all(DATokens.spacingMedium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'YouTube Music Account',
+              style: typography.title.copyWith(fontSize: 15.0, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4.0),
+            Text(
+              'Status: Logged In as $displayName',
+              style: typography.body.copyWith(fontSize: 13.0, color: Colors.greenAccent),
+            ),
+            if (session.accountEmail != null && session.accountEmail != session.accountName) ...[
+              const SizedBox(height: 2.0),
+              Text(
+                session.accountEmail!,
+                style: typography.caption.copyWith(color: colors.textSecondary),
+              ),
+            ],
+            const SizedBox(height: 6.0),
+            Text(
+              lastSyncText,
+              style: typography.caption.copyWith(color: colors.textSecondary),
+            ),
+            if (syncManager.status == YtmSyncStatus.syncing) ...[
+              const SizedBox(height: 8.0),
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                  ),
+                  const SizedBox(width: 8.0),
+                  Text(
+                    'Syncing details...',
+                    style: typography.caption.copyWith(color: colors.textSecondary),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: DATokens.spacingMedium),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: syncManager.status == YtmSyncStatus.syncing
+                        ? null
+                        : () => ref.read(ytmSyncManagerProvider.notifier).startSync(force: true),
+                    icon: const Icon(Icons.sync),
+                    label: Text(syncManager.status == YtmSyncStatus.syncing ? 'Syncing...' : 'Sync Now'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colors.primary,
+                      foregroundColor: colors.textPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: DATokens.spacingSmall),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('YouTube Music Profile'),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Name: $displayName', style: typography.title.copyWith(fontSize: 14.0)),
+                              const SizedBox(height: 4.0),
+                              Text('Email: ${session.accountEmail ?? "Unknown"}', style: typography.title.copyWith(fontSize: 14.0)),
+                              const SizedBox(height: 4.0),
+                              Text('Authorized Client: Active', style: typography.caption.copyWith(color: colors.textSecondary)),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.account_circle_outlined),
+                    label: const Text('Manage'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colors.textPrimary,
+                      side: BorderSide(color: colors.border),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: DATokens.spacingSmall),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => ref.read(sessionManagerProvider.notifier).logout(),
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Sign Out'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent.withValues(alpha: 0.8),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleLogin(BuildContext context, WidgetRef ref) async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final success = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (context) => const AuthWebViewPage()),
+      );
+      if (success == true) {
+        ref.read(ytmSyncManagerProvider.notifier).startSync();
+      }
+    } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      final sessionManager = ref.read(sessionManagerProvider);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Opening secure YouTube Music sign-in window...')),
+      );
+
+      await DesktopAuthHelper.loginWithDesktopWebview(
+        sessionManager,
+        onFinished: (success) {
+          if (success) {
+            ref.read(ytmSyncManagerProvider.notifier).startSync();
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Sign-in cancelled or failed.')),
+            );
+          }
+        },
+      );
+    }
+  }
+
+  String _formatDateTime(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }
