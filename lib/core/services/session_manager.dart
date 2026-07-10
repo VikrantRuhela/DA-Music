@@ -143,7 +143,7 @@ class SessionManager extends ChangeNotifier {
           "context": {
             "client": {
               "clientName": "WEB_REMIX",
-              "clientVersion": "1.20250709.01.00",
+              "clientVersion": "1.20260304.03.00",
               "hl": "en",
               "gl": "US"
             }
@@ -153,27 +153,47 @@ class SessionManager extends ChangeNotifier {
       );
 
       testClient.close();
+      DALogger.info('SessionManager: Verify session status=${response.statusCode}, body length=${response.body.length}');
+
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         if (body is Map && !body.containsKey('error')) {
-          final accountMenu = body['accountMenu']?['musicAccountMenuRenderer'];
-          if (accountMenu != null) {
-            final nameText = accountMenu['userName']?['runs']?[0]?['text'] ?? 
-                             accountMenu['userName']?['simpleText'] ?? 
-                             accountMenu['name']?['runs']?[0]?['text'];
-            final emailText = accountMenu['email']?['runs']?[0]?['text'] ?? 
-                              accountMenu['email']?['simpleText'];
-            _accountName = nameText as String?;
-            _accountEmail = emailText as String?;
-            DALogger.info('SessionManager: Extracted profile name: $_accountName, email: $_accountEmail');
+          String loggedInValue = '0';
+          final trackingParams = body['responseContext']?['serviceTrackingParams'] as List?;
+          if (trackingParams != null) {
+            for (final service in trackingParams) {
+              final params = service['params'] as List?;
+              if (params != null) {
+                for (final p in params) {
+                  if (p['key'] == 'logged_in') {
+                    loggedInValue = p['value'] as String? ?? '0';
+                  }
+                }
+              }
+            }
           }
-          return true;
+
+          DALogger.info('SessionManager: Verification server logged_in value is "$loggedInValue"');
+
+          if (loggedInValue == '1') {
+            final accountMenu = body['accountMenu']?['musicAccountMenuRenderer'];
+            if (accountMenu != null) {
+              final nameText = accountMenu['userName']?['runs']?[0]?['text'] ?? 
+                               accountMenu['userName']?['simpleText'] ?? 
+                               accountMenu['name']?['runs']?[0]?['text'];
+              final emailText = accountMenu['email']?['runs']?[0]?['text'] ?? 
+                                accountMenu['email']?['simpleText'];
+              _accountName = nameText as String?;
+              _accountEmail = emailText as String?;
+              DALogger.info('SessionManager: Extracted profile name: $_accountName, email: $_accountEmail');
+            }
+            return true;
+          }
         }
       }
     } catch (e) {
       DALogger.error('SessionManager: Session verification failed due to network error', e);
     }
-    testClient.close();
     return false;
   }
 }

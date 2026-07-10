@@ -1,6 +1,7 @@
 import 'package:desktop_webview_window/desktop_webview_window.dart';
 import '../../../../core/services/session_manager.dart';
 import '../../../../core/services/logger_service.dart';
+import '../../../../core/services/webview_cookie_reader.dart';
 
 class DesktopAuthHelper {
   static Future<bool> isWebviewAvailable() async {
@@ -33,16 +34,22 @@ class DesktopAuthHelper {
 
       webview.addOnUrlRequestCallback((url) async {
         if (url.startsWith('https://music.youtube.com')) {
-          final cookiesJson = await webview.evaluateJavaScript('document.cookie');
-          if (cookiesJson != null) {
-            String cookies = cookiesJson;
-            // Clean up serialized JSON response from JS engine evaluation
-            if (cookies.startsWith('"') && cookies.endsWith('"')) {
-              cookies = cookies.substring(1, cookies.length - 1);
-            }
-            // Unescape escaped hex symbols if any
-            cookies = cookies.replaceAll(r'\"', '"');
+          await Future.delayed(const Duration(milliseconds: 600));
 
+          String? cookies = WebviewCookieReader.readAllCookies();
+
+          if (cookies == null || cookies.isEmpty) {
+            final cookiesJson = await webview.evaluateJavaScript('document.cookie');
+            if (cookiesJson != null) {
+              cookies = cookiesJson;
+              if (cookies.startsWith('"') && cookies.endsWith('"')) {
+                cookies = cookies.substring(1, cookies.length - 1);
+              }
+              cookies = cookies.replaceAll(r'\"', '"');
+            }
+          }
+
+          if (cookies != null && cookies.isNotEmpty) {
             if (cookies.contains('__Secure-3PAPISID') || cookies.contains('__Secure-3PSID') || cookies.contains('SID')) {
               final success = await sessionManager.validateAndSaveSession(cookies);
               if (success) {
