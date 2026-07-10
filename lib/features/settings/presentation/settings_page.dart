@@ -13,6 +13,7 @@ import '../../../shared/widgets/da_card.dart';
 import '../../taste_engine/presentation/music_dna_page.dart';
 import '../../taste_engine/presentation/taste_settings_page.dart';
 import '../../onboarding/presentation/widgets/auth_webview_page.dart';
+import '../../onboarding/presentation/widgets/cookie_login_dialog.dart';
 import '../../onboarding/presentation/desktop_auth_helper.dart';
 
 final diagnosticLoggingProvider = StateProvider<bool>((ref) {
@@ -474,23 +475,50 @@ class SettingsPage extends ConsumerWidget {
         ref.read(ytmSyncManagerProvider.notifier).startSync();
       }
     } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-      final sessionManager = ref.read(sessionManagerProvider);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Opening secure YouTube Music sign-in window...')),
-      );
-
-      await DesktopAuthHelper.loginWithDesktopWebview(
-        sessionManager,
-        onFinished: (success) {
-          if (success) {
-            ref.read(ytmSyncManagerProvider.notifier).startSync();
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Sign-in cancelled or failed.')),
-            );
-          }
-        },
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Connect to YouTube Music'),
+          content: const Text(
+            'Choose how you want to sign in to YouTube Music:\n\n'
+            '1. In-App Webview: Simple sign-in window.\n'
+            '2. Copy-Paste Cookies (Recommended): Copy your browser cookie header for a fully authenticated session.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                showDialog(
+                  context: context,
+                  builder: (context) => const CookieLoginDialog(),
+                );
+              },
+              child: const Text('Copy-Paste Cookies'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                final sessionManager = ref.read(sessionManagerProvider);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Opening secure YouTube Music sign-in window...')),
+                );
+                await DesktopAuthHelper.loginWithDesktopWebview(
+                  sessionManager,
+                  onFinished: (success) {
+                    if (success) {
+                      ref.read(ytmSyncManagerProvider.notifier).startSync();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Sign-in cancelled or failed.')),
+                      );
+                    }
+                  },
+                );
+              },
+              child: const Text('In-App Webview'),
+            ),
+          ],
+        ),
       );
     }
   }
