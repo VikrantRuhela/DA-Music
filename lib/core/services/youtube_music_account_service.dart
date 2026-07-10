@@ -20,8 +20,9 @@ class AuthenticatedClient extends http.BaseClient {
     request.headers['Cookie'] = cookies;
     request.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     request.headers['x-youtube-client-name'] = '67';
-    request.headers['x-youtube-client-version'] = '1.20250709.01.00';
+    request.headers['x-youtube-client-version'] = '1.20260304.03.00';
     request.headers['x-origin'] = 'https://music.youtube.com';
+    request.headers['Content-Type'] = 'application/json';
 
     try {
       final Map<String, String> cookiesMap = {};
@@ -46,6 +47,7 @@ class AuthenticatedClient extends http.BaseClient {
       }
     } catch (_) {}
 
+    print('DIAGNOSTIC REQUEST HEADERS: ${request.headers}');
     return _inner.send(request);
   }
 
@@ -63,7 +65,7 @@ class YouTubeMusicAccountService {
   String? get cookies => _sessionManager.cookies;
   AuthenticatedClient? get client => _sessionManager.client;
 
-  static const String apiKey = "AIzaSyAo_JvSM59UN4us5UrT5D18Okkt5E-T24c";
+  static const String apiKey = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30";
 
   YouTubeMusicAccountService(this._sessionManager);
 
@@ -89,7 +91,7 @@ class YouTubeMusicAccountService {
           "context": {
             "client": {
               "clientName": "WEB_REMIX",
-              "clientVersion": "1.20250709.01.00",
+              "clientVersion": "1.20260304.03.00",
               "hl": "en",
               "gl": "US"
             }

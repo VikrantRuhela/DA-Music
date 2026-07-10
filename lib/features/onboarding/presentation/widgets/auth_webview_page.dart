@@ -50,8 +50,31 @@ class _AuthWebViewPageState extends ConsumerState<AuthWebViewPage> {
   Future<void> _checkForRedirect(String url) async {
     if (url.startsWith('https://music.youtube.com')) {
       final cookieManager = WebViewCookieManager();
-      final cookies = await cookieManager.getCookies(domain: Uri.parse('https://music.youtube.com'));
-      final cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+      final List<WebViewCookie> allCookies = [];
+      final Set<String> names = {};
+
+      final domains = [
+        'https://music.youtube.com',
+        'https://youtube.com',
+        'https://.youtube.com',
+        'https://accounts.google.com',
+        'https://google.com',
+        'https://.google.com',
+      ];
+
+      for (final domainStr in domains) {
+        try {
+          final cookies = await cookieManager.getCookies(domain: Uri.parse(domainStr));
+          for (final c in cookies) {
+            if (!names.contains(c.name)) {
+              names.add(c.name);
+              allCookies.add(c);
+            }
+          }
+        } catch (_) {}
+      }
+
+      final cookieString = allCookies.map((c) => '${c.name}=${c.value}').join('; ');
 
       if (cookieString.contains('__Secure-3PAPISID') || cookieString.contains('__Secure-3PSID') || cookieString.contains('SID')) {
         final sessionManager = ref.read(sessionManagerProvider);
