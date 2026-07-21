@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'source_adapter.dart';
 import 'youtube_music_account_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'secure_credential_store.dart';
 import '../exceptions/playback_exceptions.dart';
 import '../../domain/entities/song.dart';
 import '../../domain/entities/album.dart';
@@ -963,7 +964,10 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     final client = HttpClient();
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cookies = prefs.getString('ytm_cookies');
+      String? cookies = prefs.getString('ytm_cookies');
+      if (cookies == null || cookies.trim().isEmpty) {
+        cookies = await SecureCredentialStore().readCookies();
+      }
 
       const apiKey = 'AIzaSyAOghZGza2MQSZkY_zfZ370N-PUdXEo8AI';
 
@@ -1178,6 +1182,18 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       final rawBody = await response.transform(utf8.decoder).join();
       final body = json.decode(rawBody) as Map<String, dynamic>;
 
+      final sentCookie = request.headers.value('Cookie');
+      final sentAuth = request.headers.value('Authorization');
+      final bool isSignInPage = rawBody.contains('messageRenderer') || rawBody.contains('Sign in');
+      final bool isRealPlaylist = rawBody.contains('musicPlaylistShelfRenderer') || rawBody.contains('musicResponsiveListItemRenderer') || rawBody.contains('twoColumnBrowseResultsRenderer') || rawBody.contains('singleColumnBrowseResultsRenderer');
+
+      print('================ AUTHENTICATION VERIFICATION LOG ================');
+      print('1. Cookie header sent: ${sentCookie != null ? (sentCookie.length > 20 ? "${sentCookie.substring(0, 20)}... (Length: ${sentCookie.length})" : sentCookie) : "ABSENT"}');
+      print('2. Authorization (SAPISIDHASH) header sent: ${sentAuth != null ? (sentAuth.length > 30 ? "${sentAuth.substring(0, 30)}..." : sentAuth) : "ABSENT"}');
+      print('3. HTTP status: ${response.statusCode}');
+      print('4. Response Content Analysis: ${isSignInPage ? "SIGN-IN REQUIRED / MESSAGE RENDERER" : (isRealPlaylist ? "REAL PLAYLIST RESPONSE" : "OTHER RESPONSE")}');
+      print('==================================================================');
+
       if (body['error'] != null) {
         throw SourceException('InnerTube browse error: ${json.encode(body['error'])}');
       }
@@ -1337,28 +1353,39 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
 
       if (items != null && items.isNotEmpty) {
         for (final trackItem in items) {
-          final item = trackItem['musicResponsiveListItemRenderer'] as Map<String, dynamic>?;
+          final item = (trackItem['musicResponsiveListItemRenderer'] ??
+                        trackItem['playlistVideoRenderer'] ??
+                        trackItem['musicMultiFlexListItemRenderer'] ??
+                        trackItem['musicTwoRowItemRenderer'] ??
+                        trackItem['playlistPanelVideoRenderer']) as Map<String, dynamic>?;
           if (item == null) {
             discardedCount++;
-            discardReason = 'trackItem["musicResponsiveListItemRenderer"] was null (keys present: ${trackItem.keys.toList()})';
+            discardReason = 'trackItem renderer was null (keys present: ${trackItem.keys.toList()})';
             continue;
           }
 
-          final videoId = item['playlistItemData']?['videoId'] as String? ??
+          final videoId = item['videoId'] as String? ??
+              item['playlistItemData']?['videoId'] as String? ??
               item['onTap']?['watchEndpoint']?['videoId'] as String? ??
+              item['navigationEndpoint']?['watchEndpoint']?['videoId'] as String? ??
               item['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId'] as String? ??
               (item['flexColumns'] as List?)?[0]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs']?[0]?['navigationEndpoint']?['watchEndpoint']?['videoId'] as String?;
 
           if (videoId == null || videoId.isEmpty) {
             discardedCount++;
-            discardReason = 'videoId extracted was null or empty in musicResponsiveListItemRenderer';
+            discardReason = 'videoId extracted was null or empty';
             continue;
           }
 
-          final titleRuns = item['flexColumns']?[0]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
-          final trackTitle = titleRuns != null && titleRuns.isNotEmpty ? titleRuns[0]['text'] as String : 'Unknown Track';
+          final titleRuns = (item['title']?['runs'] ??
+                             item['flexColumns']?[0]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs']) as List?;
+          final trackTitle = titleRuns != null && titleRuns.isNotEmpty 
+              ? titleRuns[0]['text'] as String 
+              : (item['title']?['simpleText'] as String? ?? 'Unknown Track');
 
-          final artistRuns = item['flexColumns']?[1]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
+          final artistRuns = (item['longBylineText']?['runs'] ??
+                              item['shortBylineText']?['runs'] ??
+                              item['flexColumns']?[1]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs']) as List?;
           String trackArtist = artistRuns != null && artistRuns.isNotEmpty ? artistRuns.map((r) => r['text']).join('') : '';
           if (trackArtist.trim().isEmpty || trackArtist.toLowerCase() == 'unknown artist') {
             if (author.isNotEmpty) {
@@ -1385,10 +1412,14 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
             }
           }
 
-          final durationRuns = item['fixedColumns']?[0]?['musicResponsiveListItemFixedColumnRenderer']?['text']?['runs'] as List?;
-          final durationStr = durationRuns != null && durationRuns.isNotEmpty ? durationRuns[0]['text'] as String : '';
+          final durationRuns = (item['lengthText']?['runs'] ??
+                                item['fixedColumns']?[0]?['musicResponsiveListItemFixedColumnRenderer']?['text']?['runs']) as List?;
+          final durationStr = durationRuns != null && durationRuns.isNotEmpty 
+              ? durationRuns[0]['text'] as String 
+              : (item['lengthText']?['simpleText'] as String? ?? '');
           
-          final itemThumbs = item['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+          final itemThumbs = (item['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                              item['thumbnail']?['thumbnails']) as List?;
           final thumbUrl = itemThumbs != null && itemThumbs.isNotEmpty ? itemThumbs[0]['url'] as String : coverUrl;
 
           final cached = _songCache[videoId];
@@ -1463,17 +1494,16 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         coverUrl = songs.first.artwork.url;
       }
 
-      print('================ PARSING STAGE INSTRUMENTATION ================');
+      print('================ ANDROID / WINDOWS PLAYLIST INSTRUMENTATION ================');
       print('1. HTTP status: ${response.statusCode}');
-      print('2. Response type: BrowseResponse (Target browseId: "$targetBrowseId")');
-      print('3. Number of raw playlist items found in the response: $rawItemCount');
-      print('4. Number of Track objects created: ${songs.length}');
-      if (rawItemCount > 0 && songs.isEmpty) {
-        print('5. Mapping function discarded items: YES ($discardedCount discarded) - Reason: $discardReason');
-      } else if (rawItemCount == 0) {
-        print('6. JSON path searched: $jsonPathSearched | Actual top-level keys in response: ${body.keys.toList()}');
-      }
-      print('================================================================');
+      print('2. browseId used: "$targetBrowseId" (Original ID: "$id")');
+      print('3. Response type: BrowseResponse');
+      print('4. Number of raw playlist items found: $rawItemCount');
+      print('5. Number of Track objects created: ${songs.length}');
+      print('6. Exact JSON path searched: $jsonPathSearched');
+      print('7. Actual JSON path containing tracks: ${rawItemCount > 0 ? "shelf.contents (musicResponsiveListItemRenderer)" : "None found"}');
+      print('8. Any platform-specific differences: Operating System: ${Platform.operatingSystem} | Version: ${Platform.operatingSystemVersion} | Client User-Agent: ${request.headers.value('User-Agent')} | Cookies present: ${cookies != null && cookies.isNotEmpty}');
+      print('=============================================================================');
 
       final playlistObj = Playlist(
         id: id,
