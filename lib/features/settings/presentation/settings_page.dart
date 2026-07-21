@@ -14,7 +14,6 @@ import '../../taste_engine/presentation/music_dna_page.dart';
 import '../../taste_engine/presentation/taste_settings_page.dart';
 import '../../onboarding/presentation/widgets/auth_webview_page.dart';
 import '../../onboarding/presentation/widgets/cookie_login_dialog.dart';
-import '../../onboarding/presentation/desktop_auth_helper.dart';
 
 final diagnosticLoggingProvider = StateProvider<bool>((ref) {
   return DALogger.activeLevel == LogLevel.debug;
@@ -481,8 +480,8 @@ class SettingsPage extends ConsumerWidget {
           title: const Text('Connect to YouTube Music'),
           content: const Text(
             'Choose how you want to sign in to YouTube Music:\n\n'
-            '1. In-App Webview: Simple sign-in window.\n'
-            '2. Copy-Paste Cookies (Recommended): Copy your browser cookie header for a fully authenticated session.'
+            '1. Automatic Sign-In (Recommended): Embedded sign-in page.\n'
+            '2. Copy-Paste Cookies: Copy your browser cookie header manually.'
           ),
           actions: [
             TextButton(
@@ -498,24 +497,15 @@ class SettingsPage extends ConsumerWidget {
             TextButton(
               onPressed: () async {
                 Navigator.pop(context);
-                final sessionManager = ref.read(sessionManagerProvider);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Opening secure YouTube Music sign-in window...')),
+                final success = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AuthWebViewPage()),
                 );
-                await DesktopAuthHelper.loginWithDesktopWebview(
-                  sessionManager,
-                  onFinished: (success) {
-                    if (success) {
-                      ref.read(ytmSyncManagerProvider.notifier).startSync();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sign-in cancelled or failed.')),
-                      );
-                    }
-                  },
-                );
+                if (success == true) {
+                  ref.read(ytmSyncManagerProvider.notifier).startSync();
+                }
               },
-              child: const Text('In-App Webview'),
+              child: const Text('Automatic Sign-In'),
             ),
           ],
         ),

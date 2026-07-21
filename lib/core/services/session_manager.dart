@@ -173,9 +173,15 @@ class SessionManager extends ChangeNotifier {
             }
           }
 
-          DALogger.info('SessionManager: Verification server logged_in value is "$loggedInValue"');
+          final bodyStr = response.body;
+          final isExplicitLoggedIn = loggedInValue == '1' ||
+              bodyStr.contains('"logged_in":"1"') ||
+              bodyStr.contains('"LOGGED_IN"') ||
+              body.containsKey('accountMenu');
 
-          if (loggedInValue == '1') {
+          DALogger.info('SessionManager: Verification server logged_in value is "$loggedInValue", isExplicitLoggedIn=$isExplicitLoggedIn');
+
+          if (isExplicitLoggedIn) {
             final accountMenu = body['accountMenu']?['musicAccountMenuRenderer'];
             if (accountMenu != null) {
               final nameText = accountMenu['userName']?['runs']?[0]?['text'] ?? 

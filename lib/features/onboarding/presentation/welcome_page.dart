@@ -8,7 +8,6 @@ import '../../../app/theme/tokens.dart';
 import '../../../core/extensions/context_extensions.dart';
 import '../../../shared/providers/backend_providers.dart';
 import 'widgets/auth_webview_page.dart';
-import 'desktop_auth_helper.dart';
 
 class WelcomePage extends ConsumerWidget {
   const WelcomePage({super.key});
@@ -143,33 +142,12 @@ class WelcomePage extends ConsumerWidget {
                             return;
                           }
                           
-                          if (Platform.isAndroid || Platform.isIOS) {
-                            final success = await Navigator.push<bool>(
-                              context,
-                              MaterialPageRoute(builder: (context) => const AuthWebViewPage()),
-                            );
-                            if (success == true && context.mounted) {
-                              context.go('/');
-                            }
-                          } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-                            final sessionManager = ref.read(sessionManagerProvider);
-                            
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Opening secure YouTube Music sign-in window...')),
-                            );
-
-                            await DesktopAuthHelper.loginWithDesktopWebview(
-                              sessionManager,
-                              onFinished: (success) {
-                                if (success && context.mounted) {
-                                  context.go('/');
-                                } else if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Sign-in cancelled or failed.')),
-                                  );
-                                }
-                              },
-                            );
+                          final success = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(builder: (context) => const AuthWebViewPage()),
+                          );
+                          if (success == true && context.mounted) {
+                            context.go('/');
                           }
                         },
                         child: const Text(

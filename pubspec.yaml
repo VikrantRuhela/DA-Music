@@ -39,6 +39,7 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   webview_flutter: ^4.4.2
   desktop_webview_window: ^0.2.3
+  webview_flutter_windows: any
   flutter_animate: ^4.5.0
   shared_preferences: ^2.2.3
   freezed_annotation: ^2.4.1

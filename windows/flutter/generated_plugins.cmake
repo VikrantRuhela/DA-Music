@@ -11,6 +11,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   permission_handler_windows
   screen_retriever
   sqlite3_flutter_libs
+  webview_flutter_windows
   window_manager
 )
 
