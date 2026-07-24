@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'source_manager.dart';
 import 'logger_service.dart';
+import 'local_stream_proxy.dart';
 import '../exceptions/playback_exceptions.dart';
 import '../errors/failures.dart';
 import '../../domain/entities/audio_stream.dart';
@@ -19,12 +20,13 @@ enum StreamQuality {
 /// Stream resolver bridging Pluggable Source Adapters and Playback Engine.
 class StreamResolver {
   final SourceManager _sourceManager;
+  final LocalStreamProxy? _proxy;
   final Map<String, AudioStream> _streamCache = {};
 
   static Song? lastResolvedSong;
   static String? lastResolvedUrl;
 
-  StreamResolver(this._sourceManager);
+  StreamResolver(this._sourceManager, [this._proxy]);
 
   /// Extract audio URL and standardize payload, checking caching bounds.
   Future<AudioStream> resolve({
@@ -74,10 +76,14 @@ class StreamResolver {
     try {
       final raw = await _sourceManager.getAudioStream(trackId);
 
+      final resolvedUrl = _proxy != null && _proxy.port > 0
+          ? 'http://127.0.0.1:${_proxy.port}/stream?url=${Uri.encodeComponent(raw.streamUrl)}'
+          : raw.streamUrl;
+
       stream = AudioStream(
         id: trackId,
         providerId: providerId,
-        streamUrl: raw.streamUrl,
+        streamUrl: resolvedUrl,
         mimeType: raw.mimeType,
         bitrate: raw.bitrate,
         duration: raw.duration,

@@ -891,7 +891,11 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     try {
       final manifest = await _ytClient.videos.streamsClient.getManifest(
         id,
-        ytClients: [yt.YoutubeApiClient.androidVr],
+        ytClients: [
+          yt.YoutubeApiClient.androidVr,
+          yt.YoutubeApiClient.android,
+          yt.YoutubeApiClient.ios,
+        ],
       ).timeout(const Duration(milliseconds: 15000));
       
       var audioStreams = manifest.audioOnly.where((s) => s.container.name == 'mp4').toList();
@@ -941,7 +945,11 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
             final fallbackId = fallbackVideo.id.value;
             final manifest = await _ytClient.videos.streamsClient.getManifest(
               fallbackId,
-              ytClients: [yt.YoutubeApiClient.androidVr],
+              ytClients: [
+                yt.YoutubeApiClient.androidVr,
+                yt.YoutubeApiClient.android,
+                yt.YoutubeApiClient.ios,
+              ],
             ).timeout(const Duration(milliseconds: 15000));
 
             var audioStreams = manifest.audioOnly.where((s) => s.container.name == 'mp4').toList();
@@ -978,11 +986,16 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   Future<bool> _isStreamPlayable(String url) async {
     final client = HttpClient();
     try {
-      final request = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 2));
+      final request = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 5));
       request.headers.set('Range', 'bytes=0-0');
-      final response = await request.close().timeout(const Duration(seconds: 2));
+      request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      final response = await request.close().timeout(const Duration(seconds: 5));
       return response.statusCode == 200 || response.statusCode == 206;
-    } catch (_) {}
+    } catch (e) {
+      DALogger.warning('YouTubeMusicAdapter: _isStreamPlayable check failed: $e');
+    } finally {
+      client.close();
+    }
     return false;
   }
   Future<({Playlist playlist, List<Song> songs})> _fetchPlaylistDetails(String id) async {

@@ -37,6 +37,7 @@ import '../../core/services/request_manager.dart';
 import '../../core/services/source_manager.dart';
 import '../../core/services/youtube_music_adapter.dart';
 import '../../core/services/stream_resolver.dart';
+import '../../core/services/local_stream_proxy.dart';
 import '../../data/datasource/data_sources.dart';
 import '../../data/datasource/remote_music_data_source_impl.dart';
 import '../../data/datasource/local_data_sources_impl.dart';
@@ -68,9 +69,17 @@ final remoteMusicDataSourceProvider = Provider<RemoteMusicDataSource>((ref) {
   );
 });
 
+final localStreamProxyProvider = Provider<LocalStreamProxy>((ref) {
+  final proxy = LocalStreamProxy();
+  proxy.start();
+  ref.onDispose(() => proxy.stop());
+  return proxy;
+});
+
 final streamResolverProvider = Provider<StreamResolver>((ref) {
   return StreamResolver(
     ref.watch(sourceManagerProvider),
+    ref.watch(localStreamProxyProvider),
   );
 });
 

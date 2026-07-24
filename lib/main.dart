@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +16,27 @@ import 'shared/providers/player_providers.dart';
 
 import 'package:desktop_webview_window/desktop_webview_window.dart';
 
+class FallbackHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    final client = super.createHttpClient(context);
+    client.connectionFactory = (Uri url, String? proxyHost, int? proxyPort) async {
+      final host = proxyHost ?? url.host;
+      final port = proxyPort ?? (url.port != 0 ? url.port : (url.scheme == 'https' ? 443 : 80));
+      try {
+        final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
+        if (addresses.isNotEmpty) {
+          return await Socket.startConnect(addresses.first, port);
+        }
+      } catch (_) {}
+      return await Socket.startConnect(host, port);
+    };
+    return client;
+  }
+}
+
 void main([List<String> args = const []]) async {
+  HttpOverrides.global = FallbackHttpOverrides();
   WidgetsFlutterBinding.ensureInitialized();
   
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
