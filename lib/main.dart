@@ -23,13 +23,24 @@ class FallbackHttpOverrides extends HttpOverrides {
     client.connectionFactory = (Uri url, String? proxyHost, int? proxyPort) async {
       final host = proxyHost ?? url.host;
       final port = proxyPort ?? (url.port != 0 ? url.port : (url.scheme == 'https' ? 443 : 80));
+      
+      Socket socket;
       try {
         final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
         if (addresses.isNotEmpty) {
-          return await Socket.startConnect(addresses.first, port);
+          socket = await Socket.connect(addresses.first, port);
+        } else {
+          socket = await Socket.connect(host, port);
         }
-      } catch (_) {}
-      return await Socket.startConnect(host, port);
+      } catch (_) {
+        socket = await Socket.connect(host, port);
+      }
+
+      if (url.scheme.toLowerCase() == 'https') {
+        final secureSocket = await SecureSocket.secure(socket, host: host);
+        return ConnectionTask.fromSocket(Future.value(secureSocket), () {});
+      }
+      return ConnectionTask.fromSocket(Future.value(socket), () {});
     };
     return client;
   }

@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'source_manager.dart';
 import 'logger_service.dart';
 import 'local_stream_proxy.dart';
+import 'youtube_music_adapter.dart';
 import '../exceptions/playback_exceptions.dart';
 import '../errors/failures.dart';
 import '../../domain/entities/audio_stream.dart';
 import '../../domain/entities/song.dart';
+import '../../domain/entities/value_objects.dart';
 import '../../app/router/router.dart';
 
 enum StreamQuality {
@@ -32,10 +34,31 @@ class StreamResolver {
   Future<AudioStream> resolve({
     required String trackId,
     required String providerId,
+    String? songTitle,
+    String? artist,
+    Duration? duration,
     StreamQuality quality = StreamQuality.auto,
   }) async {
     final startTime = DateTime.now();
     DALogger.info('StreamResolver: Resolving stream for track "$trackId" (quality: ${quality.name})');
+
+    if (songTitle != null && artist != null) {
+      try {
+        final adapter = _sourceManager.activeAdapter;
+        if (adapter is YouTubeMusicAdapter) {
+          adapter.cacheSongForTesting(Song(
+            id: trackId,
+            title: songTitle,
+            artistId: artist,
+            albumId: 'yt_album_unknown',
+            duration: DurationValue(duration ?? const Duration(minutes: 3)),
+            thumbnail: Artwork(''),
+            artwork: Artwork(''),
+            sourceId: providerId,
+          ));
+        }
+      } catch (_) {}
+    }
 
     if (providerId == 'local') {
       final localStream = AudioStream(

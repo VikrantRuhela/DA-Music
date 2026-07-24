@@ -78,6 +78,9 @@ class PlaybackEngineImpl implements PlaybackEngine {
           final stream = await _streamResolver.resolve(
             trackId: song.id,
             providerId: song.sourceId,
+            songTitle: song.title,
+            artist: song.artistId,
+            duration: song.duration.value,
           );
           // ignore: avoid_print
           print('Resolved stream URL: ${stream.streamUrl}');

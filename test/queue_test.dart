@@ -81,7 +81,14 @@ class MockStreamResolver extends StreamResolver {
   MockStreamResolver() : super(SourceManager());
 
   @override
-  Future<AudioStream> resolve({required String trackId, required String providerId, StreamQuality quality = StreamQuality.auto}) async {
+  Future<AudioStream> resolve({
+    required String trackId,
+    required String providerId,
+    String? songTitle,
+    String? artist,
+    Duration? duration,
+    StreamQuality quality = StreamQuality.auto,
+  }) async {
     return AudioStream(
       id: trackId,
       providerId: providerId,

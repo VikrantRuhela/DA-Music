@@ -166,7 +166,7 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
       'sessionId': sessionId,
       'date': DateTime.now().toIso8601String().substring(0, 10),
       'artworkUrl': artworkUrl ?? '',
-      'source': source ?? 'youtube',
+      'source': source == 'youtube' ? 'youtube_music' : (source ?? 'youtube_music'),
     };
 
     await _historyRepo.appendLog(log);
@@ -436,7 +436,7 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
           duration: domain.DurationValue(Duration(milliseconds: log['durationMs'] ?? 0)),
           thumbnail: domain.Artwork(log['artworkUrl'] ?? ''),
           artwork: domain.Artwork(log['artworkUrl'] ?? ''),
-          sourceId: log['source'] ?? 'youtube',
+          sourceId: log['source'] == 'youtube' ? 'youtube_music' : (log['source'] ?? 'youtube_music'),
         ));
       }
     }
@@ -466,7 +466,7 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
         duration: domain.DurationValue(Duration(milliseconds: log['durationMs'] ?? 0)),
         thumbnail: domain.Artwork(log['artworkUrl'] ?? ''),
         artwork: domain.Artwork(log['artworkUrl'] ?? ''),
-        sourceId: log['source'] ?? 'youtube',
+        sourceId: log['source'] == 'youtube' ? 'youtube_music' : (log['source'] ?? 'youtube_music'),
       ));
     }
     if (recentItems.length >= 10) break;
@@ -537,7 +537,7 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
         duration: domain.DurationValue(Duration(milliseconds: matchingLog['durationMs'] ?? 0)),
         thumbnail: domain.Artwork(matchingLog['artworkUrl'] ?? ''),
         artwork: domain.Artwork(matchingLog['artworkUrl'] ?? ''),
-        sourceId: matchingLog['source'] ?? 'youtube',
+        sourceId: matchingLog['source'] == 'youtube' ? 'youtube_music' : (matchingLog['source'] ?? 'youtube_music'),
       ));
     }
     if (rediscoverItems.length >= 8) break;
