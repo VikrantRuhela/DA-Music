@@ -15,3 +15,17 @@ extension DAContextExtension on BuildContext {
   /// Fetch custom design typography
   DATypography get daTypography => daColors.typography;
 }
+
+extension ColorContrast on Color {
+  Color get contrastingColor {
+    return ThemeData.estimateBrightnessForColor(this) == Brightness.light
+        ? const Color(0xFF1C0A0D)
+        : const Color(0xFFFBF1F2);
+  }
+
+  Color get contrastingColorMuted {
+    return ThemeData.estimateBrightnessForColor(this) == Brightness.light
+        ? const Color(0xFF5E494C)
+        : const Color(0xFFAFA2A5);
+  }
+}

@@ -9,7 +9,6 @@ import '../../shared/models/music_models.dart';
 
 final dynamicThemeProvider = StateNotifierProvider<DynamicThemeNotifier, ThemeData>((ref) {
   final notifier = DynamicThemeNotifier();
-  // Listen to current song changes to trigger palette extraction
   ref.listen<Song?>(currentSongProvider, (previous, next) {
     notifier.updatePalette(next);
   });
@@ -21,13 +20,21 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
 
   DynamicThemeNotifier() : super(DATheme.darkTheme);
 
+  bool _isMonochromeOrVeryDark(Color color) {
+    final hsl = HSLColor.fromColor(color);
+    final r = color.red;
+    final g = color.green;
+    final b = color.blue;
+    final maxDiff = (r - g).abs() + (g - b).abs() + (b - r).abs();
+    return hsl.saturation < 0.16 || hsl.lightness < 0.18 || maxDiff < 32;
+  }
+
   Future<void> updatePalette(Song? song) async {
     if (song == null) {
       state = DATheme.darkTheme;
       return;
     }
 
-    // Check cache first
     if (_cache.containsKey(song.id)) {
       state = _buildThemeData(_cache[song.id]!);
       return;
@@ -44,37 +51,89 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
           (artworkUrl.startsWith('http://') || artworkUrl.startsWith('https://'))
               ? NetworkImage(artworkUrl)
               : FileImage(File(artworkUrl)) as ImageProvider;
+
       final paletteGenerator = await PaletteGenerator.fromImageProvider(
         ResizeImage(imageProvider, width: 80, height: 80),
         maximumColorCount: 16,
         timeout: const Duration(seconds: 4),
       );
 
-      final Color dominantColor = paletteGenerator.dominantColor?.color ?? const Color(0xFF00E676);
-      final Color vibrantColor = paletteGenerator.vibrantColor?.color ?? dominantColor;
-      final Color mutedColor = paletteGenerator.mutedColor?.color ?? dominantColor;
+      final Color dominant = paletteGenerator.dominantColor?.color ?? const Color(0xFF1E1E1E);
+      final Color vibrant = paletteGenerator.vibrantColor?.color ?? dominant;
+      final Color muted = paletteGenerator.mutedColor?.color ?? dominant;
+      final Color darkVibrant = paletteGenerator.darkVibrantColor?.color ?? vibrant;
+      final Color darkMuted = paletteGenerator.darkMutedColor?.color ?? muted;
 
-      // Calibrate and adjust HSL saturation and lightness for clean premium dark theme compatibility
-      final primaryHsl = HSLColor.fromColor(vibrantColor);
-      final primaryColor = primaryHsl
-          .withSaturation((primaryHsl.saturation).clamp(0.4, 0.8))
-          .withLightness((primaryHsl.lightness).clamp(0.4, 0.65))
-          .toColor();
+      Color primaryColor;
+      Color accentColor;
+      Color gradientStart;
+      Color gradientMiddle;
+      Color gradientEnd;
 
-      final accentHsl = HSLColor.fromColor(mutedColor);
-      final accentColor = accentHsl
-          .withSaturation((accentHsl.saturation).clamp(0.4, 0.8))
-          .withLightness((accentHsl.lightness).clamp(0.4, 0.65))
-          .toColor();
+      final bool isDarkCover = _isMonochromeOrVeryDark(dominant);
 
-      // Extract a very dark, tinted background
-      final bgHsl = HSLColor.fromColor(dominantColor);
-      final backgroundColor = bgHsl
-          .withSaturation((bgHsl.saturation * 0.15).clamp(0.0, 0.22))
-          .withLightness(0.06) // Sleek dark value
-          .toColor();
+      if (isDarkCover) {
+        final domHsl = HSLColor.fromColor(dominant);
+        final vibHsl = HSLColor.fromColor(vibrant);
 
-      // Extracted tinted surface values
+        if (vibHsl.saturation > 0.18) {
+          primaryColor = vibHsl
+              .withSaturation(vibHsl.saturation.clamp(0.6, 0.95))
+              .withLightness(vibHsl.lightness.clamp(0.5, 0.75))
+              .toColor();
+        } else {
+          primaryColor = domHsl
+              .withSaturation(domHsl.saturation.clamp(0.0, 0.1))
+              .withLightness(0.85)
+              .toColor();
+        }
+
+        final mutHsl = HSLColor.fromColor(muted);
+        if (mutHsl.saturation > 0.15) {
+          accentColor = mutHsl
+              .withSaturation(mutHsl.saturation.clamp(0.4, 0.8))
+              .withLightness(mutHsl.lightness.clamp(0.45, 0.65))
+              .toColor();
+        } else {
+          accentColor = domHsl
+              .withSaturation(domHsl.saturation.clamp(0.0, 0.1))
+              .withLightness(0.55)
+              .toColor();
+        }
+
+        gradientStart = domHsl
+            .withSaturation(domHsl.saturation.clamp(0.02, 0.15))
+            .withLightness(0.14)
+            .toColor();
+
+        gradientMiddle = domHsl
+            .withSaturation(domHsl.saturation.clamp(0.02, 0.12))
+            .withLightness(0.08)
+            .toColor();
+
+        gradientEnd = domHsl
+            .withSaturation(domHsl.saturation.clamp(0.01, 0.08))
+            .withLightness(0.04)
+            .toColor();
+      } else {
+        final primaryHsl = HSLColor.fromColor(vibrant);
+        primaryColor = primaryHsl
+            .withSaturation((primaryHsl.saturation).clamp(0.5, 0.95))
+            .withLightness((primaryHsl.lightness).clamp(0.45, 0.70))
+            .toColor();
+
+        final accentHsl = HSLColor.fromColor(muted);
+        accentColor = accentHsl
+            .withSaturation((accentHsl.saturation).clamp(0.45, 0.90))
+            .withLightness((accentHsl.lightness).clamp(0.45, 0.70))
+            .toColor();
+
+        gradientStart = _darkenForBackground(vibrant, targetLightness: 0.12);
+        gradientMiddle = _darkenForBackground(darkVibrant ?? darkMuted, targetLightness: 0.08);
+        gradientEnd = _darkenForBackground(dominant, targetLightness: 0.04);
+      }
+
+      final bgHsl = HSLColor.fromColor(dominant);
       final surfaceColor = bgHsl
           .withSaturation((bgHsl.saturation * 0.15).clamp(0.0, 0.22))
           .withLightness(0.09)
@@ -96,7 +155,7 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
           .toColor();
 
       final customExtension = DAThemeExtension(
-        background: backgroundColor,
+        background: gradientMiddle,
         surface: surfaceColor,
         surfaceCard: surfaceCardColor,
         surfaceHover: surfaceHoverColor,
@@ -106,19 +165,27 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
         textSecondary: Colors.white70,
         border: borderColor,
         typography: DATypography.dark,
+        gradientStart: gradientStart,
+        gradientMiddle: gradientMiddle,
+        gradientEnd: gradientEnd,
       );
 
-      // Cache it
       _cache[song.id] = customExtension;
-
       state = _buildThemeData(customExtension);
     } catch (e) {
       dev.log('DynamicTheme: Palette extraction failed: $e');
-      // If load fails, keep the current state or default to darkTheme
       if (state == DATheme.darkTheme) {
         state = DATheme.darkTheme;
       }
     }
+  }
+
+  Color _darkenForBackground(Color color, {required double targetLightness}) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withSaturation((hsl.saturation * 0.35).clamp(0.05, 0.4))
+        .withLightness(targetLightness)
+        .toColor();
   }
 
   ThemeData _buildThemeData(DAThemeExtension extension) {

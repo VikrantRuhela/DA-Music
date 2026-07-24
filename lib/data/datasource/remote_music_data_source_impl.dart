@@ -57,8 +57,8 @@ class RemoteMusicDataSourceImpl implements RemoteMusicDataSource {
 
   @override
   Future<List<ArtistModel>> getArtistsByQuery(String query) async {
-    final domainResult = await _sourceManager.search(query);
-    return domainResult.artists.map((a) => ArtistModel.fromEntity(a)).toList();
+    final domainArtists = await _sourceManager.searchArtists(query);
+    return domainArtists.map((a) => ArtistModel.fromEntity(a)).toList();
   }
 
   @override

@@ -114,13 +114,81 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   void updateMetadata(Song song, Duration duration) {
+    Uri? resolvedArtUri;
+
+    if (song.artworkUrl != null && song.artworkUrl!.isNotEmpty) {
+      if (song.artworkUrl!.startsWith('http')) {
+        resolvedArtUri = Uri.tryParse(song.artworkUrl!);
+      } else {
+        final file = File(song.artworkUrl!);
+        if (file.existsSync()) {
+          resolvedArtUri = Uri.file(song.artworkUrl!);
+        }
+      }
+    }
+
+    if (resolvedArtUri == null && song.source == 'local') {
+      try {
+        final audioFile = File(song.id);
+        if (audioFile.existsSync()) {
+          final parentDir = audioFile.parent;
+          if (parentDir.existsSync()) {
+            final commonNames = [
+              'cover.jpg', 'cover.png', 'cover.jpeg',
+              'folder.jpg', 'folder.png', 'folder.jpeg',
+              'albumart.jpg', 'albumart.png', 'albumart.jpeg',
+              'album.jpg', 'album.png', 'album.jpeg',
+              'art.jpg', 'art.png', 'art.jpeg',
+            ];
+
+            File? foundFile;
+            for (final name in commonNames) {
+              final f = File('${parentDir.path}/$name');
+              if (f.existsSync()) {
+                foundFile = f;
+                break;
+              }
+            }
+
+            if (foundFile == null) {
+              final list = parentDir.listSync();
+              for (final entity in list) {
+                if (entity is File) {
+                  final filename = entity.path.split('/').last.split('\\').last.toLowerCase();
+                  final ext = filename.split('.').last;
+                  if (ext == 'jpg' || ext == 'png' || ext == 'jpeg') {
+                    if (filename.contains('cover') ||
+                        filename.contains('folder') ||
+                        filename.contains('albumart') ||
+                        filename.contains('album') ||
+                        filename.contains('art')) {
+                      foundFile = entity;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (foundFile != null) {
+              resolvedArtUri = Uri.file(foundFile.path);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (resolvedArtUri == null && !kIsWeb && Platform.isAndroid) {
+      resolvedArtUri = Uri.parse('android.resource://com.damusic.da_music/drawable/ic_notification');
+    }
+
     mediaItem.add(MediaItem(
       id: song.id,
       title: song.title,
       artist: song.artist,
       album: song.album,
       duration: duration,
-      artUri: song.artworkUrl != null ? Uri.tryParse(song.artworkUrl!) : null,
+      artUri: resolvedArtUri,
     ));
   }
 

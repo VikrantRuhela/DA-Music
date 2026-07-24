@@ -71,6 +71,8 @@ class _TastePlaybackObserverState extends ConsumerState<TastePlaybackObserver> {
           startTime: finalStartTime,
           endTime: endTime,
           sessionId: finalSessionId,
+          artworkUrl: finalSong.artworkUrl,
+          source: finalSong.source,
         );
       });
     }

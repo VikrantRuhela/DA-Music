@@ -66,6 +66,7 @@ class LyricsController extends StateNotifier<LyricsState> {
     // 1. Try local database cache lookup
     try {
       final cached = await _lyricsRepository.getLyricsBySongId(song.id);
+      if (state.songId != song.id) return;
       if (cached.plainLyrics == 'Instrumental') {
         state = state.copyWith(
           isLoading: false,
@@ -95,9 +96,13 @@ class LyricsController extends StateNotifier<LyricsState> {
           duration: song.duration,
         );
 
+        if (state.songId != song.id) return;
+
         if (lyrics != null) {
           // Cache download results locally
           await _lyricsRepository.saveLyrics(lyrics);
+
+          if (state.songId != song.id) return;
 
           if (lyrics.plainLyrics == 'Instrumental') {
             state = state.copyWith(
@@ -119,6 +124,8 @@ class LyricsController extends StateNotifier<LyricsState> {
         // Continue to next provider
       }
     }
+
+    if (state.songId != song.id) return;
 
     // 3. Set error state if no lyrics found
     state = state.copyWith(

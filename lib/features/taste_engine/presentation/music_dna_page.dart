@@ -97,7 +97,7 @@ class MusicDnaPage extends ConsumerWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [colors.primary.withValues(alpha: 0.2), colors.secondary.withValues(alpha: 0.1)],
+          colors: [colors.primary.withValues(alpha: 0.2), colors.accent.withValues(alpha: 0.1)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

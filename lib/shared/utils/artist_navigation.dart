@@ -24,10 +24,10 @@ Future<void> navigateToArtistByName(BuildContext context, WidgetRef ref, String 
     }
 
     final sourceManager = ref.read(sourceManagerProvider);
-    final results = await sourceManager.search(name);
+    final artists = await sourceManager.searchArtists(name);
     
-    if (results.artists.isNotEmpty) {
-      final artistId = results.artists.first.id;
+    if (artists.isNotEmpty) {
+      final artistId = artists.first.id;
       if (context.mounted) {
         context.push('/artist/$artistId');
       }

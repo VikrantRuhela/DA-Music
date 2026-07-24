@@ -131,7 +131,7 @@ class _ControlButtonState extends State<_ControlButton> {
 
     final defaultColor = widget.isSelected ? colors.primary : colors.textSecondary;
     final finalColor = widget.isPrimary
-        ? Colors.white
+        ? colors.primary.contrastingColor
         : (_isHovered ? colors.textPrimary : defaultColor);
 
     return MouseRegion(

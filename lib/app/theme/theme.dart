@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'tokens.dart';
 
-/// Centralized Typography system using design tokens.
 class DATypography {
   final TextStyle display;
   final TextStyle headline;
@@ -78,7 +77,6 @@ class DATypography {
   );
 }
 
-/// Custom ThemeExtension to inject design tokens directly into Flutter's Theme framework.
 class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
   final Color background;
   final Color surface;
@@ -90,6 +88,9 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
   final Color textSecondary;
   final Color border;
   final DATypography typography;
+  final Color gradientStart;
+  final Color gradientMiddle;
+  final Color gradientEnd;
 
   const DAThemeExtension({
     required this.background,
@@ -102,6 +103,9 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     required this.textSecondary,
     required this.border,
     required this.typography,
+    required this.gradientStart,
+    required this.gradientMiddle,
+    required this.gradientEnd,
   });
 
   static const DAThemeExtension dark = DAThemeExtension(
@@ -115,6 +119,9 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     textSecondary: DATokens.darkTextSecondary,
     border: DATokens.darkBorder,
     typography: DATypography.dark,
+    gradientStart: Color(0xFF160E0F),
+    gradientMiddle: Color(0xFF0F0B0C),
+    gradientEnd: Color(0xFF070505),
   );
 
   static const DAThemeExtension light = DAThemeExtension(
@@ -128,6 +135,9 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     textSecondary: DATokens.lightTextSecondary,
     border: DATokens.lightBorder,
     typography: DATypography.light,
+    gradientStart: Color(0xFFF9F6F6),
+    gradientMiddle: Color(0xFFECE6E6),
+    gradientEnd: Color(0xFFDFD4D4),
   );
 
   @override
@@ -142,6 +152,9 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     Color? textSecondary,
     Color? border,
     DATypography? typography,
+    Color? gradientStart,
+    Color? gradientMiddle,
+    Color? gradientEnd,
   }) {
     return DAThemeExtension(
       background: background ?? this.background,
@@ -154,6 +167,9 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
       textSecondary: textSecondary ?? this.textSecondary,
       border: border ?? this.border,
       typography: typography ?? this.typography,
+      gradientStart: gradientStart ?? this.gradientStart,
+      gradientMiddle: gradientMiddle ?? this.gradientMiddle,
+      gradientEnd: gradientEnd ?? this.gradientEnd,
     );
   }
 
@@ -170,12 +186,14 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
       textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       border: Color.lerp(border, other.border, t)!,
-      typography: typography, // Linear interpolation of static typography styles isn't strictly necessary here.
+      typography: typography,
+      gradientStart: Color.lerp(gradientStart, other.gradientStart, t)!,
+      gradientMiddle: Color.lerp(gradientMiddle, other.gradientMiddle, t)!,
+      gradientEnd: Color.lerp(gradientEnd, other.gradientEnd, t)!,
     );
   }
 }
 
-/// Helper wrapper for providing light and dark theme configurations.
 class DATheme {
   DATheme._();
 

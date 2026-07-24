@@ -10,6 +10,8 @@ import 'progress_section.dart';
 import 'playback_controls.dart';
 import 'lyrics_preview.dart';
 import 'immersive/immersive_player.dart';
+import '../../../../shared/widgets/da_image.dart';
+import '../../../../core/extensions/context_extensions.dart';
 
 class PersistentPlayerPanel extends ConsumerWidget {
   const PersistentPlayerPanel({super.key});
@@ -38,7 +40,7 @@ class PersistentPlayerPanel extends ConsumerWidget {
                   children: [
                     const PlayerHeader(),
                     const SizedBox(height: DATokens.spacingLarge),
-                    const VinylPlayerWidget(),
+                    _buildArtworkWidget(context, ref, currentSong),
                     const SizedBox(height: DATokens.spacingLarge),
                     SongInformation(
                       title: currentSong?.title ?? 'No Track Selected',
@@ -56,5 +58,81 @@ class PersistentPlayerPanel extends ConsumerWidget {
               ),
       ),
     );
+  }
+
+  Widget _buildArtworkWidget(BuildContext context, WidgetRef ref, dynamic currentSong) {
+    final style = ref.watch(playerStyleProvider);
+    final colors = context.daColors;
+
+    switch (style) {
+      case PlayerStyle.minimal:
+        return SizedBox(
+          height: 380.0,
+          child: Center(
+            child: Container(
+              width: 260.0,
+              height: 260.0,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 15.0,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16.0),
+                child: DAImage(
+                  url: currentSong?.artworkUrl,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+        );
+      case PlayerStyle.immersive:
+        return SizedBox(
+          height: 380.0,
+          child: Center(
+            child: Container(
+              width: 260.0,
+              height: 260.0,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.primary.withOpacity(0.35),
+                    blurRadius: 25.0,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16.0),
+                child: ShaderMask(
+                  shaderCallback: (rect) {
+                    return const RadialGradient(
+                      center: Alignment.topLeft,
+                      radius: 1.3,
+                      colors: [Colors.white, Colors.transparent],
+                      stops: [0.35, 1.0],
+                    ).createShader(rect);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: DAImage(
+                    url: currentSong?.artworkUrl,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      case PlayerStyle.vinyl:
+      default:
+        return const VinylPlayerWidget();
+    }
   }
 }

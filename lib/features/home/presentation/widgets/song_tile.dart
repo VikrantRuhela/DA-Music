@@ -44,82 +44,89 @@ class _SongTileState extends State<SongTile> {
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _isPressed = true),
-        onTapUp: (_) => setState(() => _isPressed = false),
-        onTapCancel: () => setState(() => _isPressed = false),
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: duration,
-          curve: DATokens.curveHover,
-          padding: const EdgeInsets.symmetric(
-            horizontal: DATokens.spacingMedium,
-            vertical: DATokens.spacingSmall + 2,
-          ),
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(DATokens.radiusLarge),
-          ),
-          child: Row(
-            children: [
-              // Album Thumbnail
-              Container(
-                width: 48.0,
-                height: 48.0,
-                decoration: BoxDecoration(
-                  color: colors.border,
-                  borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+      child: AnimatedContainer(
+        duration: duration,
+        curve: DATokens.curveHover,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onTap,
+              splashColor: colors.primary.withValues(alpha: 0.1),
+              highlightColor: colors.primary.withValues(alpha: 0.05),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: DATokens.spacingMedium,
+                  vertical: DATokens.spacingSmall + 2,
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: DAImage(
-                  url: widget.coverUrl,
-                  fit: BoxFit.cover,
-                  placeholder: _buildPlaceholder(colors),
-                ),
-              ),
-              const SizedBox(width: DATokens.spacingMedium),
-
-              // Title and Artist
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text(
-                      widget.title,
-                      style: typography.title.copyWith(fontSize: 14.0),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2.0),
-                    Text(
-                      widget.artist,
-                      style: typography.body.copyWith(
-                        fontSize: 12.0,
-                        color: colors.textSecondary,
+                    // Album Thumbnail
+                    Container(
+                      width: 48.0,
+                      height: 48.0,
+                      decoration: BoxDecoration(
+                        color: colors.border,
+                        borderRadius: BorderRadius.circular(DATokens.radiusMedium),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      clipBehavior: Clip.antiAlias,
+                      child: DAImage(
+                        url: widget.coverUrl,
+                        fit: BoxFit.cover,
+                        placeholder: _buildPlaceholder(colors),
+                      ),
                     ),
+                    const SizedBox(width: DATokens.spacingMedium),
+
+                    // Title and Artist
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: typography.title.copyWith(fontSize: 14.0),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2.0),
+                          Text(
+                            widget.artist,
+                            style: typography.body.copyWith(
+                              fontSize: 12.0,
+                              color: colors.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: DATokens.spacingMedium),
+
+                    // Duration
+                    Text(
+                      widget.duration,
+                      style: typography.caption.copyWith(color: colors.textSecondary),
+                    ),
+                    if (widget.onMorePressed != null) ...[
+                      const SizedBox(width: DATokens.spacingSmall),
+                      IconButton(
+                        icon: Icon(Icons.more_vert, color: colors.textSecondary),
+                        onPressed: widget.onMorePressed,
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(width: DATokens.spacingMedium),
-
-              // Duration
-              Text(
-                widget.duration,
-                style: typography.caption.copyWith(color: colors.textSecondary),
-              ),
-              if (widget.onMorePressed != null) ...[
-                const SizedBox(width: DATokens.spacingSmall),
-                IconButton(
-                  icon: Icon(Icons.more_vert, color: colors.textSecondary),
-                  onPressed: widget.onMorePressed,
-                  constraints: const BoxConstraints(),
-                  padding: EdgeInsets.zero,
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),

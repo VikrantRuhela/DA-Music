@@ -20,119 +20,116 @@ class QueuePage extends ConsumerWidget {
     final queue = controller.currentQueue;
     final currentIndex = controller.currentIndex;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          ref.read(immersiveModeProvider.notifier).state = true;
+        }
+      },
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'Play Queue',
-          style: typography.title.copyWith(fontSize: 22.0, fontWeight: FontWeight.bold),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: Text(
+            'Play Queue',
+            style: typography.title.copyWith(fontSize: 22.0, fontWeight: FontWeight.bold),
+          ),
         ),
-      ),
-      body: queue.isEmpty
-          ? const Center(
-              child: DAEmptyState(
-                icon: Icons.queue_music_outlined,
-                title: 'Play Queue is Empty',
-                description: 'Start playing songs to build a queue.',
-              ),
-            )
-          : ReorderableListView.builder(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(
-                horizontal: DATokens.spacingMedium,
-                vertical: DATokens.spacingSmall,
-              ),
-              itemCount: queue.length,
-              onReorder: (oldIndex, newIndex) {
-                if (newIndex > oldIndex) {
-                  newIndex -= 1;
-                }
-                final updatedSongs = List<Song>.from(queue);
-                final song = updatedSongs.removeAt(oldIndex);
-                updatedSongs.insert(newIndex, song);
+        body: queue.isEmpty
+            ? const Center(
+                child: DAEmptyState(
+                  icon: Icons.queue_music_outlined,
+                  title: 'Play Queue is Empty',
+                  description: 'Start playing songs to build a queue.',
+                ),
+              )
+            : ReorderableListView.builder(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: DATokens.spacingMedium,
+                  vertical: DATokens.spacingSmall,
+                ),
+                itemCount: queue.length,
+                onReorder: (oldIdx, newIdx) {
+                  final controller = ref.read(playbackControllerProvider);
+                  final currIdx = controller.currentIndex;
+                  final updatedSongs = List<Song>.from(queue);
+                  final s = updatedSongs.removeAt(oldIdx);
+                  if (newIdx > oldIdx) newIdx--;
+                  updatedSongs.insert(newIdx, s);
+                  final newCurrentIndex = (currIdx == oldIdx) ? newIdx : ((currIdx > oldIdx && currIdx <= newIdx) ? currIdx - 1 : ((currIdx < oldIdx && currIdx >= newIdx) ? currIdx + 1 : currIdx));
+                  controller.reorderQueue(updatedSongs, newCurrentIndex);
+                },
+                itemBuilder: (context, index) {
+                  final song = queue[index];
+                  final isActive = index == currentIndex;
 
-                int newCurrentIndex = currentIndex;
-                if (oldIndex == currentIndex) {
-                  newCurrentIndex = newIndex;
-                } else if (oldIndex < currentIndex && newIndex >= currentIndex) {
-                  newCurrentIndex -= 1;
-                } else if (oldIndex > currentIndex && newIndex <= currentIndex) {
-                  newCurrentIndex += 1;
-                }
-
-                ref.read(playbackControllerProvider).reorderQueue(updatedSongs, newCurrentIndex);
-              },
-              itemBuilder: (context, index) {
-                final song = queue[index];
-                final isActive = index == currentIndex;
-
-                return Card(
-                  key: ValueKey(song.id),
-                  color: isActive
-                      ? colors.primary.withValues(alpha: 0.15)
-                      : colors.surfaceCard.withValues(alpha: 0.1),
-                  margin: const EdgeInsets.only(bottom: DATokens.spacingSmall),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(DATokens.radiusMedium),
-                    side: isActive
-                        ? BorderSide(color: colors.primary, width: 1.0)
-                        : BorderSide(color: colors.border.withValues(alpha: 0.1)),
-                  ),
-                  child: ListTile(
-                    onTap: () {
-                      ref.read(playbackControllerProvider).setQueue(
-                            queue,
-                            startIndex: index,
-                            autoPlay: true,
-                          );
-                    },
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                      child: DAImage(
-                        url: song.artworkUrl,
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.cover,
-                        placeholder: const Icon(Icons.music_note, color: Colors.white24),
-                      ),
+                  return Container(
+                    key: ValueKey('queue_item_${song.id}_$index'),
+                    margin: const EdgeInsets.symmetric(vertical: 4.0),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? colors.primary.withValues(alpha: 0.15)
+                          : colors.surfaceCard.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                      border: isActive
+                          ? Border.all(color: colors.primary, width: 1.0)
+                          : Border.all(color: colors.border.withValues(alpha: 0.1), width: 1.0),
                     ),
-                    title: Text(
-                      song.title,
-                      style: typography.title.copyWith(
-                        fontSize: 14.0,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                        color: isActive ? colors.primary : colors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      song.artist,
-                      style: typography.caption.copyWith(color: colors.textSecondary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isActive) ...[
-                          Icon(Icons.volume_up, color: colors.primary),
-                          const SizedBox(width: DATokens.spacingSmall),
-                        ],
-                        IconButton(
-                          icon: Icon(Icons.more_vert, color: colors.textSecondary),
-                          onPressed: () {
-                            showSongOptionsMenu(context, ref, song);
-                          },
+                    child: ListTile(
+                      onTap: () {
+                        ref.read(playbackControllerProvider).setQueue(
+                          queue,
+                          startIndex: index,
+                          autoPlay: true,
+                        );
+                      },
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                        child: DAImage(
+                          url: song.artworkUrl,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
                         ),
-                      ],
+                      ),
+                      title: Text(
+                        song.title,
+                        style: typography.body.copyWith(
+                          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                          color: isActive ? colors.primary : colors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        song.artist,
+                        style: typography.caption.copyWith(color: colors.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isActive) ...[
+                            Icon(Icons.volume_up, color: colors.primary),
+                            const SizedBox(width: DATokens.spacingSmall),
+                          ],
+                          IconButton(
+                            icon: Icon(Icons.more_vert, color: colors.textSecondary),
+                            onPressed: () {
+                              showSongOptionsMenu(context, ref, song, queueIndex: index);
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
-            ),
+                  );
+                },
+              ),
+      ),
     );
   }
 }

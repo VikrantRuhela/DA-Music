@@ -1,13 +1,14 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/playback_controller.dart';
+import '../../core/services/storage_service.dart';
 import '../models/music_models.dart';
 import '../models/playback_state.dart';
 import 'backend_providers.dart';
+import 'library_providers.dart';
 
-// StateProvider from Sprint 4
 final immersiveModeProvider = StateProvider<bool>((ref) => false);
 
-// 1. Playback Controller Provider (ChangeNotifierProvider)
 final playbackControllerProvider = ChangeNotifierProvider<PlaybackController>((ref) {
   final engine = ref.watch(playbackEngineProvider);
   final sourceManager = ref.watch(sourceManagerProvider);
@@ -23,7 +24,6 @@ final playbackControllerProvider = ChangeNotifierProvider<PlaybackController>((r
   );
 });
 
-// 2. Playback State Provider (Watching status from controller)
 final playbackStateProvider = Provider<PlaybackState>((ref) {
   final controller = ref.watch(playbackControllerProvider);
   return PlaybackState(
@@ -32,38 +32,67 @@ final playbackStateProvider = Provider<PlaybackState>((ref) {
   );
 });
 
-// 3. Current Song Provider (Watching active song from controller)
 final currentSongProvider = Provider<Song?>((ref) {
   final controller = ref.watch(playbackControllerProvider);
   return controller.currentSong;
 });
 
-// 4. Volume Provider (Watching volume setting from controller)
 final volumeProvider = Provider<int>((ref) {
   final controller = ref.watch(playbackControllerProvider);
   return controller.settings.volume;
 });
 
-// 5. Mute Provider (Watching mute setting from controller)
 final muteProvider = Provider<bool>((ref) {
   final controller = ref.watch(playbackControllerProvider);
   return controller.settings.isMuted;
 });
 
-// 6. Repeat Mode Provider
 final repeatModeProvider = Provider<RepeatMode>((ref) {
   final controller = ref.watch(playbackControllerProvider);
   return controller.settings.repeatMode;
 });
 
-// 7. Shuffle Provider
 final shuffleProvider = Provider<bool>((ref) {
   final controller = ref.watch(playbackControllerProvider);
   return controller.settings.isShuffle;
 });
 
-// 8. Queue Provider
 final queueProvider = Provider<List<QueueItem>>((ref) {
   final controller = ref.watch(playbackControllerProvider);
   return controller.queue;
 });
+
+final sleepTimerProvider = StateProvider<Timer?>((ref) => null);
+final sleepTimerDurationProvider = StateProvider<Duration?>((ref) => null);
+
+enum PlayerStyle { immersive, vinyl, minimal }
+
+final playerStyleProvider = StateNotifierProvider<PlayerStyleNotifier, PlayerStyle>((ref) {
+  final storage = ref.watch(storageServiceProvider);
+  return PlayerStyleNotifier(storage);
+});
+
+class PlayerStyleNotifier extends StateNotifier<PlayerStyle> {
+  final StorageService _storage;
+  static const _key = 'player_style';
+
+  PlayerStyleNotifier(this._storage) : super(PlayerStyle.vinyl) {
+    _load();
+  }
+
+  void _load() async {
+    final val = await _storage.getString(_key);
+    if (val != null) {
+      final matched = PlayerStyle.values.firstWhere(
+        (e) => e.name == val,
+        orElse: () => PlayerStyle.vinyl,
+      );
+      state = matched;
+    }
+  }
+
+  Future<void> setStyle(PlayerStyle style) async {
+    state = style;
+    await _storage.setString(_key, style.name);
+  }
+}

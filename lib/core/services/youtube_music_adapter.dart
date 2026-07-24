@@ -167,6 +167,31 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   }
 
   @override
+  Future<List<Artist>> searchArtists(String query) async {
+    _checkInitialized();
+    try {
+      final results = await _ytClient.search.searchContent(query, filter: yt.TypeFilters.channel);
+      final artists = <Artist>[];
+      for (final result in results) {
+        if (result is yt.SearchChannel) {
+          artists.add(Artist(
+            id: result.id.value,
+            name: result.name,
+            image: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
+            subscriberCount: 0,
+            description: result.description,
+            genres: const [],
+          ));
+        }
+      }
+      return artists;
+    } catch (e, stack) {
+      DALogger.error('YouTubeMusicAdapter: searchArtists failed for "$query"', e, stack);
+      return [];
+    }
+  }
+
+  @override
   Future<HomeFeed> getHome() async {
     _checkInitialized();
     DALogger.info('YouTubeMusicAdapter: Fetching Home Feed (songs, albums, playlists)...');

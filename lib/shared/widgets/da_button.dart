@@ -32,7 +32,9 @@ class _DAButtonState extends State<DAButton> {
         ? (_isHovered ? colors.surfaceHover : colors.surfaceCard)
         : (_isHovered ? colors.primary.withValues(alpha: 0.9) : colors.primary);
 
-    final textColor = widget.isSecondary ? colors.textPrimary : Colors.white;
+    final textColor = widget.isSecondary
+        ? colors.textPrimary
+        : backgroundColor.contrastingColor;
 
     return MouseRegion(
       cursor: widget.onPressed != null ? SystemMouseCursors.click : SystemMouseCursors.basic,

@@ -8,6 +8,11 @@ import '../../../../data/repositories/download_repository.dart';
 import '../../../../shared/providers/library_providers.dart';
 import '../../../../shared/providers/backend_providers.dart';
 import '../../../../shared/models/music_models.dart';
+import '../../../../domain/entities/album.dart' as domain;
+import '../../../../domain/entities/playlist.dart' as domain;
+import '../../../../domain/entities/song.dart' as domain;
+import '../../../../domain/entities/value_objects.dart' as domain;
+import '../../../../domain/entities/home_feed.dart' as domain;
 
 class TasteEngineState {
   final MusicDNA dna;
@@ -131,6 +136,8 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
     String? artistId,
     String? albumId,
     String? genre,
+    String? artworkUrl,
+    String? source,
   }) async {
     if (state.isLearningPaused) return;
 
@@ -158,6 +165,8 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
       'endTime': endTime.toIso8601String(),
       'sessionId': sessionId,
       'date': DateTime.now().toIso8601String().substring(0, 10),
+      'artworkUrl': artworkUrl ?? '',
+      'source': source ?? 'youtube',
     };
 
     await _historyRepo.appendLog(log);
@@ -280,9 +289,11 @@ final tasteEngineNotifierProvider = StateNotifierProvider<TasteEngineNotifier, T
 });
 
 final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) async {
-  final tasteState = ref.watch(tasteEngineNotifierProvider);
-  if (!tasteState.isPersonalizationEnabled) return const [];
+  final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
+  final excludeDownloads = ref.watch(tasteEngineNotifierProvider.select((s) => s.excludeDownloads));
+  if (!isPersonalizationEnabled) return const [];
 
+  final tasteState = ref.read(tasteEngineNotifierProvider);
   final sourceManager = ref.watch(sourceManagerProvider);
   final downloadRepo = ref.watch(downloadRepositoryProvider);
   final downloadedSongs = await downloadRepo.getDownloadedSongs();
@@ -303,8 +314,301 @@ final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) asy
   return RecommendationEngine.generateRecommendations(
     dna: tasteState.dna,
     sourceManager: sourceManager,
-    excludeDownloads: tasteState.excludeDownloads,
+    excludeDownloads: excludeDownloads,
     downloadedSongs: downloadedSongs,
     ytmRecommendations: ytmRecs,
   );
+});
+
+final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) async {
+  final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
+  final sourceManager = ref.watch(sourceManagerProvider);
+
+  List<domain.Album> ytmAlbums = [];
+  try {
+    final genericFeed = await sourceManager.getHome();
+    final albumsSection = genericFeed.sections.firstWhere((s) => s.type == 'albums');
+    ytmAlbums = albumsSection.items.cast<domain.Album>().toList();
+  } catch (_) {}
+
+  if (!isPersonalizationEnabled) return ytmAlbums;
+
+  final tasteState = ref.read(tasteEngineNotifierProvider);
+  return RecommendationEngine.generateAlbumRecommendations(
+    dna: tasteState.dna,
+    sourceManager: sourceManager,
+    ytmAlbums: ytmAlbums,
+  );
+});
+
+final personalizedPlaylistsProvider = FutureProvider<List<domain.Playlist>>((ref) async {
+  final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
+  final sourceManager = ref.watch(sourceManagerProvider);
+
+  List<domain.Playlist> ytmPlaylists = [];
+  try {
+    final genericFeed = await sourceManager.getHome();
+    final playlistsSection = genericFeed.sections.firstWhere((s) => s.type == 'playlists');
+    ytmPlaylists = playlistsSection.items.cast<domain.Playlist>().toList();
+  } catch (_) {}
+
+  if (!isPersonalizationEnabled) return ytmPlaylists;
+
+  final tasteState = ref.read(tasteEngineNotifierProvider);
+  return RecommendationEngine.generatePlaylistRecommendations(
+    dna: tasteState.dna,
+    sourceManager: sourceManager,
+    ytmPlaylists: ytmPlaylists,
+  );
+});
+
+class RecommendationSection {
+  final String title;
+  final String subtitle;
+  final String type;
+  final List<dynamic> items;
+
+  const RecommendationSection({
+    required this.title,
+    required this.subtitle,
+    required this.type,
+    required this.items,
+  });
+}
+
+final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
+  final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
+  
+  final sourceManager = ref.watch(sourceManagerProvider);
+  
+  domain.HomeFeed? genericFeed;
+  try {
+    genericFeed = await sourceManager.getHome();
+  } catch (_) {}
+
+  final genericSongs = genericFeed?.sections.firstWhere((s) => s.type == 'recommended', orElse: () => domain.HomeFeedSection(title: '', type: 'recommended', items: const [])).items.cast<domain.Song>().toList() ?? const <domain.Song>[];
+  final genericAlbums = genericFeed?.sections.firstWhere((s) => s.type == 'albums', orElse: () => domain.HomeFeedSection(title: '', type: 'albums', items: const [])).items.cast<domain.Album>().toList() ?? const <domain.Album>[];
+  final genericPlaylists = genericFeed?.sections.firstWhere((s) => s.type == 'playlists', orElse: () => domain.HomeFeedSection(title: '', type: 'playlists', items: const [])).items.cast<domain.Playlist>().toList() ?? const <domain.Playlist>[];
+
+  if (!isPersonalizationEnabled) {
+    return [
+      RecommendationSection(
+        title: 'Trending For You',
+        subtitle: 'Popular tracks picked for you',
+        type: 'trending',
+        items: genericSongs,
+      ),
+      RecommendationSection(
+        title: 'Recommended Albums',
+        subtitle: 'Albums you might like',
+        type: 'similar_albums',
+        items: genericAlbums,
+      ),
+      RecommendationSection(
+        title: 'Featured Playlists',
+        subtitle: 'Handpicked mixes and playlists',
+        type: 'playlists',
+        items: genericPlaylists,
+      ),
+    ];
+  }
+
+  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final dna = tasteState.dna;
+  final logs = tasteState.logs;
+
+  final List<RecommendationSection> sections = [];
+
+  final continueItems = <domain.Song>[];
+  final seenIds = <String>{};
+  for (final log in logs.reversed) {
+    final id = log['songId'] as String? ?? '';
+    if (id.isEmpty || id == 'search_query') continue;
+    final double comp = (log['completionPercentage'] ?? 0.0).toDouble();
+    if (comp >= 10.0 && comp < 85.0) {
+      if (!seenIds.contains(id)) {
+        seenIds.add(id);
+        continueItems.add(domain.Song(
+          id: id,
+          title: log['songTitle'] ?? 'Unknown Track',
+          artistId: log['artistId'] ?? log['artist'] ?? 'Unknown Artist',
+          albumId: log['albumId'] ?? log['album'] ?? 'Unknown Album',
+          duration: domain.DurationValue(Duration(milliseconds: log['durationMs'] ?? 0)),
+          thumbnail: domain.Artwork(log['artworkUrl'] ?? ''),
+          artwork: domain.Artwork(log['artworkUrl'] ?? ''),
+          sourceId: log['source'] ?? 'youtube',
+        ));
+      }
+    }
+    if (continueItems.length >= 8) break;
+  }
+  if (continueItems.isNotEmpty) {
+    sections.add(RecommendationSection(
+      title: 'Continue Listening',
+      subtitle: 'Pick up where you left off',
+      type: 'continue_listening',
+      items: continueItems,
+    ));
+  }
+
+  final recentItems = <domain.Song>[];
+  final seenRecent = <String>{};
+  for (final log in logs.reversed) {
+    final id = log['songId'] as String? ?? '';
+    if (id.isEmpty || id == 'search_query') continue;
+    if (!seenRecent.contains(id)) {
+      seenRecent.add(id);
+      recentItems.add(domain.Song(
+        id: id,
+        title: log['songTitle'] ?? 'Unknown Track',
+        artistId: log['artistId'] ?? log['artist'] ?? 'Unknown Artist',
+        albumId: log['albumId'] ?? log['album'] ?? 'Unknown Album',
+        duration: domain.DurationValue(Duration(milliseconds: log['durationMs'] ?? 0)),
+        thumbnail: domain.Artwork(log['artworkUrl'] ?? ''),
+        artwork: domain.Artwork(log['artworkUrl'] ?? ''),
+        sourceId: log['source'] ?? 'youtube',
+      ));
+    }
+    if (recentItems.length >= 10) break;
+  }
+  if (recentItems.isNotEmpty) {
+    sections.add(RecommendationSection(
+      title: 'Recently Played',
+      subtitle: 'Tracks you played recently',
+      type: 'recently_played',
+      items: recentItems,
+    ));
+  }
+
+  final madeForYouItems = <domain.Song>[];
+  try {
+    final recSongs = await ref.read(personalizedRecommendationsProvider.future);
+    madeForYouItems.addAll(recSongs.map((s) => domain.Song(
+      id: s.id,
+      title: s.title,
+      artistId: s.artist,
+      albumId: s.album,
+      duration: domain.DurationValue(s.duration),
+      thumbnail: domain.Artwork(s.artworkUrl ?? ''),
+      artwork: domain.Artwork(s.artworkUrl ?? ''),
+      sourceId: s.source,
+    )));
+  } catch (_) {}
+
+  sections.add(RecommendationSection(
+    title: 'Made For You',
+    subtitle: 'A custom mix generated from your taste profile',
+    type: 'made_for_you',
+    items: madeForYouItems.isNotEmpty ? madeForYouItems : genericSongs,
+  ));
+
+  if (dna.topArtists.isNotEmpty) {
+    final targetArtist = dna.topArtists.first;
+    final becauseItems = <domain.Song>[];
+    try {
+      final searchRes = await sourceManager.activeAdapter.search('$targetArtist hits');
+      becauseItems.addAll(searchRes.songs.take(10));
+    } catch (_) {}
+    if (becauseItems.isNotEmpty) {
+      sections.add(RecommendationSection(
+        title: 'Because You Listened To $targetArtist',
+        subtitle: 'More tracks from your top artist',
+        type: 'because_you_listened',
+        items: becauseItems,
+      ));
+    }
+  }
+
+  final rediscoverItems = <domain.Song>[];
+  final lastPlayedIds = logs.reversed.take(15).map((l) => l['songId'] as String? ?? '').toSet();
+  final sortedSongs = dna.songAffinities.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  for (final entry in sortedSongs) {
+    final matchingLog = logs.firstWhere(
+      (l) => l['songTitle'] == entry.key && !lastPlayedIds.contains(l['songId']),
+      orElse: () => <String, dynamic>{},
+    );
+    if (matchingLog.isNotEmpty) {
+      rediscoverItems.add(domain.Song(
+        id: matchingLog['songId'] ?? '',
+        title: matchingLog['songTitle'] ?? '',
+        artistId: matchingLog['artistId'] ?? matchingLog['artist'] ?? '',
+        albumId: matchingLog['albumId'] ?? matchingLog['album'] ?? '',
+        duration: domain.DurationValue(Duration(milliseconds: matchingLog['durationMs'] ?? 0)),
+        thumbnail: domain.Artwork(matchingLog['artworkUrl'] ?? ''),
+        artwork: domain.Artwork(matchingLog['artworkUrl'] ?? ''),
+        sourceId: matchingLog['source'] ?? 'youtube',
+      ));
+    }
+    if (rediscoverItems.length >= 8) break;
+  }
+  if (rediscoverItems.isNotEmpty) {
+    sections.add(RecommendationSection(
+      title: 'Rediscover Favorites',
+      subtitle: 'Old favorites you haven\'t heard in a while',
+      type: 'rediscover_favorites',
+      items: rediscoverItems,
+    ));
+  }
+
+  if (dna.topArtists.length > 1) {
+    final secondArtist = dna.topArtists[1];
+    final similarArtistItems = <domain.Song>[];
+    try {
+      final searchRes = await sourceManager.activeAdapter.search('$secondArtist hits');
+      similarArtistItems.addAll(searchRes.songs.take(10));
+    } catch (_) {}
+    if (similarArtistItems.isNotEmpty) {
+      sections.add(RecommendationSection(
+        title: 'Similar to $secondArtist',
+        subtitle: 'Tracks inspired by your music preferences',
+        type: 'similar_artists',
+        items: similarArtistItems,
+      ));
+    }
+  }
+
+  final similarAlbumItems = <domain.Album>[];
+  try {
+    final recAlbums = await ref.read(personalizedAlbumsProvider.future);
+    similarAlbumItems.addAll(recAlbums);
+  } catch (_) {}
+  sections.add(RecommendationSection(
+    title: 'Similar Albums',
+    subtitle: 'Albums recommended for you',
+    type: 'similar_albums',
+    items: similarAlbumItems.isNotEmpty ? similarAlbumItems : genericAlbums,
+  ));
+
+  if (dna.topArtists.isNotEmpty) {
+    final artist = dna.topArtists.first;
+    final newReleaseItems = <domain.Album>[];
+    try {
+      final searchRes = await sourceManager.activeAdapter.search('new release $artist');
+      newReleaseItems.addAll(searchRes.albums);
+    } catch (_) {}
+    if (newReleaseItems.isNotEmpty) {
+      sections.add(RecommendationSection(
+        title: 'New Releases for You',
+        subtitle: 'Latest albums from $artist',
+        type: 'new_releases',
+        items: newReleaseItems,
+      ));
+    }
+  }
+
+  final trendingItems = <domain.Song>[];
+  final favoriteGenre = dna.favoriteGenres.isNotEmpty ? dna.favoriteGenres.first : 'Pop';
+  try {
+    final searchRes = await sourceManager.activeAdapter.search('trending $favoriteGenre');
+    trendingItems.addAll(searchRes.songs.take(10));
+  } catch (_) {}
+  sections.add(RecommendationSection(
+    title: 'Trending for You',
+    subtitle: 'Popular $favoriteGenre hits trending now',
+    type: 'trending',
+    items: trendingItems.isNotEmpty ? trendingItems : genericSongs,
+  ));
+
+  return sections;
 });

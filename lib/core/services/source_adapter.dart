@@ -16,6 +16,10 @@ abstract class MusicSourceAdapter {
   Future<void> dispose();
 
   Future<SearchResult> search(String query);
+  Future<List<Artist>> searchArtists(String query) async {
+    final res = await search(query);
+    return res.artists;
+  }
   Future<HomeFeed> getHome();
   Future<Album> getAlbum(String id);
   Future<Artist> getArtist(String id);

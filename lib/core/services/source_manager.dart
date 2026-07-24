@@ -106,6 +106,17 @@ class SourceManager {
     return result;
   }
 
+  Future<List<Artist>> searchArtists(String query) async {
+    final cacheKey = 'search_artists_$query';
+    if (_cache.containsKey(cacheKey)) {
+      return _cache[cacheKey] as List<Artist>;
+    }
+
+    final result = await _executeRequest(cacheKey, () => activeAdapter.searchArtists(query));
+    _cache[cacheKey] = result;
+    return result;
+  }
+
   Future<HomeFeed> getHome() async {
     const cacheKey = 'home_feed';
     if (_cache.containsKey(cacheKey)) {

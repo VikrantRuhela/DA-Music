@@ -5,6 +5,8 @@ import 'section_header.dart';
 import '../../../../app/theme/tokens.dart';
 import '../../../../domain/entities/playlist.dart';
 
+import '../../../../core/extensions/context_extensions.dart';
+
 class FavoritesGrid extends StatelessWidget {
   final List<Playlist> playlists;
 
@@ -15,6 +17,38 @@ class FavoritesGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.daColors;
+    final typography = context.daTypography;
+
+    if (playlists.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(title: 'Featured Playlists'),
+          Container(
+            height: 150.0,
+            decoration: BoxDecoration(
+              color: colors.surfaceCard,
+              borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+              border: Border.all(color: colors.border),
+            ),
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.playlist_play, color: colors.textSecondary.withValues(alpha: 0.4), size: 48.0),
+                const SizedBox(height: DATokens.spacingSmall),
+                Text(
+                  'No playlist recommendations yet.',
+                  style: typography.body.copyWith(color: colors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -65,30 +65,51 @@ class _DACardState extends ConsumerState<DACard> {
       onExit: (_) {
         if (widget.isHoverable) setState(() => _isHovered = false);
       },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: scale,
+      child: AnimatedScale(
+        scale: scale,
+        duration: duration,
+        curve: curve,
+        child: AnimatedContainer(
           duration: duration,
           curve: curve,
-          child: AnimatedContainer(
-            duration: duration,
-            curve: curve,
-            width: widget.width,
-            height: widget.height,
-            padding: widget.padding ?? const EdgeInsets.all(DATokens.spacingMedium),
-            decoration: BoxDecoration(
-              color: _isHovered && widget.isHoverable
-                  ? colors.surfaceHover
-                  : colors.surfaceCard,
-              borderRadius: BorderRadius.circular(DATokens.radiusLarge),
-              border: Border.all(
-                color: colors.border,
-                width: 1.0,
-              ),
-              boxShadow: shadow,
+          width: widget.width,
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: _isHovered && widget.isHoverable
+                ? colors.surfaceHover
+                : colors.surfaceCard,
+            borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+            border: Border.all(
+              color: colors.border,
+              width: 1.0,
             ),
-            child: widget.child,
+            boxShadow: shadow,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.onTap,
+                hoverColor: Colors.transparent,
+                splashColor: colors.primary.withValues(alpha: 0.1),
+                highlightColor: colors.primary.withValues(alpha: 0.05),
+                child: Padding(
+                  padding: widget.padding ?? const EdgeInsets.all(DATokens.spacingMedium),
+                  child: DefaultTextStyle(
+                    style: context.daTypography.body.copyWith(
+                      color: (_isHovered && widget.isHoverable ? colors.surfaceHover : colors.surfaceCard).contrastingColor,
+                    ),
+                    child: IconTheme(
+                      data: IconThemeData(
+                        color: (_isHovered && widget.isHoverable ? colors.surfaceHover : colors.surfaceCard).contrastingColor,
+                      ),
+                      child: widget.child,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),

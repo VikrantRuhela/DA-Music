@@ -6,6 +6,9 @@ import '../../../../domain/entities/song.dart';
 import '../../../../shared/providers/player_providers.dart';
 import '../../../../shared/models/music_models.dart' as shared;
 import '../../../../shared/utils/song_options.dart';
+import '../../../../app/theme/tokens.dart';
+
+import '../../../../core/extensions/context_extensions.dart';
 
 class RecentlyPlayedWidget extends ConsumerWidget {
   final List<Song> songs;
@@ -23,6 +26,38 @@ class RecentlyPlayedWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.daColors;
+    final typography = context.daTypography;
+
+    if (songs.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(title: 'Recommended Songs'),
+          Container(
+            height: 150.0,
+            decoration: BoxDecoration(
+              color: colors.surfaceCard,
+              borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+              border: Border.all(color: colors.border),
+            ),
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.music_note, color: colors.textSecondary.withValues(alpha: 0.4), size: 48.0),
+                const SizedBox(height: DATokens.spacingSmall),
+                Text(
+                  'No song recommendations yet.',
+                  style: typography.body.copyWith(color: colors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -8,6 +8,7 @@ import '../../../core/services/ytm_sync_manager.dart';
 import '../../../shared/animations/motion_system.dart';
 import '../../../shared/providers/source_providers.dart';
 import '../../../shared/providers/library_providers.dart';
+import '../../../shared/providers/player_providers.dart';
 import '../../../shared/providers/backend_providers.dart' hide sourceManagerProvider;
 import '../../../shared/widgets/da_card.dart';
 import '../../taste_engine/presentation/music_dna_page.dart';
@@ -117,6 +118,33 @@ class SettingsPage extends ConsumerWidget {
                     value: showAlbumArt,
                     onChanged: (val) {
                       ref.read(showAlbumArtBackgroundProvider.notifier).toggle(val);
+                    },
+                  ),
+                  const Divider(height: 1),
+                  _buildDropdownTile<PlayerStyle>(
+                    context: context,
+                    icon: Icons.play_circle_outline,
+                    title: 'Player Style',
+                    subtitle: 'Select the visual theme for full screen playback',
+                    value: ref.watch(playerStyleProvider),
+                    items: const [
+                      DropdownMenuItem(
+                        value: PlayerStyle.immersive,
+                        child: Text('Immersive'),
+                      ),
+                      DropdownMenuItem(
+                        value: PlayerStyle.vinyl,
+                        child: Text('Vinyl'),
+                      ),
+                      DropdownMenuItem(
+                        value: PlayerStyle.minimal,
+                        child: Text('Minimal'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        ref.read(playerStyleProvider.notifier).setStyle(val);
+                      }
                     },
                   ),
                 ],

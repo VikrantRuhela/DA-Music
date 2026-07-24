@@ -138,9 +138,10 @@ class PlaybackController extends ChangeNotifier {
 
   // Actions
   Future<void> setQueue(List<Song> songs, {int startIndex = 0, bool autoPlay = true}) async {
+    final copiedSongs = List<Song>.from(songs);
     _queueSongs.clear();
-    _queueSongs.addAll(songs);
-    _currentIndex = songs.isEmpty ? -1 : startIndex.clamp(0, songs.length - 1);
+    _queueSongs.addAll(copiedSongs);
+    _currentIndex = copiedSongs.isEmpty ? -1 : startIndex.clamp(0, copiedSongs.length - 1);
 
     final domainQueue = domain.Queue(
       songs: _queueSongs.map((s) => _mapToDomain(s)).toList(),
