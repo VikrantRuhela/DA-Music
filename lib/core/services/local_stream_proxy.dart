@@ -41,7 +41,7 @@ class LocalStreamProxy {
       try {
         final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
         if (addresses.isNotEmpty) {
-          socket = await Socket.connect(addresses.first, port);
+          socket = await Socket.connect(addresses.first, port).timeout(const Duration(milliseconds: 1500));
         } else {
           socket = await Socket.connect(host, port);
         }

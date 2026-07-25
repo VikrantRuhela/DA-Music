@@ -26,15 +26,15 @@ class FallbackHttpOverrides extends HttpOverrides {
       
       Socket socket;
       try {
-        // Try forcing IPv4 connection first (crucial to bypass IPv6 CDN blocks on cellular networks like Jio/Airtel)
+        // Try forcing IPv4 connection first with a 1.5s timeout (crucial to bypass IPv6 CDN blocks on cellular networks like Jio/Airtel without hanging on pure IPv6 networks)
         final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
         if (addresses.isNotEmpty) {
-          socket = await Socket.connect(addresses.first, port);
+          socket = await Socket.connect(addresses.first, port).timeout(const Duration(milliseconds: 1500));
         } else {
           socket = await Socket.connect(host, port);
         }
       } catch (_) {
-        // Fallback to standard dual-stack connection
+        // Fallback to standard dual-stack connection (e.g. if IPv4 is not routable)
         socket = await Socket.connect(host, port);
       }
 
