@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-/// Design Tokens for DA Music.
+/// Design Tokens for DA Tunes.
 /// These constants define the visual rules for colors, radius, typography,
 /// padding, icon sizes, animation durations, and curves.
 class DATokens {

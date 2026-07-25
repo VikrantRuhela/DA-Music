@@ -25,7 +25,7 @@ class SystemMediaSessionManager {
       _audioHandler = await AudioService.init(
         builder: () => MyAudioHandler(),
         config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.da_music.channel.audio',
+          androidNotificationChannelId: 'com.vikrantruhela.datunes.channel.audio',
           androidNotificationChannelName: 'Music Playback',
           androidNotificationOngoing: true,
           androidShowNotificationBadge: true,
@@ -179,7 +179,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
 
     if (resolvedArtUri == null && !kIsWeb && Platform.isAndroid) {
-      resolvedArtUri = Uri.parse('android.resource://com.damusic.da_music/drawable/ic_notification');
+      resolvedArtUri = Uri.parse('android.resource://com.vikrantruhela.datunes/drawable/ic_notification');
     }
 
     mediaItem.add(MediaItem(

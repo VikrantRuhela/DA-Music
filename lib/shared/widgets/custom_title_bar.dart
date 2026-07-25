@@ -64,7 +64,7 @@ class _CustomTitleBarState extends State<CustomTitleBar> {
             ),
             const SizedBox(width: DATokens.spacingSmall),
             Text(
-              'DA Music',
+              'DA Tunes',
               style: typography.body.copyWith(
                 fontSize: 12.0,
                 fontWeight: FontWeight.w600,

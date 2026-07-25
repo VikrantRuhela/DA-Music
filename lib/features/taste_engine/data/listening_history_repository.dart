@@ -10,7 +10,7 @@ class ListeningHistoryRepository {
   Future<File> _getCacheFile() async {
     if (_cacheFile != null) return _cacheFile!;
     final docDir = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(docDir.path, 'da_music_taste'));
+    final dir = Directory(p.join(docDir.path, 'da_tunes_taste'));
     if (!dir.existsSync()) {
       dir.createSync(recursive: true);
     }

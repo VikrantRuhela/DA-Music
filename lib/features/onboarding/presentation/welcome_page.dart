@@ -94,7 +94,7 @@ class WelcomePage extends ConsumerWidget {
                     const SizedBox(height: DATokens.spacingLarge),
 
                     Text(
-                      'Welcome to DA Music',
+                      'Welcome to DA Tunes',
                       style: typography.display.copyWith(
                         fontWeight: FontWeight.bold,
                         fontSize: 32.0,

@@ -73,7 +73,7 @@ class PlaybackEngineImpl implements PlaybackEngine {
         await _backend.stop();
 
         final docDir = await getApplicationDocumentsDirectory();
-        final localFile = File(p.join(docDir.path, 'da_music_downloads', '${song.id}.mp3'));
+        final localFile = File(p.join(docDir.path, 'da_tunes_downloads', '${song.id}.mp3'));
 
         if (localFile.existsSync()) {
           if (_currentlyLoadingSongId != targetSongId) {

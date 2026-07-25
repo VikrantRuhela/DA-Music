@@ -1,4 +1,4 @@
-package com.damusic.da_music
+package com.vikrantruhela.datunes
 
 import android.Manifest
 import android.content.pm.PackageManager

@@ -220,7 +220,7 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
           ),
           const SizedBox(height: DATokens.spacingTiny),
           Text(
-            'DA MUSIC',
+            'DA TUNES',
             style: context.daTypography.caption.copyWith(
               color: colors.primary,
               fontWeight: FontWeight.w900,

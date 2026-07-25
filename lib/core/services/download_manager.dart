@@ -166,7 +166,7 @@ class DownloadManager extends ChangeNotifier {
 
     // Delete partial file
     final docDir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(docDir.path, 'da_music_downloads', '$songId.mp3'));
+    final file = File(p.join(docDir.path, 'da_tunes_downloads', '$songId.mp3'));
     if (file.existsSync()) {
       try {
         file.deleteSync();
@@ -215,7 +215,7 @@ class DownloadManager extends ChangeNotifier {
       );
 
       final docDir = await getApplicationDocumentsDirectory();
-      final downloadsDir = Directory(p.join(docDir.path, 'da_music_downloads'));
+      final downloadsDir = Directory(p.join(docDir.path, 'da_tunes_downloads'));
       if (!downloadsDir.existsSync()) {
         downloadsDir.createSync(recursive: true);
       }

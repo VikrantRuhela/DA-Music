@@ -117,7 +117,7 @@ class DAMusicApp extends ConsumerWidget {
     });
 
     return MaterialApp.router(
-      title: 'DA Music',
+      title: 'DA Tunes',
       debugShowCheckedModeBanner: false,
       theme: themeData,
       darkTheme: themeData,

@@ -36,7 +36,7 @@ flutter test
 
 ## License 📄
 
-DA Music is open-source software licensed under the **GNU General Public License v3.0 (GPL-3.0)**. 
+DA Tunes is open-source software licensed under the **GNU General Public License v3.0 (GPL-3.0)**. 
 
 ### Key Terms:
 - **Open Source**: DA Tunes is licensed under GPL-3.0. You are free to copy, modify, and distribute the software.

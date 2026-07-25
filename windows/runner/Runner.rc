@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.damusic" "\0"
-            VALUE "FileDescription", "da_music" "\0"
+            VALUE "CompanyName", "com.vikrantruhela" "\0"
+            VALUE "FileDescription", "DA Tunes" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "da_music" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.damusic. All rights reserved." "\0"
-            VALUE "OriginalFilename", "da_music.exe" "\0"
-            VALUE "ProductName", "da_music" "\0"
+            VALUE "InternalName", "da_tunes" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.vikrantruhela. All rights reserved." "\0"
+            VALUE "OriginalFilename", "da_tunes.exe" "\0"
+            VALUE "ProductName", "DA Tunes" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

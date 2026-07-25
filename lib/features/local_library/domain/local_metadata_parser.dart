@@ -68,7 +68,7 @@ class LocalMetadataParser {
             final picture = pictures.first;
             final bytes = picture.bytes;
             if (bytes.isNotEmpty) {
-              final artworkDir = Directory(p.join(docDirPath, 'da_music_local_artwork'));
+              final artworkDir = Directory(p.join(docDirPath, 'da_tunes_local_artwork'));
               if (!artworkDir.existsSync()) {
                 artworkDir.createSync(recursive: true);
               }

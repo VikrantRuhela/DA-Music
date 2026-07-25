@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Copyright (c) 2026 DA Music Contributors
+// Copyright (c) 2026 DA Tunes Contributors
 // Licensed under GPL-3.0.
 
 import 'dart:async';
