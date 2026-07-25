@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:da_music/core/services/secure_credential_store.dart';
-import 'package:da_music/core/services/session_manager.dart';
-import 'package:da_music/core/services/youtube_music_account_service.dart';
+import 'package:da_tunes/core/services/secure_credential_store.dart';
+import 'package:da_tunes/core/services/session_manager.dart';
+import 'package:da_tunes/core/services/youtube_music_account_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

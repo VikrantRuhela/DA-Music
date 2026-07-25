@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:da_music/core/services/playback_controller.dart';
-import 'package:da_music/core/services/impl/playback_engine_impl.dart';
-import 'package:da_music/core/services/platform_audio_backend.dart';
-import 'package:da_music/core/services/stream_resolver.dart';
-import 'package:da_music/core/services/source_manager.dart';
-import 'package:da_music/domain/entities/audio_stream.dart';
-import 'package:da_music/shared/models/music_models.dart';
-import 'package:da_music/shared/models/playback_state.dart';
+import 'package:da_tunes/core/services/playback_controller.dart';
+import 'package:da_tunes/core/services/impl/playback_engine_impl.dart';
+import 'package:da_tunes/core/services/platform_audio_backend.dart';
+import 'package:da_tunes/core/services/stream_resolver.dart';
+import 'package:da_tunes/core/services/source_manager.dart';
+import 'package:da_tunes/domain/entities/audio_stream.dart';
+import 'package:da_tunes/shared/models/music_models.dart';
+import 'package:da_tunes/shared/models/playback_state.dart';
 
 class MockPlatformAudioBackend implements PlatformAudioBackend {
   final _eventController = StreamController<PlatformAudioEvent>.broadcast();

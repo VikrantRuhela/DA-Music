@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'package:da_music/core/services/youtube_music_adapter.dart';
-import 'package:da_music/main.dart';
+import 'package:da_tunes/core/services/youtube_music_adapter.dart';
+import 'package:da_tunes/main.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

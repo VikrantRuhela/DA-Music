@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:da_music/shared/providers/player_providers.dart';
+import 'package:da_tunes/shared/providers/player_providers.dart';
 
 class ImmersiveBackground extends ConsumerWidget {
   final Widget child;

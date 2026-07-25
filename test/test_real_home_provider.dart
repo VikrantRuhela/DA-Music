@@ -1,13 +1,13 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:da_music/core/services/storage_service.dart';
-import 'package:da_music/shared/providers/library_providers.dart';
-import 'package:da_music/shared/providers/backend_providers.dart';
-import 'package:da_music/core/services/secure_credential_store.dart';
-import 'package:da_music/core/services/session_manager.dart';
-import 'package:da_music/features/taste_engine/presentation/providers/taste_engine_providers.dart';
-import 'package:da_music/main.dart';
+import 'package:da_tunes/core/services/storage_service.dart';
+import 'package:da_tunes/shared/providers/library_providers.dart';
+import 'package:da_tunes/shared/providers/backend_providers.dart';
+import 'package:da_tunes/core/services/secure_credential_store.dart';
+import 'package:da_tunes/core/services/session_manager.dart';
+import 'package:da_tunes/features/taste_engine/presentation/providers/taste_engine_providers.dart';
+import 'package:da_tunes/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeStorageService implements StorageService {

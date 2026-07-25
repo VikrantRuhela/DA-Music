@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:da_music/core/services/youtube_music_adapter.dart';
+import 'package:da_tunes/core/services/youtube_music_adapter.dart';
 
 void main() {
   test('Test artist album tracks loading', () async {

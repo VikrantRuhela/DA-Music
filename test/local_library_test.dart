@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:da_music/features/local_library/domain/local_metadata_parser.dart';
+import 'package:da_tunes/features/local_library/domain/local_metadata_parser.dart';
 
 void main() {
   group('Local Music Library Tests', () {

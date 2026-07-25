@@ -2,10 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:da_music/main.dart' as app;
-import 'package:da_music/shared/providers/player_providers.dart';
-import 'package:da_music/shared/models/music_models.dart';
-import 'package:da_music/shared/models/playback_state.dart';
+import 'package:da_tunes/main.dart' as app;
+import 'package:da_tunes/shared/providers/player_providers.dart';
+import 'package:da_tunes/shared/models/music_models.dart';
+import 'package:da_tunes/shared/models/playback_state.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

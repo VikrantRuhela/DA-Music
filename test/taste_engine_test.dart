@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:da_music/features/taste_engine/domain/taste_analyzer.dart';
-import 'package:da_music/features/taste_engine/domain/music_dna.dart';
+import 'package:da_tunes/features/taste_engine/domain/taste_analyzer.dart';
+import 'package:da_tunes/features/taste_engine/domain/music_dna.dart';
 
 void main() {
   group('Intelligent Taste Engine - TasteAnalyzer Tests', () {

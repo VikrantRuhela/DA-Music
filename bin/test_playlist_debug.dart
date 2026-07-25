@@ -1,4 +1,4 @@
-import 'package:da_music/core/services/youtube_music_adapter.dart';
+import 'package:da_tunes/core/services/youtube_music_adapter.dart';
 
 Future<void> main(List<String> args) async {
   final playlistId = args.isNotEmpty ? args[0] : 'PL4fGSI1pDJn6O1LS0XSdF3RyO0Rq_LDeI';

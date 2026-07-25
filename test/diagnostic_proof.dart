@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
-import 'package:da_music/core/services/secure_credential_store.dart';
-import 'package:da_music/core/services/youtube_music_account_service.dart';
-import 'package:da_music/core/services/session_manager.dart';
-import 'package:da_music/shared/models/music_models.dart';
+import 'package:da_tunes/core/services/secure_credential_store.dart';
+import 'package:da_tunes/core/services/youtube_music_account_service.dart';
+import 'package:da_tunes/core/services/session_manager.dart';
+import 'package:da_tunes/shared/models/music_models.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
