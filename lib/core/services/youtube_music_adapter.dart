@@ -1225,7 +1225,6 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         ytClients: [
           yt.YoutubeApiClient.androidVr,
           yt.YoutubeApiClient.android,
-          yt.YoutubeApiClient.ios,
         ],
       ).timeout(const Duration(milliseconds: 15000));
       
@@ -1279,7 +1278,6 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
               ytClients: [
                 yt.YoutubeApiClient.androidVr,
                 yt.YoutubeApiClient.android,
-                yt.YoutubeApiClient.ios,
               ],
             ).timeout(const Duration(milliseconds: 15000));
 
