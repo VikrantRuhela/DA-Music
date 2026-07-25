@@ -38,22 +38,19 @@ class LocalStreamProxy {
       final port = proxyPort ?? (url.port != 0 ? url.port : (url.scheme == 'https' ? 443 : 80));
       
       Socket socket;
-      final isGoogleVideo = host.contains('googlevideo.com');
-      if (isGoogleVideo) {
+      try {
+        socket = await Socket.connect(host, port);
+      } catch (_) {
         try {
           final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
           if (addresses.isNotEmpty) {
-            socket = await Socket.connect(addresses.first, port).timeout(const Duration(milliseconds: 1500));
+            socket = await Socket.connect(addresses.first, port);
           } else {
-            socket = await Socket.connect(host, port);
+            rethrow;
           }
-        } catch (_) {
-          // Fallback to standard dual-stack connection
+        } catch (e2) {
           socket = await Socket.connect(host, port);
         }
-      } else {
-        // Direct dual-stack connect for all other hosts (API, proxy targets, etc.) to prevent connection delay accumulation
-        socket = await Socket.connect(host, port);
       }
 
       if (url.scheme.toLowerCase() == 'https') {
