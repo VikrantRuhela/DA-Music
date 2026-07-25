@@ -9,6 +9,7 @@ import 'package:da_music/shared/providers/library_providers.dart';
 import 'package:da_music/shared/providers/backend_providers.dart';
 import 'package:da_music/core/services/secure_credential_store.dart';
 import 'package:da_music/core/services/session_manager.dart';
+import 'package:da_music/features/taste_engine/presentation/providers/taste_engine_providers.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -70,6 +71,14 @@ void main() {
               HomeFeedSection(title: 'Featured Playlists', type: 'playlists', items: const []),
             ],
           )),
+          personalizedSectionsProvider.overrideWith((ref) => [
+            const RecommendationSection(
+              title: 'Recommended for You',
+              subtitle: 'Popular tracks picked for you',
+              type: 'trending',
+              items: [],
+            ),
+          ]),
         ],
         child: const DAMusicApp(),
       ),

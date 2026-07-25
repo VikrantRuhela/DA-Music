@@ -81,13 +81,13 @@ class SourceManager {
     throw const SourceException('Operation failed after retries');
   }
 
-  Future<T> _executeRequest<T>(String key, Future<T> Function() action) async {
+  Future<T> _executeRequest<T>(String key, Future<T> Function() action, {int retries = 2}) async {
     if (_pendingRequests.containsKey(key)) {
       DALogger.info('Deduplicating identical request for key: $key');
       return await _pendingRequests[key] as T;
     }
 
-    final future = _executeWithRetry(action).whenComplete(() {
+    final future = _executeWithRetry(action, retries: retries).whenComplete(() {
       _pendingRequests.remove(key);
     });
     _pendingRequests[key] = future;
@@ -101,7 +101,7 @@ class SourceManager {
       return _cache[cacheKey] as SearchResult;
     }
 
-    final result = await _executeRequest(cacheKey, () => activeAdapter.search(query));
+    final result = await _executeRequest(cacheKey, () => activeAdapter.search(query), retries: 0);
     _cache[cacheKey] = result;
     return result;
   }
@@ -112,7 +112,7 @@ class SourceManager {
       return _cache[cacheKey] as List<Artist>;
     }
 
-    final result = await _executeRequest(cacheKey, () => activeAdapter.searchArtists(query));
+    final result = await _executeRequest(cacheKey, () => activeAdapter.searchArtists(query), retries: 0);
     _cache[cacheKey] = result;
     return result;
   }
@@ -123,7 +123,7 @@ class SourceManager {
       return _cache[cacheKey] as HomeFeed;
     }
 
-    final result = await _executeRequest(cacheKey, () => activeAdapter.getHome());
+    final result = await _executeRequest(cacheKey, () => activeAdapter.getHome(), retries: 1);
     _cache[cacheKey] = result;
     return result;
   }

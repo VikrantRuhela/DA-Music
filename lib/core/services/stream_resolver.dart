@@ -83,17 +83,43 @@ class StreamResolver {
     final cached = _streamCache[trackId];
     if (cached != null && !cached.isExpired) {
       DALogger.info('StreamResolver: Reusing cached stream for track "$trackId"');
-      lastResolvedSong = await _sourceManager.getSong(trackId);
+      if (songTitle != null && artist != null) {
+        lastResolvedSong = Song(
+          id: trackId,
+          title: songTitle,
+          artistId: artist,
+          albumId: 'yt_album_unknown',
+          duration: DurationValue(duration ?? const Duration(minutes: 3)),
+          thumbnail: Artwork(''),
+          artwork: Artwork(''),
+          sourceId: providerId,
+        );
+      } else {
+        lastResolvedSong = await _sourceManager.getSong(trackId);
+      }
       lastResolvedUrl = cached.streamUrl;
       return cached;
     }
 
-    String title = 'Unknown Title';
-    try {
-      final song = await _sourceManager.getSong(trackId);
-      title = song.title;
-      lastResolvedSong = song;
-    } catch (_) {}
+    String title = songTitle ?? 'Unknown Title';
+    if (songTitle != null && artist != null) {
+      lastResolvedSong = Song(
+        id: trackId,
+        title: songTitle,
+        artistId: artist,
+        albumId: 'yt_album_unknown',
+        duration: DurationValue(duration ?? const Duration(minutes: 3)),
+        thumbnail: Artwork(''),
+        artwork: Artwork(''),
+        sourceId: providerId,
+      );
+    } else {
+      try {
+        final song = await _sourceManager.getSong(trackId);
+        title = song.title;
+        lastResolvedSong = song;
+      } catch (_) {}
+    }
 
     AudioStream stream;
     try {

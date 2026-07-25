@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
 import 'source_adapter.dart';
 import 'youtube_music_account_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +29,8 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   void cacheSongForTesting(Song song) {
     _songCache[song.id] = song;
   }
+
+  yt.YoutubeExplode get ytClientForTesting => _ytClient;
 
   // Caches for artist details
   final Map<String, List<Song>> _artistSongs = {};
@@ -67,7 +70,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   Future<void> initialize() async {
     if (_isInitialized) return;
     
-    _ytClient = yt.YoutubeExplode();
+    _ytClient = yt.YoutubeExplode(httpClient: yt.YoutubeHttpClient(InterceptingClient()));
     DALogger.info('YouTubeMusicAdapter: YoutubeExplode client initialized (unauthenticated, clean headers for playback).');
     _isInitialized = true;
   }
@@ -191,73 +194,339 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     }
   }
 
+  Future<Map<String, String>> _getHomeHeaders() async {
+    final Map<String, String> headers = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'x-youtube-client-name': '67',
+      'x-youtube-client-version': '1.20260304.03.00',
+      'x-origin': 'https://music.youtube.com',
+    };
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? cookies = prefs.getString('ytm_cookies');
+      if (cookies == null || cookies.trim().isEmpty) {
+        cookies = await SecureCredentialStore().readCookies();
+      }
+      if (cookies != null && cookies.isNotEmpty) {
+        headers['Cookie'] = cookies;
+        final cookiesMap = <String, String>{};
+        for (final cookie in cookies.split(';')) {
+          final parts = cookie.trim().split('=');
+          if (parts.length >= 2) {
+            cookiesMap[parts[0]] = parts.sublist(1).join('=');
+          }
+        }
+        final sapisid = cookiesMap['SAPISID'] ?? cookiesMap['__Secure-3PAPISID'];
+        if (sapisid != null && sapisid.isNotEmpty) {
+          final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          const origin = 'https://music.youtube.com';
+          final input = '$timestamp $sapisid $origin';
+          final sha1Hex = sha1.convert(utf8.encode(input)).toString();
+          headers['Authorization'] = 'SAPISIDHASH ${timestamp}_$sha1Hex';
+        }
+      }
+    } catch (_) {}
+    return headers;
+  }
+
+  Duration _parseDurationString(String text) {
+    if (text.isEmpty) return const Duration(minutes: 3);
+    final parts = text.split(':');
+    if (parts.length == 2) {
+      final mins = int.tryParse(parts[0]) ?? 0;
+      final secs = int.tryParse(parts[1]) ?? 0;
+      return Duration(minutes: mins, seconds: secs);
+    } else if (parts.length == 3) {
+      final hrs = int.tryParse(parts[0]) ?? 0;
+      final mins = int.tryParse(parts[1]) ?? 0;
+      final secs = int.tryParse(parts[2]) ?? 0;
+      return Duration(hours: hrs, minutes: mins, seconds: secs);
+    }
+    return const Duration(minutes: 3);
+  }
+
   @override
   Future<HomeFeed> getHome() async {
     _checkInitialized();
     DALogger.info('YouTubeMusicAdapter: Fetching Home Feed (songs, albums, playlists)...');
 
     try {
-      final songResults = await _ytClient.search.searchContent('trending songs', filter: yt.TypeFilters.video);
-      final songs = songResults.whereType<yt.SearchVideo>().map((v) {
-        final song = Song(
-          id: v.id.value,
-          title: v.title,
-          artistId: v.author,
-          albumId: 'yt_album_unknown',
-          duration: DurationValue(_parseDuration(v.duration)),
-          thumbnail: Artwork(v.thumbnails.isNotEmpty ? v.thumbnails.first.url.toString() : ''),
-          artwork: Artwork(v.thumbnails.isNotEmpty ? v.thumbnails.last.url.toString() : ''),
-          sourceId: id,
-        );
-        _songCache[song.id] = song;
-        return song;
-      }).take(6).toList();
+      final headers = await _getHomeHeaders();
+      
+      final response = await http.post(
+        Uri.parse('https://music.youtube.com/youtubei/v1/browse?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30&prettyPrint=false'),
+        headers: headers,
+        body: jsonEncode({
+          "context": {
+            "client": {
+              "clientName": "WEB_REMIX",
+              "clientVersion": "1.20260304.03.00",
+              "hl": "en",
+              "gl": "US"
+            }
+          },
+          "browseId": "FEmusic_home"
+        }),
+      ).timeout(const Duration(seconds: 8));
 
-      final albumResults = await _ytClient.search.searchContent('music albums', filter: yt.TypeFilters.playlist);
-      final albums = albumResults.whereType<yt.SearchPlaylist>().map((p) => Album(
-        id: p.id.value,
-        title: p.title,
-        artistId: 'Various Artists',
-        cover: Artwork(p.thumbnails.isNotEmpty ? p.thumbnails.first.url.toString() : ''),
-        year: 2026,
-        trackCount: p.videoCount,
-        duration: DurationValue(const Duration(minutes: 40)),
-      )).take(6).toList();
+      if (response.statusCode != 200) {
+        throw Exception('InnerTube browse returned status ${response.statusCode}');
+      }
 
-      final playlistResults = await _ytClient.search.searchContent('music playlists', filter: yt.TypeFilters.playlist);
-      final playlists = playlistResults.whereType<yt.SearchPlaylist>().map((p) => Playlist(
-        id: p.id.value,
-        title: p.title,
-        description: 'YouTube Playlist',
-        cover: Artwork(p.thumbnails.isNotEmpty ? p.thumbnails.first.url.toString() : ''),
-        owner: 'YouTube',
-        songIds: const [],
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      )).take(6).toList();
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      
+      final List<Song> songs = [];
+      final List<Album> albums = [];
+      final List<Playlist> playlists = [];
+
+      void traverse(dynamic node) {
+        if (node is Map) {
+          if (node.containsKey('musicResponsiveListItemRenderer')) {
+            try {
+              final renderer = node['musicResponsiveListItemRenderer'];
+              final playlistItemData = renderer['playlistItemData'];
+              String? videoId = playlistItemData?['videoId'] as String?;
+              videoId ??= renderer['navigationEndpoint']?['watchEndpoint']?['videoId'] as String?;
+              videoId ??= renderer['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId'] as String?;
+
+              if (videoId != null && videoId.isNotEmpty) {
+                final flexColumns = renderer['flexColumns'] as List?;
+                String title = 'Unknown Title';
+                String artist = 'Unknown Artist';
+                String albumName = 'Single';
+                Duration duration = const Duration(minutes: 3);
+
+                if (flexColumns != null && flexColumns.isNotEmpty) {
+                  final titleNode = flexColumns[0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'];
+                  if (titleNode is List && titleNode.isNotEmpty) {
+                    title = titleNode[0]['text'] as String? ?? 'Unknown Title';
+                  }
+
+                  if (flexColumns.length > 1) {
+                    final runs = flexColumns[1]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                    if (runs != null && runs.isNotEmpty) {
+                      artist = runs[0]['text'] as String? ?? 'Unknown Artist';
+                      if (runs.length > 2) {
+                        albumName = runs[2]['text'] as String? ?? 'Single';
+                      }
+                    }
+                  }
+                  
+                  if (flexColumns.length > 2) {
+                    final runs = flexColumns[2]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                    if (runs != null && runs.isNotEmpty) {
+                      final durStr = runs[0]['text'] as String? ?? '';
+                      duration = _parseDurationString(durStr);
+                    }
+                  }
+                }
+
+                String thumbnail = '';
+                final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+                if (thumbnails != null && thumbnails.isNotEmpty) {
+                  thumbnail = thumbnails.last['url'] as String? ?? '';
+                }
+
+                final song = Song(
+                  id: videoId,
+                  title: title,
+                  artistId: artist,
+                  albumId: albumName,
+                  duration: DurationValue(duration),
+                  thumbnail: Artwork(thumbnail),
+                  artwork: Artwork(thumbnail),
+                  sourceId: id,
+                );
+                _songCache[song.id] = song;
+                songs.add(song);
+              } else {
+                final browseId = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] as String?;
+                if (browseId != null) {
+                  String title = 'Unknown';
+                  String artist = 'Unknown Artist';
+                  final flexColumns = renderer['flexColumns'] as List?;
+                  if (flexColumns != null && flexColumns.isNotEmpty) {
+                    final runs = flexColumns[0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                    if (runs != null && runs.isNotEmpty) {
+                      title = runs[0]['text'] as String? ?? 'Unknown';
+                    }
+                    if (flexColumns.length > 1) {
+                      final runs2 = flexColumns[1]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List?;
+                      if (runs2 != null && runs2.isNotEmpty) {
+                        artist = runs2[0]['text'] as String? ?? 'Unknown Artist';
+                      }
+                    }
+                  }
+                  String cover = '';
+                  final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+                  if (thumbnails != null && thumbnails.isNotEmpty) {
+                    cover = thumbnails.last['url'] as String? ?? '';
+                  }
+
+                  if (browseId.startsWith('PL') || browseId.startsWith('VL') || browseId.startsWith('RD')) {
+                    playlists.add(Playlist(
+                      id: browseId,
+                      title: title,
+                      description: 'YouTube Playlist',
+                      cover: Artwork(cover),
+                      owner: artist,
+                      songIds: const [],
+                      createdAt: DateTime.now(),
+                      updatedAt: DateTime.now(),
+                    ));
+                  } else if (browseId.startsWith('MPREb_') || browseId.contains('album') || browseId.contains('release')) {
+                    albums.add(Album(
+                      id: browseId,
+                      title: title,
+                      artistId: artist,
+                      cover: Artwork(cover),
+                      year: 2026,
+                      trackCount: 10,
+                      duration: DurationValue(const Duration(minutes: 40)),
+                    ));
+                  }
+                }
+              }
+            } catch (_) {}
+          } else if (node.containsKey('musicTwoRowItemRenderer')) {
+            try {
+              final renderer = node['musicTwoRowItemRenderer'];
+              final navigationEndpoint = renderer['navigationEndpoint'];
+              final String? browseId = navigationEndpoint?['browseEndpoint']?['browseId'];
+              final String? videoId = navigationEndpoint?['watchEndpoint']?['videoId'];
+
+              final titleText = renderer['title']?['runs']?[0]?['text'] ?? renderer['title']?['simpleText'];
+              final title = titleText as String? ?? 'Unknown';
+
+              String artist = 'Unknown Artist';
+              final subtitleRuns = renderer['subtitle']?['runs'] as List?;
+              if (subtitleRuns != null && subtitleRuns.isNotEmpty) {
+                artist = subtitleRuns[0]['text'] as String? ?? 'Unknown Artist';
+              }
+
+              String cover = '';
+              final thumbnails = renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+              if (thumbnails != null && thumbnails.isNotEmpty) {
+                cover = thumbnails.last['url'] as String? ?? '';
+              }
+
+              if (videoId != null && videoId.isNotEmpty) {
+                final song = Song(
+                  id: videoId,
+                  title: title,
+                  artistId: artist,
+                  albumId: 'Single',
+                  duration: DurationValue(const Duration(minutes: 3)),
+                  thumbnail: Artwork(cover),
+                  artwork: Artwork(cover),
+                  sourceId: id,
+                );
+                _songCache[song.id] = song;
+                songs.add(song);
+              } else if (browseId != null && browseId.isNotEmpty) {
+                if (browseId.startsWith('PL') || browseId.startsWith('VL') || browseId.startsWith('RD')) {
+                  playlists.add(Playlist(
+                    id: browseId,
+                    title: title,
+                    description: 'YouTube Playlist',
+                    cover: Artwork(cover),
+                    owner: artist,
+                    songIds: const [],
+                    createdAt: DateTime.now(),
+                    updatedAt: DateTime.now(),
+                  ));
+                } else if (browseId.startsWith('MPREb_') || browseId.contains('album') || browseId.contains('release')) {
+                  albums.add(Album(
+                    id: browseId,
+                    title: title,
+                    artistId: artist,
+                    cover: Artwork(cover),
+                    year: 2026,
+                    trackCount: 10,
+                    duration: DurationValue(const Duration(minutes: 40)),
+                  ));
+                }
+              }
+            } catch (_) {}
+          }
+          node.values.forEach(traverse);
+        } else if (node is List) {
+          node.forEach(traverse);
+        }
+      }
+
+      traverse(json);
+
+      if (songs.isEmpty) {
+        try {
+          final songResults = await _ytClient.search.searchContent('trending songs', filter: yt.TypeFilters.video);
+          songs.addAll(songResults.whereType<yt.SearchVideo>().map((v) {
+            final song = Song(
+              id: v.id.value,
+              title: v.title,
+              artistId: v.author,
+              albumId: 'yt_album_unknown',
+              duration: DurationValue(_parseDuration(v.duration)),
+              thumbnail: Artwork(v.thumbnails.isNotEmpty ? v.thumbnails.first.url.toString() : ''),
+              artwork: Artwork(v.thumbnails.isNotEmpty ? v.thumbnails.last.url.toString() : ''),
+              sourceId: id,
+            );
+            _songCache[song.id] = song;
+            return song;
+          }).take(6));
+        } catch (_) {}
+      }
 
       return HomeFeed(
         sections: [
           HomeFeedSection(
             title: 'Recommended for You',
             type: 'recommended',
-            items: songs,
+            items: songs.take(10).toList(),
           ),
           HomeFeedSection(
             title: 'Trending Albums',
             type: 'albums',
-            items: albums,
+            items: albums.take(10).toList(),
           ),
           HomeFeedSection(
             title: 'Featured Playlists',
             type: 'playlists',
-            items: playlists,
+            items: playlists.take(10).toList(),
           ),
         ],
       );
     } catch (e, stack) {
       DALogger.error('YouTubeMusicAdapter: Failed to load Home Feed', e, stack);
-      throw SourceException('Failed to load Home Feed: $e', e.toString());
+      try {
+        final songResults = await _ytClient.search.searchContent('trending songs', filter: yt.TypeFilters.video);
+        final songs = songResults.whereType<yt.SearchVideo>().map((v) {
+          final song = Song(
+            id: v.id.value,
+            title: v.title,
+            artistId: v.author,
+            albumId: 'yt_album_unknown',
+            duration: DurationValue(_parseDuration(v.duration)),
+            thumbnail: Artwork(v.thumbnails.isNotEmpty ? v.thumbnails.first.url.toString() : ''),
+            artwork: Artwork(v.thumbnails.isNotEmpty ? v.thumbnails.last.url.toString() : ''),
+            sourceId: id,
+          );
+          _songCache[song.id] = song;
+          return song;
+        }).take(6).toList();
+
+        return HomeFeed(
+          sections: [
+            HomeFeedSection(title: 'Recommended for You', type: 'recommended', items: songs),
+            HomeFeedSection(title: 'Trending Albums', type: 'albums', items: const []),
+            HomeFeedSection(title: 'Featured Playlists', type: 'playlists', items: const []),
+          ],
+        );
+      } catch (_) {
+        throw SourceException('Failed to load Home Feed: $e', e.toString());
+      }
     }
   }
 
@@ -894,7 +1163,6 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         ytClients: [
           yt.YoutubeApiClient.androidVr,
           yt.YoutubeApiClient.android,
-          yt.YoutubeApiClient.ios,
         ],
       ).timeout(const Duration(milliseconds: 15000));
       
@@ -948,7 +1216,6 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
               ytClients: [
                 yt.YoutubeApiClient.androidVr,
                 yt.YoutubeApiClient.android,
-                yt.YoutubeApiClient.ios,
               ],
             ).timeout(const Duration(milliseconds: 15000));
 
@@ -1001,10 +1268,15 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   Future<({Playlist playlist, List<Song> songs})> _fetchPlaylistDetails(String id) async {
     final client = HttpClient();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      String? cookies = prefs.getString('ytm_cookies');
-      if (cookies == null || cookies.trim().isEmpty) {
-        cookies = await SecureCredentialStore().readCookies();
+      String? cookies;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        cookies = prefs.getString('ytm_cookies');
+        if (cookies == null || cookies.trim().isEmpty) {
+          cookies = await SecureCredentialStore().readCookies();
+        }
+      } catch (e) {
+        DALogger.warning('YouTubeMusicAdapter: Failed to load cookies (likely running in a test environment without bindings): $e');
       }
 
       const apiKey = 'AIzaSyAOghZGza2MQSZkY_zfZ370N-PUdXEo8AI';
@@ -1560,21 +1832,6 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     }
   }
 
-  Duration _parseDurationString(String str) {
-    if (str.isEmpty) return const Duration(minutes: 3);
-    final parts = str.split(':');
-    if (parts.length == 2) {
-      final m = int.tryParse(parts[0]) ?? 0;
-      final s = int.tryParse(parts[1]) ?? 0;
-      return Duration(minutes: m, seconds: s);
-    } else if (parts.length == 3) {
-      final h = int.tryParse(parts[0]) ?? 0;
-      final m = int.tryParse(parts[1]) ?? 0;
-      final s = int.tryParse(parts[2]) ?? 0;
-      return Duration(hours: h, minutes: m, seconds: s);
-    }
-    return const Duration(minutes: 3);
-  }
 
   Future<Album> _getAlbumFallback(String id) async {
     final playlist = await _ytClient.playlists.get(id);
@@ -1763,5 +2020,43 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       }
     }
     return null;
+  }
+}
+
+class InterceptingClient extends http.BaseClient {
+  final http.Client _inner = http.Client();
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final response = await _inner.send(request);
+    final urlStr = request.url.toString();
+    if (urlStr.contains('youtubei/v1/search') || urlStr.contains('results?search_query=')) {
+      final bytes = await response.stream.toBytes();
+      var body = utf8.decode(bytes);
+      body = body.replaceAll('"viewCountText":{"runs":', '"viewCountText":{"simpleText":"0 views","_runs":');
+      final modifiedBytes = utf8.encode(body);
+      
+      final headers = Map<String, String>.from(response.headers);
+      headers.remove('content-encoding');
+      headers['content-length'] = modifiedBytes.length.toString();
+
+      return http.StreamedResponse(
+        Stream.value(modifiedBytes),
+        response.statusCode,
+        contentLength: modifiedBytes.length,
+        request: request,
+        headers: headers,
+        isRedirect: response.isRedirect,
+        persistentConnection: response.persistentConnection,
+        reasonPhrase: response.reasonPhrase,
+      );
+    }
+    return response;
+  }
+
+  @override
+  void close() {
+    _inner.close();
+    super.close();
   }
 }
