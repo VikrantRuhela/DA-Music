@@ -209,13 +209,20 @@ class AboutPage extends ConsumerWidget {
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(12.0),
+                      width: 52,
+                      height: 52,
                       decoration: BoxDecoration(
-                        color: colors.primary.withValues(alpha: 0.05),
                         shape: BoxShape.circle,
-                        border: Border.all(color: colors.primary.withValues(alpha: 0.1), width: 1),
+                        border: Border.all(color: colors.primary.withValues(alpha: 0.15), width: 1.5),
                       ),
-                      child: Icon(Icons.person_outline, color: colors.primary, size: 28.0),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(26.0),
+                        child: Image.asset(
+                          'assets/images/developer.jpg',
+                          fit: BoxFit.cover,
+                          errorBuilder: (ctx, err, st) => Icon(Icons.person_outline, color: colors.primary, size: 28.0),
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 16.0),
                     Expanded(
