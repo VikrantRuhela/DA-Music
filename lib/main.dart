@@ -26,8 +26,8 @@ class FallbackHttpOverrides extends HttpOverrides {
       
       Socket socket;
       try {
-        // Try standard dual-stack connection first (crucial for IPv6-only networks like Jio)
-        socket = await Socket.connect(host, port);
+        // Try standard dual-stack connection first (crucial for IPv6-only networks like Jio) with a fail-fast 1.5s timeout
+        socket = await Socket.connect(host, port).timeout(const Duration(milliseconds: 1500));
       } catch (_) {
         try {
           final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);

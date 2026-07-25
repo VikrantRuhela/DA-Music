@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'logger_service.dart';
+import 'stream_resolver.dart';
 
 class LocalStreamProxy {
   HttpServer? _server;
@@ -23,6 +24,7 @@ class LocalStreamProxy {
     }
 
     final targetUrl = request.uri.queryParameters['url'];
+    final trackId = request.uri.queryParameters['trackId'];
     if (targetUrl == null || targetUrl.isEmpty) {
       request.response.statusCode = HttpStatus.badRequest;
       await request.response.close();
@@ -39,7 +41,8 @@ class LocalStreamProxy {
       
       Socket socket;
       try {
-        socket = await Socket.connect(host, port);
+        // Enforce a tight 1.5s timeout on standard connection so we fail-fast on blackholed IPv6 routes
+        socket = await Socket.connect(host, port).timeout(const Duration(milliseconds: 1500));
       } catch (_) {
         try {
           final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
@@ -67,57 +70,85 @@ class LocalStreamProxy {
     String failureStage = 'Connection';
     String exceptionDetails = '';
     const int timeoutMs = 15000;
+    const int retryCount = 3;
 
     try {
-      failureStage = 'Opening connection';
-      final forwardReq = await client.openUrl(request.method, targetUri)
-          .timeout(const Duration(milliseconds: timeoutMs));
+      HttpClientResponse? forwardRes;
+      
+      for (int attempt = 1; attempt <= retryCount; attempt++) {
+        try {
+          failureStage = 'Opening connection (Attempt $attempt)';
+          final forwardReq = await client.openUrl(request.method, targetUri)
+              .timeout(const Duration(milliseconds: timeoutMs));
 
-      // Copy headers from client request to forward request
-      request.headers.forEach((name, values) {
-        if (name.toLowerCase() != 'host') {
-          for (final val in values) {
-            forwardReq.headers.add(name, val);
+          // Copy headers from client request to forward request
+          request.headers.forEach((name, values) {
+            if (name.toLowerCase() != 'host') {
+              for (final val in values) {
+                forwardReq.headers.add(name, val);
+              }
+            }
+          });
+
+          // Set browser user-agent to avoid 403 Forbidden
+          forwardReq.headers.set(
+            'User-Agent',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          );
+
+          failureStage = 'Waiting for response (Attempt $attempt)';
+          forwardRes = await forwardReq.close()
+              .timeout(const Duration(milliseconds: timeoutMs));
+          
+          httpStatusCode = forwardRes.statusCode;
+          redirectChain = forwardRes.redirects.map((r) => r.location.toString()).toList();
+
+          if (httpStatusCode >= 400) {
+            throw HttpException('Server returned status code $httpStatusCode');
           }
+          
+          // Copy status code and headers back to client
+          request.response.statusCode = forwardRes.statusCode;
+          forwardRes.headers.forEach((name, values) {
+            for (final val in values) {
+              request.response.headers.add(name, val);
+            }
+          });
+
+          failureStage = 'Streaming payload';
+          await request.response.addStream(forwardRes);
+          break; // Exit retry loop on success
+        } catch (e) {
+          exceptionDetails = e.toString();
+          
+          // Determine if we should fail or retry
+          final isPeerClosed = e is SocketException && exceptionDetails.contains('Connection closed by peer');
+          if (attempt == retryCount || isPeerClosed) {
+            if (!isPeerClosed) {
+              DALogger.error('=== STREAM PROXY FAILURE DIAGNOSTIC ===');
+              DALogger.error('- Target CDN Endpoint: $cdnEndpoint');
+              DALogger.error('- HTTP Status Code: $httpStatusCode');
+              DALogger.error('- Redirect Chain: $redirectChain');
+              DALogger.error('- Network Protocol: $networkProtocol');
+              DALogger.error('- Failure Stage: $failureStage');
+              DALogger.error('- Exception Details: $exceptionDetails');
+              DALogger.error('- Timeout Setting: ${timeoutMs}ms');
+              DALogger.error('=======================================');
+            }
+
+            // Invalidate cache immediately on failure so fresh URL is fetched on retry
+            if (trackId != null && trackId.isNotEmpty) {
+              StreamResolver.invalidate(trackId);
+            }
+            rethrow;
+          }
+          
+          DALogger.warning('LocalStreamProxy: Attempt $attempt failed, retrying in ${attempt * 400}ms... (Error: $e)');
+          await Future.delayed(Duration(milliseconds: attempt * 400));
         }
-      });
-
-      // Set browser user-agent to avoid 403 Forbidden
-      forwardReq.headers.set(
-        'User-Agent',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      );
-
-      failureStage = 'Waiting for response';
-      final forwardRes = await forwardReq.close()
-          .timeout(const Duration(milliseconds: timeoutMs));
-      httpStatusCode = forwardRes.statusCode;
-      redirectChain = forwardRes.redirects.map((r) => r.location.toString()).toList();
-
-      // Copy status code and headers back to client
-      request.response.statusCode = forwardRes.statusCode;
-      forwardRes.headers.forEach((name, values) {
-        for (final val in values) {
-          request.response.headers.add(name, val);
-        }
-      });
-
-      failureStage = 'Streaming payload';
-      await request.response.addStream(forwardRes);
-    } catch (e) {
-      exceptionDetails = e.toString();
-      // Only log diagnostics if the request didn't fail due to standard player client cancellation/seek disconnects
-      if (e is! SocketException || !exceptionDetails.contains('Connection closed by peer')) {
-        DALogger.error('=== STREAM PROXY FAILURE DIAGNOSTIC ===');
-        DALogger.error('- Target CDN Endpoint: $cdnEndpoint');
-        DALogger.error('- HTTP Status Code: $httpStatusCode');
-        DALogger.error('- Redirect Chain: $redirectChain');
-        DALogger.error('- Network Protocol: $networkProtocol');
-        DALogger.error('- Failure Stage: $failureStage');
-        DALogger.error('- Exception Details: $exceptionDetails');
-        DALogger.error('- Timeout Setting: ${timeoutMs}ms');
-        DALogger.error('=======================================');
       }
+    } catch (e) {
+      // Errors already reported in loop
     } finally {
       try {
         await request.response.close();

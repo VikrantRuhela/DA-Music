@@ -23,6 +23,7 @@ class PlaybackEngineImpl implements PlaybackEngine {
   List<int> _shuffledIndices = [];
   int _shuffledIndex = -1;
   StreamSubscription? _backendEventSub;
+  String? _currentlyLoadingSongId;
 
   PlaybackEngineImpl(this._backend, this._streamResolver);
 
@@ -66,12 +67,19 @@ class PlaybackEngineImpl implements PlaybackEngine {
   @override
   Future<PlaybackResult<void>> load(Song song) =>
       _runSafe('load', () async {
+        _currentlyLoadingSongId = song.id;
+        final targetSongId = song.id;
+
         await _backend.stop();
 
         final docDir = await getApplicationDocumentsDirectory();
         final localFile = File(p.join(docDir.path, 'da_music_downloads', '${song.id}.mp3'));
 
         if (localFile.existsSync()) {
+          if (_currentlyLoadingSongId != targetSongId) {
+            DALogger.info('PlaybackEngine: load($targetSongId) discarded because a newer load request started.');
+            return;
+          }
           DALogger.info('PlaybackEngine: Playing local offline file: ${localFile.path}');
           await _backend.load(localFile.path);
         } else {
@@ -82,6 +90,12 @@ class PlaybackEngineImpl implements PlaybackEngine {
             artist: song.artistId,
             duration: song.duration.value,
           );
+
+          if (_currentlyLoadingSongId != targetSongId) {
+            DALogger.info('PlaybackEngine: load($targetSongId) discarded after resolution because a newer load request started.');
+            return;
+          }
+
           // ignore: avoid_print
           print('Resolved stream URL: ${stream.streamUrl}');
           await _backend.load(stream.streamUrl);

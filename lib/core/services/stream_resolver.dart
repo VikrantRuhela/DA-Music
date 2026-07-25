@@ -23,7 +23,14 @@ enum StreamQuality {
 class StreamResolver {
   final SourceManager _sourceManager;
   final LocalStreamProxy? _proxy;
-  final Map<String, AudioStream> _streamCache = {};
+  static final Map<String, AudioStream> _streamCache = {};
+
+  static void invalidate(String trackId) {
+    if (_streamCache.containsKey(trackId)) {
+      _streamCache.remove(trackId);
+      DALogger.info('StreamResolver: Cache invalidated for track "$trackId" due to proxy stream failure.');
+    }
+  }
 
   static Song? lastResolvedSong;
   static String? lastResolvedUrl;
@@ -126,7 +133,7 @@ class StreamResolver {
       final raw = await _sourceManager.getAudioStream(trackId);
 
       final resolvedUrl = _proxy != null && _proxy.port > 0
-          ? 'http://127.0.0.1:${_proxy.port}/stream?url=${Uri.encodeComponent(raw.streamUrl)}'
+          ? 'http://127.0.0.1:${_proxy.port}/stream?url=${Uri.encodeComponent(raw.streamUrl)}&trackId=${Uri.encodeComponent(trackId)}'
           : raw.streamUrl;
 
       stream = AudioStream(
