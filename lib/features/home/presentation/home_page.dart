@@ -168,7 +168,11 @@ class HorizontalCarouselSection extends StatelessWidget {
             }
 
             const double gap = 12.0;
-            final double cardWidth = (totalWidth - (visibleCards - 1) * gap) / visibleCards;
+            final double calculatedWidth = (totalWidth - (visibleCards - 1) * gap) / visibleCards;
+            if (calculatedWidth <= 0) {
+              return const SizedBox.shrink();
+            }
+            final double cardWidth = calculatedWidth;
 
             return SizedBox(
               height: cardWidth + 76.0,
@@ -197,11 +201,26 @@ class HorizontalCarouselSection extends StatelessWidget {
   }
 }
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    print('[HOME] initState()');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    print('[HOME] Widget rebuilding');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print('[HOME] Render completed');
+    });
     final scaleMode = ref.watch(motionScaleModeProvider);
     final sectionsAsync = ref.watch(personalizedSectionsProvider);
     final topArtists = ref.watch(tasteEngineNotifierProvider.select((s) => s.dna.topArtists));

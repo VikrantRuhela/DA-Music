@@ -305,7 +305,7 @@ final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) asy
   final excludeDownloads = ref.watch(tasteEngineNotifierProvider.select((s) => s.excludeDownloads));
   if (!isPersonalizationEnabled) return const [];
 
-  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final tasteState = ref.watch(tasteEngineNotifierProvider);
   final sourceManager = ref.watch(sourceManagerProvider);
   final downloadRepo = ref.watch(downloadRepositoryProvider);
   final downloadedSongs = await downloadRepo.getDownloadedSongs();
@@ -333,6 +333,7 @@ final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) asy
 });
 
 final genericHomeFeedProvider = FutureProvider<domain.HomeFeed>((ref) async {
+  print('[HOME] Repository called');
   final sourceManager = ref.watch(sourceManagerProvider);
   
   DALogger.info('genericHomeFeedProvider: Fetching generic home feed...');
@@ -370,7 +371,7 @@ final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) asyn
   if (!isPersonalizationEnabled) return ytmAlbums;
 
   final sourceManager = ref.watch(sourceManagerProvider);
-  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final tasteState = ref.watch(tasteEngineNotifierProvider);
   return RecommendationEngine.generateAlbumRecommendations(
     dna: tasteState.dna,
     sourceManager: sourceManager,
@@ -391,7 +392,7 @@ final personalizedPlaylistsProvider = FutureProvider<List<domain.Playlist>>((ref
   if (!isPersonalizationEnabled) return ytmPlaylists;
 
   final sourceManager = ref.watch(sourceManagerProvider);
-  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final tasteState = ref.watch(tasteEngineNotifierProvider);
   return RecommendationEngine.generatePlaylistRecommendations(
     dna: tasteState.dna,
     sourceManager: sourceManager,
@@ -414,6 +415,7 @@ class RecommendationSection {
 }
 
 final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
+  print('[HOME] Controller initialized');
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
   
   final sourceManager = ref.watch(sourceManagerProvider);
@@ -429,6 +431,7 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
   final genericPlaylists = genericFeed?.sections.firstWhere((s) => s.type == 'playlists', orElse: () => domain.HomeFeedSection(title: '', type: 'playlists', items: const [])).items.cast<domain.Playlist>().toList() ?? const <domain.Playlist>[];
 
   if (!isPersonalizationEnabled) {
+    print('[HOME] State updated');
     return [
       RecommendationSection(
         title: 'Trending For You',
@@ -451,7 +454,7 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
     ];
   }
 
-  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final tasteState = ref.watch(tasteEngineNotifierProvider);
   final dna = tasteState.dna;
   final logs = tasteState.logs;
 
@@ -648,5 +651,6 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
     items: trendingItems.isNotEmpty ? trendingItems : genericSongs,
   ));
 
+  print('[HOME] State updated');
   return sections;
 });

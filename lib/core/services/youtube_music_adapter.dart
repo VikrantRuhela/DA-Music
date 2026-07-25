@@ -255,6 +255,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     try {
       final headers = await _getHomeHeaders();
       
+      print('[HOME] Sending request');
       final response = await http.post(
         Uri.parse('https://music.youtube.com/youtubei/v1/browse?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30&prettyPrint=false'),
         headers: headers,
@@ -271,11 +272,15 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         }),
       ).timeout(const Duration(seconds: 8));
 
+      print('[HOME] Response received');
+      print('[HOME] Status Code: ${response.statusCode}');
+
       if (response.statusCode != 200) {
         throw Exception('InnerTube browse returned status ${response.statusCode}');
       }
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
+      print('[HOME] JSON parsed');
       
       final List<Song> songs = [];
       final List<Album> albums = [];
@@ -479,6 +484,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         } catch (_) {}
       }
 
+      print('[HOME] Models created');
       return HomeFeed(
         sections: [
           HomeFeedSection(
