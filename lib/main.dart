@@ -25,16 +25,22 @@ class FallbackHttpOverrides extends HttpOverrides {
       final port = proxyPort ?? (url.port != 0 ? url.port : (url.scheme == 'https' ? 443 : 80));
       
       Socket socket;
-      try {
-        // Try forcing IPv4 connection first with a 1.5s timeout (crucial to bypass IPv6 CDN blocks on cellular networks like Jio/Airtel without hanging on pure IPv6 networks)
-        final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
-        if (addresses.isNotEmpty) {
-          socket = await Socket.connect(addresses.first, port).timeout(const Duration(milliseconds: 1500));
-        } else {
+      final isGoogleVideo = host.contains('googlevideo.com');
+      if (isGoogleVideo) {
+        try {
+          // Try forcing IPv4 connection first with a 1.5s timeout (crucial to bypass IPv6 CDN blocks on cellular networks like Jio/Airtel without hanging on pure IPv6 networks)
+          final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
+          if (addresses.isNotEmpty) {
+            socket = await Socket.connect(addresses.first, port).timeout(const Duration(milliseconds: 1500));
+          } else {
+            socket = await Socket.connect(host, port);
+          }
+        } catch (_) {
+          // Fallback to standard dual-stack connection (e.g. if IPv4 is not routable)
           socket = await Socket.connect(host, port);
         }
-      } catch (_) {
-        // Fallback to standard dual-stack connection (e.g. if IPv4 is not routable)
+      } else {
+        // Direct dual-stack connect for all other hosts (API, images, etc.) to prevent connection delay accumulation
         socket = await Socket.connect(host, port);
       }
 
