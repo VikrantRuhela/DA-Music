@@ -499,9 +499,11 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         ],
       );
     } catch (e, stack) {
-      DALogger.error('YouTubeMusicAdapter: Failed to load Home Feed', e, stack);
+      DALogger.error('YouTubeMusicAdapter: Failed to load Home Feed, entering fallback search', e, stack);
       try {
-        final songResults = await _ytClient.search.searchContent('trending songs', filter: yt.TypeFilters.video);
+        DALogger.info('YouTubeMusicAdapter: Fallback query searchContent("trending songs") started...');
+        final songResults = await _ytClient.search.searchContent('trending songs', filter: yt.TypeFilters.video).timeout(const Duration(seconds: 8));
+        DALogger.info('YouTubeMusicAdapter: Fallback query finished, fetched ${songResults.length} videos.');
         final songs = songResults.whereType<yt.SearchVideo>().map((v) {
           final song = Song(
             id: v.id.value,

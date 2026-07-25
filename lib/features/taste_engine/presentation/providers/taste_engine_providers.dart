@@ -13,6 +13,8 @@ import '../../../../domain/entities/playlist.dart' as domain;
 import '../../../../domain/entities/song.dart' as domain;
 import '../../../../domain/entities/value_objects.dart' as domain;
 import '../../../../domain/entities/home_feed.dart' as domain;
+import '../../../../core/services/logger_service.dart';
+import '../../../../shared/utils/home_feed_cache_serializer.dart';
 
 class TasteEngineState {
   final MusicDNA dna;
@@ -94,32 +96,42 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
   }
 
   Future<void> _init() async {
+    DALogger.info('TasteEngineNotifier: Initializing taste engine state...');
     state = state.copyWith(isLoading: true);
-    final prefs = await SharedPreferences.getInstance();
-    final isLearningPaused = prefs.getBool('taste_learning_paused') ?? false;
-    final isPersonalizationEnabled = prefs.getBool('taste_personalization_enabled') ?? true;
-    final excludeDownloads = prefs.getBool('taste_exclude_downloads') ?? false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isLearningPaused = prefs.getBool('taste_learning_paused') ?? false;
+      final isPersonalizationEnabled = prefs.getBool('taste_personalization_enabled') ?? true;
+      final excludeDownloads = prefs.getBool('taste_exclude_downloads') ?? false;
 
-    final logs = await _historyRepo.loadLogs();
-    
-    // Count favorites and downloads
-    final downloadedSongs = await _downloadRepo.getDownloadedSongs();
-    final likes = _ref.read(libraryManagerProvider).likedSongs;
+      DALogger.info('TasteEngineNotifier: Loading history logs...');
+      final logs = await _historyRepo.loadLogs();
+      
+      // Count favorites and downloads
+      DALogger.info('TasteEngineNotifier: Fetching downloaded songs and library likes...');
+      final downloadedSongs = await _downloadRepo.getDownloadedSongs();
+      final likes = _ref.read(libraryManagerProvider).likedSongs;
 
-    final dna = TasteAnalyzer.analyze(
-      logs,
-      downloadedSongs: downloadedSongs,
-      likedSongs: likes,
-    );
+      DALogger.info('TasteEngineNotifier: Running TasteAnalyzer.analyze on logs=${logs.length}, downloads=${downloadedSongs.length}, likes=${likes.length}');
+      final dna = TasteAnalyzer.analyze(
+        logs,
+        downloadedSongs: downloadedSongs,
+        likedSongs: likes,
+      );
 
-    state = TasteEngineState(
-      dna: dna,
-      isLearningPaused: isLearningPaused,
-      isPersonalizationEnabled: isPersonalizationEnabled,
-      excludeDownloads: excludeDownloads,
-      logs: logs,
-      isLoading: false,
-    );
+      state = TasteEngineState(
+        dna: dna,
+        isLearningPaused: isLearningPaused,
+        isPersonalizationEnabled: isPersonalizationEnabled,
+        excludeDownloads: excludeDownloads,
+        logs: logs,
+        isLoading: false,
+      );
+      DALogger.info('TasteEngineNotifier: Taste engine state initialized successfully. Favorite genres: ${dna.favoriteGenres}');
+    } catch (e, stack) {
+      DALogger.error('TasteEngineNotifier: Initialization failed', e, stack);
+      state = state.copyWith(isLoading: false);
+    }
   }
 
   Future<void> recordPlaybackSession({
@@ -381,10 +393,26 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
   
   final sourceManager = ref.watch(sourceManagerProvider);
   
+  DALogger.info('personalizedSectionsProvider: Fetching home feed genericFeed...');
   domain.HomeFeed? genericFeed;
   try {
     genericFeed = await sourceManager.getHome();
-  } catch (_) {}
+    DALogger.info('personalizedSectionsProvider: Successfully loaded genericFeed from sourceManager.');
+  } catch (e, stack) {
+    DALogger.error('personalizedSectionsProvider: Failed to load genericFeed from sourceManager, attempting cache load...', e, stack);
+    try {
+      final storage = ref.read(storageServiceProvider);
+      final cached = await storage.getString('ytm_cache_home_feed');
+      if (cached != null && cached.isNotEmpty) {
+        genericFeed = HomeFeedCacheSerializer.deserialize(cached);
+        DALogger.info('personalizedSectionsProvider: Successfully loaded genericFeed from offline cache fallback.');
+      } else {
+        DALogger.warning('personalizedSectionsProvider: Offline cache fallback is empty.');
+      }
+    } catch (cacheErr, cacheStack) {
+      DALogger.error('personalizedSectionsProvider: Failed to load offline cache fallback', cacheErr, cacheStack);
+    }
+  }
 
   final genericSongs = genericFeed?.sections.firstWhere((s) => s.type == 'recommended', orElse: () => domain.HomeFeedSection(title: '', type: 'recommended', items: const [])).items.cast<domain.Song>().toList() ?? const <domain.Song>[];
   final genericAlbums = genericFeed?.sections.firstWhere((s) => s.type == 'albums', orElse: () => domain.HomeFeedSection(title: '', type: 'albums', items: const [])).items.cast<domain.Album>().toList() ?? const <domain.Album>[];

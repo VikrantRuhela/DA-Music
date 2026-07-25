@@ -147,64 +147,22 @@ class _AuthWebViewPageState extends ConsumerState<AuthWebViewPage> {
         String cookieString = '';
 
         if (Platform.isWindows && _windowsController != null) {
-          final List<win_wv.WebviewCookie> allWinCookies = [];
-          final Set<String> names = {};
-
-          final domains = [
-            'https://music.youtube.com',
-            'https://youtube.com',
-            'https://.youtube.com',
-            'https://accounts.google.com',
-            'https://google.com',
-            'https://.google.com',
-            '',
-          ];
-
-          for (final domainStr in domains) {
-            try {
-              final cookies = await _windowsController!.getCookies(domainStr);
-              DALogger.info('[Auth Webview] Windows getCookies("$domainStr") returned ${cookies.length} cookies.');
-              for (final c in cookies) {
-                if (!names.contains(c.name)) {
-                  names.add(c.name);
-                  allWinCookies.add(c);
-                }
-              }
-            } catch (e) {
-              DALogger.error('[Auth Webview] Windows failed to get cookies for $domainStr', e);
-            }
+          try {
+            final cookies = await _windowsController!.getCookies('https://music.youtube.com');
+            DALogger.info('[Auth Webview] Windows getCookies("https://music.youtube.com") returned ${cookies.length} cookies.');
+            cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+          } catch (e) {
+            DALogger.error('[Auth Webview] Windows failed to get cookies', e);
           }
-
-          cookieString = allWinCookies.map((c) => '${c.name}=${c.value}').join('; ');
         } else {
           final cookieManager = mobile_wv.WebViewCookieManager();
-          final List<mobile_wv.WebViewCookie> allCookies = [];
-          final Set<String> names = {};
-
-          final domains = [
-            'https://music.youtube.com',
-            'https://youtube.com',
-            'https://.youtube.com',
-            'https://accounts.google.com',
-            'https://google.com',
-            'https://.google.com',
-          ];
-
-          for (final domainStr in domains) {
-            try {
-              final cookies = await cookieManager.getCookies(domain: Uri.parse(domainStr));
-              for (final c in cookies) {
-                if (!names.contains(c.name)) {
-                  names.add(c.name);
-                  allCookies.add(c);
-                }
-              }
-            } catch (e) {
-              DALogger.error('[Auth Webview] Mobile failed to get cookies for domain $domainStr', e);
-            }
+          try {
+            final cookies = await cookieManager.getCookies(domain: Uri.parse('https://music.youtube.com'));
+            DALogger.info('[Auth Webview] Mobile getCookies("https://music.youtube.com") returned ${cookies.length} cookies.');
+            cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+          } catch (e) {
+            DALogger.error('[Auth Webview] Mobile failed to get cookies', e);
           }
-
-          cookieString = allCookies.map((c) => '${c.name}=${c.value}').join('; ');
         }
 
         final hasKeys =

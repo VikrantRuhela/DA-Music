@@ -150,7 +150,7 @@ class SessionManager extends ChangeNotifier {
           },
           "browseId": "FEmusic_home"
         }),
-      );
+      ).timeout(const Duration(seconds: 10));
 
       testClient.close();
       DALogger.info('SessionManager: Verify session status=${response.statusCode}, body length=${response.body.length}');
