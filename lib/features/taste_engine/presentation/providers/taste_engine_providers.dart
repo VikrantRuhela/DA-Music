@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/listening_history_repository.dart';
@@ -135,7 +136,7 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
       DALogger.info('TasteEngineNotifier: Taste engine state initialized successfully. Favorite genres: ${dna.favoriteGenres}');
     } catch (e, stack) {
       DALogger.error('TasteEngineNotifier: Initialization failed', e, stack);
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(isLoading: false, isInitialized: true);
     }
   }
 
@@ -308,7 +309,8 @@ final tasteEngineNotifierProvider = StateNotifierProvider<TasteEngineNotifier, T
 final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) async {
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
   final excludeDownloads = ref.watch(tasteEngineNotifierProvider.select((s) => s.excludeDownloads));
-  ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
+  final isInitialized = ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
+  if (!isInitialized) return const [];
   if (!isPersonalizationEnabled) return const [];
 
   final tasteState = ref.read(tasteEngineNotifierProvider);
@@ -366,7 +368,8 @@ final genericHomeFeedProvider = FutureProvider<domain.HomeFeed>((ref) async {
 
 final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) async {
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
-  ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
+  final isInitialized = ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
+  if (!isInitialized) return const [];
 
   List<domain.Album> ytmAlbums = [];
   try {
@@ -388,7 +391,8 @@ final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) asyn
 
 final personalizedPlaylistsProvider = FutureProvider<List<domain.Playlist>>((ref) async {
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
-  ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
+  final isInitialized = ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
+  if (!isInitialized) return const [];
 
   List<domain.Playlist> ytmPlaylists = [];
   try {
@@ -425,7 +429,8 @@ class RecommendationSection {
 final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
   print('[HOME] Controller initialized');
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
-  ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
+  final isInitialized = ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
+  if (!isInitialized) return const [];
   
   final sourceManager = ref.watch(sourceManagerProvider);
   
