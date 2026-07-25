@@ -36,6 +36,9 @@ class WindowsPlatformService extends WindowListener implements PlatformService {
   @override
   Future<void> saveWindowState() async {
     try {
+      final isMinimized = await windowManager.isMinimized();
+      if (isMinimized) return;
+
       final prefs = await SharedPreferences.getInstance();
 
       final isMaximized = await windowManager.isMaximized();
@@ -44,6 +47,10 @@ class WindowsPlatformService extends WindowListener implements PlatformService {
       if (!isMaximized) {
         final size = await windowManager.getSize();
         final position = await windowManager.getPosition();
+
+        if (position.dx < -10000 || position.dy < -10000 || size.width <= 100 || size.height <= 100) {
+          return;
+        }
 
         await prefs.setDouble(_prefWidth, size.width);
         await prefs.setDouble(_prefHeight, size.height);
@@ -67,13 +74,13 @@ class WindowsPlatformService extends WindowListener implements PlatformService {
       final double? y = prefs.getDouble(_prefY);
       final bool? isMaximized = prefs.getBool(_prefMaximized);
 
-      if (width != null && height != null) {
+      if (width != null && width > 100 && height != null && height > 100) {
         await windowManager.setSize(Size(width, height));
       } else {
         await windowManager.setSize(const Size(1280, 720));
       }
 
-      if (x != null && y != null) {
+      if (x != null && x > -10000 && y != null && y > -10000) {
         await windowManager.setPosition(Offset(x, y));
       } else {
         await windowManager.center();
