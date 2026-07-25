@@ -50,7 +50,9 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
       final ImageProvider imageProvider =
           (artworkUrl.startsWith('http://') || artworkUrl.startsWith('https://'))
               ? NetworkImage(artworkUrl)
-              : FileImage(File(artworkUrl)) as ImageProvider;
+              : (artworkUrl.startsWith('assets/')
+                  ? AssetImage(artworkUrl)
+                  : FileImage(File(artworkUrl))) as ImageProvider;
 
       final paletteGenerator = await PaletteGenerator.fromImageProvider(
         ResizeImage(imageProvider, width: 80, height: 80),

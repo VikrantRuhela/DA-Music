@@ -173,24 +173,78 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   Future<List<Artist>> searchArtists(String query) async {
     _checkInitialized();
     try {
-      final results = await _ytClient.search.searchContent(query, filter: yt.TypeFilters.channel).timeout(const Duration(seconds: 10));
+      final client = HttpClient();
+      const apiKey = 'AIzaSyAOghZGza2MQSZkY_zfZ370N-PUdXEo8AI';
+      final url = Uri.parse('https://music.youtube.com/youtubei/v1/search?key=$apiKey');
+
+      final request = await client.postUrl(url);
+      request.headers.set('Content-Type', 'application/json');
+      request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+      final payload = {
+        'query': query,
+        'context': {
+          'client': {
+            'clientName': 'WEB_REMIX',
+            'clientVersion': '1.20260707.01.00',
+            'hl': 'en',
+            'gl': 'US',
+          }
+        },
+        'params': 'EgWKAQIgAWoKEAkQChAFEAMQBA%3D%3D' // Restrict search results to Artists
+      };
+
+      request.write(jsonEncode(payload));
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      client.close();
+
       final artists = <Artist>[];
-      for (final result in results) {
-        if (result is yt.SearchChannel) {
-          artists.add(Artist(
-            id: result.id.value,
-            name: result.name,
-            image: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
-            subscriberCount: 0,
-            description: result.description,
-            genres: const [],
-          ));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(body);
+        final contents = data['contents']?['tabbedSearchResultsRenderer']?['tabs']?[0]?['tabRenderer']?['content']?['sectionListRenderer']?['contents'];
+        if (contents != null) {
+          for (final section in contents) {
+            final items = section['musicShelfRenderer']?['contents'];
+            if (items != null) {
+              for (final item in items) {
+                final renderer = item['musicResponsiveListItemRenderer'];
+                if (renderer != null) {
+                  final flexColumns = renderer['flexColumns'] as List?;
+                  String name = '';
+                  if (flexColumns != null && flexColumns.isNotEmpty) {
+                    final runs = flexColumns[0]['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
+                    if (runs != null && runs.isNotEmpty) {
+                      name = runs[0]['text'] ?? '';
+                    }
+                  }
+                  final id = renderer['navigationEndpoint']?['browseEndpoint']?['browseId'] ?? '';
+                  final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+                  String image = '';
+                  if (thumbnails != null && thumbnails.isNotEmpty) {
+                    image = thumbnails.last['url'] ?? '';
+                  }
+
+                  if (name.isNotEmpty && id.isNotEmpty) {
+                    artists.add(Artist(
+                      id: id,
+                      name: name,
+                      image: Artwork(image),
+                      subscriberCount: 0,
+                      description: '',
+                      genres: const [],
+                    ));
+                  }
+                }
+              }
+            }
+          }
         }
       }
       return artists;
     } catch (e, stack) {
       DALogger.error('YouTubeMusicAdapter: searchArtists failed for "$query"', e, stack);
-      return [];
+      rethrow;
     }
   }
 

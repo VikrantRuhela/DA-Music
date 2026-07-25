@@ -40,12 +40,19 @@ class BlurredBackground extends StatelessWidget {
                     cacheWidth: 150,
                     errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
                   )
-                : Image.file(
-                    File(imageUrl),
-                    fit: BoxFit.cover,
-                    cacheWidth: 150,
-                    errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
-                  ),
+                : (imageUrl.startsWith('assets/')
+                    ? Image.asset(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        cacheWidth: 150,
+                        errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+                      )
+                    : Image.file(
+                        File(imageUrl),
+                        fit: BoxFit.cover,
+                        cacheWidth: 150,
+                        errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+                      )),
           ),
         ),
         // 3. Slight dark overlay

@@ -25,7 +25,7 @@ class DurationValue {
 class Artwork {
   final String url;
 
-  static const String defaultArtwork = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819';
+  static const String defaultArtwork = 'assets/images/holder.png';
 
   Artwork(String? url) : url = _validateAndNormalize(url);
 

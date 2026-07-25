@@ -10,6 +10,10 @@ class DAImage extends StatelessWidget {
   final BoxFit fit;
   final Widget? placeholder;
   final Widget Function(BuildContext, Object, StackTrace?)? errorBuilder;
+  final String? trackId;
+  final String? albumId;
+  final String? artistId;
+  final bool isTrack;
 
   const DAImage({
     super.key,
@@ -19,23 +23,66 @@ class DAImage extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.placeholder,
     this.errorBuilder,
+    this.trackId,
+    this.albumId,
+    this.artistId,
+    this.isTrack = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cleanUrl = url;
+    var cleanUrl = url?.trim();
+    if ((cleanUrl == null || cleanUrl.isEmpty) && isTrack) {
+      cleanUrl = 'assets/images/holder.png';
+    } else if (cleanUrl == 'assets/images/holder.png' && !isTrack) {
+      cleanUrl = '';
+    }
+
     final fallback = placeholder ?? Container(
       width: width,
       height: height,
-      color: Colors.white10,
-      child: const Icon(Icons.music_note_outlined, color: Colors.white30),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      child: const Center(
+        child: Icon(Icons.music_note_outlined, color: Colors.white30),
+      ),
     );
 
-    if (cleanUrl == null || cleanUrl.trim().isEmpty) {
+    if (trackId != null) print('[ARTWORK] Track ID: $trackId');
+    if (albumId != null) print('[ARTWORK] Album ID: $albumId');
+    if (artistId != null) print('[ARTWORK] Artist ID: $artistId');
+    print('[ARTWORK] Artwork URL: ${cleanUrl ?? "empty"}');
+
+    if (cleanUrl == null || cleanUrl.isEmpty) {
+      print('[ARTWORK] Placeholder Used');
       return fallback;
     }
 
     final hasNetwork = cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
+    final hasAsset = cleanUrl.startsWith('assets/');
+
+    if (hasAsset) {
+      return Image.asset(
+        cleanUrl,
+        width: width,
+        height: height,
+        fit: fit,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (frame != null) {
+            print('[ARTWORK] Image Loaded');
+            print('[ARTWORK] Cache Hit');
+            return child;
+          }
+          return fallback;
+        },
+        errorBuilder: (ctx, err, st) {
+          print('[ARTWORK] Placeholder Used (Error loading asset)');
+          return fallback;
+        },
+      );
+    }
 
     if (hasNetwork) {
       return Image.network(
@@ -43,7 +90,18 @@ class DAImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
-        errorBuilder: errorBuilder ?? (ctx, err, st) => fallback,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (frame != null) {
+            print('[ARTWORK] Image Loaded');
+            print('[ARTWORK] Cache ${wasSynchronouslyLoaded ? "Hit" : "Miss"}');
+            return child;
+          }
+          return fallback;
+        },
+        errorBuilder: (ctx, err, st) {
+          print('[ARTWORK] Placeholder Used (Error loading network image)');
+          return errorBuilder?.call(ctx, err, st) ?? fallback;
+        },
       );
     } else {
       // Local image file path
@@ -58,9 +116,21 @@ class DAImage extends StatelessWidget {
           fit: fit,
           cacheWidth: targetCacheWidth,
           cacheHeight: targetCacheHeight,
-          errorBuilder: (ctx, err, st) => fallback,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (frame != null) {
+              print('[ARTWORK] Image Loaded');
+              print('[ARTWORK] Cache ${wasSynchronouslyLoaded ? "Hit" : "Miss"}');
+              return child;
+            }
+            return fallback;
+          },
+          errorBuilder: (ctx, err, st) {
+            print('[ARTWORK] Placeholder Used (Error loading local file)');
+            return fallback;
+          },
         );
       }
+      print('[ARTWORK] Placeholder Used (File does not exist)');
       return fallback;
     }
   }
