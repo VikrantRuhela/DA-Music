@@ -25,7 +25,7 @@ class DurationValue {
 class Artwork {
   final String url;
 
-  static const String defaultArtwork = 'assets/images/holder.png';
+  static const String defaultArtwork = 'assets/images/da_placeholder.jpg';
 
   Artwork(String? url) : url = _validateAndNormalize(url);
 

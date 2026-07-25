@@ -33,8 +33,8 @@ class DAImage extends StatelessWidget {
   Widget build(BuildContext context) {
     var cleanUrl = url?.trim();
     if ((cleanUrl == null || cleanUrl.isEmpty) && isTrack) {
-      cleanUrl = 'assets/images/holder.png';
-    } else if (cleanUrl == 'assets/images/holder.png' && !isTrack) {
+      cleanUrl = 'assets/images/da_placeholder.jpg';
+    } else if (cleanUrl == 'assets/images/da_placeholder.jpg' && !isTrack) {
       cleanUrl = '';
     }
 
