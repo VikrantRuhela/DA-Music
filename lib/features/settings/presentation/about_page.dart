@@ -235,7 +235,7 @@ class AboutPage extends ConsumerWidget {
                           ),
                           const SizedBox(height: 2.0),
                           Text(
-                            'Founder & Developer',
+                            'Founder',
                             style: typography.body.copyWith(fontSize: 13.0, color: colors.textSecondary),
                           ),
                         ],
