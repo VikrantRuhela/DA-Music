@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
@@ -13,7 +15,11 @@ class WindowsPlatformService extends WindowListener implements PlatformService {
   static const String _prefY = 'window_y';
   static const String _prefMaximized = 'window_maximized';
 
+  static Future<void> Function()? onShutdown;
+
   bool _isInitialized = false;
+  SharedPreferences? _prefs;
+  Timer? _debounceTimer;
 
   @override
   Future<void> initializeWindow() async {
@@ -22,6 +28,9 @@ class WindowsPlatformService extends WindowListener implements PlatformService {
 
     windowManager.addListener(this);
     await windowManager.ensureInitialized();
+
+    // Cache SharedPreferences instance during initialization to avoid blocking calls on shutdown
+    _prefs = await SharedPreferences.getInstance();
 
     // Configure frameless window custom frame
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
@@ -39,7 +48,8 @@ class WindowsPlatformService extends WindowListener implements PlatformService {
       final isMinimized = await windowManager.isMinimized();
       if (isMinimized) return;
 
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      _prefs = prefs;
 
       final isMaximized = await windowManager.isMaximized();
       await prefs.setBool(_prefMaximized, isMaximized);
@@ -66,7 +76,8 @@ class WindowsPlatformService extends WindowListener implements PlatformService {
   @override
   Future<void> restoreWindowState() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      _prefs = prefs;
 
       final double? width = prefs.getDouble(_prefWidth);
       final double? height = prefs.getDouble(_prefHeight);
@@ -117,26 +128,59 @@ class WindowsPlatformService extends WindowListener implements PlatformService {
     debugPrint(' [Windows Platform Tray] Setting up System Tray menu...');
   }
 
+  void _debouncedSaveWindowState() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      saveWindowState();
+    });
+  }
+
   @override
   void onWindowClose() async {
-    debugPrint(' [Windows Platform] Intercepted close event, saving state and exiting...');
+    debugPrint(' [Windows Platform] Intercepted close event, executing clean shutdown...');
+    final startTime = DateTime.now();
+
+    // Cancel any pending debounce writes
+    _debounceTimer?.cancel();
+
+    // 1. Save final window layout state directly
+    final saveTime = DateTime.now();
     await saveWindowState();
+    debugPrint(' [Windows Platform] Window state saved in ${DateTime.now().difference(saveTime).inMilliseconds}ms');
+
+    // 2. Execute registered shutdown callback with a safety timeout guard
+    if (onShutdown != null) {
+      final shutdownTime = DateTime.now();
+      await onShutdown!().timeout(
+        const Duration(milliseconds: 400),
+        onTimeout: () => debugPrint(' [Windows Platform] Shutdown callback timed out'),
+      );
+      debugPrint(' [Windows Platform] Services shutdown completed in ${DateTime.now().difference(shutdownTime).inMilliseconds}ms');
+    }
+
+    // 3. Cleanup window manager listeners and destroy window
     windowManager.removeListener(this);
     await windowManager.destroy();
+
+    debugPrint(' [Windows Platform] Window destroyed, terminating process. Total shutdown duration: ${DateTime.now().difference(startTime).inMilliseconds}ms');
+    
+    // 4. Hard terminate process to ensure all native background threads are killed
+    exit(0);
   }
 
   @override
   void onWindowResized() {
-    saveWindowState();
+    _debouncedSaveWindowState();
   }
 
   @override
   void onWindowMoved() {
-    saveWindowState();
+    _debouncedSaveWindowState();
   }
 
   @override
   Future<void> dispose() async {
+    _debounceTimer?.cancel();
     windowManager.removeListener(this);
     _isInitialized = false;
   }

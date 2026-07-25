@@ -76,6 +76,50 @@ void main([List<String> args = const []]) async {
     ],
   );
 
+  if (!kIsWeb && Platform.isWindows) {
+    WindowsPlatformService.onShutdown = () async {
+      final startTime = DateTime.now();
+      debugPrint(' [Shutdown] Starting clean shutdown sequence...');
+
+      // 1. Stop audio player
+      final stopPlayerTime = DateTime.now();
+      try {
+        final playbackEngine = container.read(playbackEngineProvider);
+        await playbackEngine.dispose();
+        debugPrint(' [Shutdown] Audio player disposed in ${DateTime.now().difference(stopPlayerTime).inMilliseconds}ms');
+      } catch (e) {
+        debugPrint(' [Shutdown] Audio player disposal failed: $e');
+      }
+
+      // 2. Stop local stream proxy
+      final stopProxyTime = DateTime.now();
+      try {
+        final proxy = container.read(localStreamProxyProvider);
+        await proxy.stop();
+        debugPrint(' [Shutdown] Local stream proxy stopped in ${DateTime.now().difference(stopProxyTime).inMilliseconds}ms');
+      } catch (e) {
+        debugPrint(' [Shutdown] Local stream proxy stop failed: $e');
+      }
+
+      // 3. Close database connection
+      final stopDbTime = DateTime.now();
+      try {
+        final db = container.read(appDatabaseProvider);
+        await db.close();
+        debugPrint(' [Shutdown] Database closed in ${DateTime.now().difference(stopDbTime).inMilliseconds}ms');
+      } catch (e) {
+        debugPrint(' [Shutdown] Database close failed: $e');
+      }
+
+      // 4. Dispose ProviderContainer
+      final disposeContainerTime = DateTime.now();
+      container.dispose();
+      debugPrint(' [Shutdown] Riverpod container disposed in ${DateTime.now().difference(disposeContainerTime).inMilliseconds}ms');
+
+      debugPrint(' [Shutdown] Clean shutdown completed in ${DateTime.now().difference(startTime).inMilliseconds}ms');
+    };
+  }
+
   final controller = container.read(playbackControllerProvider);
   await SystemMediaSessionManager.initialize(controller);
 
