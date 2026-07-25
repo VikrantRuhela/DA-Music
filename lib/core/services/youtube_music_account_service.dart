@@ -98,7 +98,7 @@ class YouTubeMusicAccountService {
           },
           "browseId": browseId
         }),
-      );
+      ).timeout(const Duration(seconds: 10));
 
       final bodyPreview = response.body.substring(0, response.body.length > 100 ? 100 : response.body.length);
       DALogger.info('YTM API Sync Request: browseId=$browseId, status=${response.statusCode}, size=${response.body.length} bytes, body_preview="$bodyPreview"');

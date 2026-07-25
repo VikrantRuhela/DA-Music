@@ -332,19 +332,44 @@ final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) asy
   );
 });
 
+final genericHomeFeedProvider = FutureProvider<domain.HomeFeed>((ref) async {
+  final sourceManager = ref.watch(sourceManagerProvider);
+  
+  DALogger.info('genericHomeFeedProvider: Fetching generic home feed...');
+  try {
+    final feed = await sourceManager.getHome();
+    DALogger.info('genericHomeFeedProvider: Successfully loaded from sourceManager.');
+    return feed;
+  } catch (e, stack) {
+    DALogger.error('genericHomeFeedProvider: Failed to load from sourceManager, trying offline cache fallback', e, stack);
+    try {
+      final storage = ref.read(storageServiceProvider);
+      final cached = await storage.getString('ytm_cache_home_feed');
+      if (cached != null && cached.isNotEmpty) {
+        final feed = HomeFeedCacheSerializer.deserialize(cached);
+        DALogger.info('genericHomeFeedProvider: Successfully loaded from offline cache fallback.');
+        return feed;
+      }
+    } catch (cacheErr, cacheStack) {
+      DALogger.error('genericHomeFeedProvider: Failed to load offline cache fallback', cacheErr, cacheStack);
+    }
+    return domain.HomeFeed(sections: []);
+  }
+});
+
 final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) async {
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
-  final sourceManager = ref.watch(sourceManagerProvider);
 
   List<domain.Album> ytmAlbums = [];
   try {
-    final genericFeed = await sourceManager.getHome();
+    final genericFeed = await ref.watch(genericHomeFeedProvider.future);
     final albumsSection = genericFeed.sections.firstWhere((s) => s.type == 'albums');
     ytmAlbums = albumsSection.items.cast<domain.Album>().toList();
   } catch (_) {}
 
   if (!isPersonalizationEnabled) return ytmAlbums;
 
+  final sourceManager = ref.watch(sourceManagerProvider);
   final tasteState = ref.read(tasteEngineNotifierProvider);
   return RecommendationEngine.generateAlbumRecommendations(
     dna: tasteState.dna,
@@ -355,17 +380,17 @@ final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) asyn
 
 final personalizedPlaylistsProvider = FutureProvider<List<domain.Playlist>>((ref) async {
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
-  final sourceManager = ref.watch(sourceManagerProvider);
 
   List<domain.Playlist> ytmPlaylists = [];
   try {
-    final genericFeed = await sourceManager.getHome();
+    final genericFeed = await ref.watch(genericHomeFeedProvider.future);
     final playlistsSection = genericFeed.sections.firstWhere((s) => s.type == 'playlists');
     ytmPlaylists = playlistsSection.items.cast<domain.Playlist>().toList();
   } catch (_) {}
 
   if (!isPersonalizationEnabled) return ytmPlaylists;
 
+  final sourceManager = ref.watch(sourceManagerProvider);
   final tasteState = ref.read(tasteEngineNotifierProvider);
   return RecommendationEngine.generatePlaylistRecommendations(
     dna: tasteState.dna,
@@ -393,26 +418,11 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
   
   final sourceManager = ref.watch(sourceManagerProvider);
   
-  DALogger.info('personalizedSectionsProvider: Fetching home feed genericFeed...');
+  DALogger.info('personalizedSectionsProvider: Fetching home feed genericFeed via genericHomeFeedProvider...');
   domain.HomeFeed? genericFeed;
   try {
-    genericFeed = await sourceManager.getHome();
-    DALogger.info('personalizedSectionsProvider: Successfully loaded genericFeed from sourceManager.');
-  } catch (e, stack) {
-    DALogger.error('personalizedSectionsProvider: Failed to load genericFeed from sourceManager, attempting cache load...', e, stack);
-    try {
-      final storage = ref.read(storageServiceProvider);
-      final cached = await storage.getString('ytm_cache_home_feed');
-      if (cached != null && cached.isNotEmpty) {
-        genericFeed = HomeFeedCacheSerializer.deserialize(cached);
-        DALogger.info('personalizedSectionsProvider: Successfully loaded genericFeed from offline cache fallback.');
-      } else {
-        DALogger.warning('personalizedSectionsProvider: Offline cache fallback is empty.');
-      }
-    } catch (cacheErr, cacheStack) {
-      DALogger.error('personalizedSectionsProvider: Failed to load offline cache fallback', cacheErr, cacheStack);
-    }
-  }
+    genericFeed = await ref.watch(genericHomeFeedProvider.future);
+  } catch (_) {}
 
   final genericSongs = genericFeed?.sections.firstWhere((s) => s.type == 'recommended', orElse: () => domain.HomeFeedSection(title: '', type: 'recommended', items: const [])).items.cast<domain.Song>().toList() ?? const <domain.Song>[];
   final genericAlbums = genericFeed?.sections.firstWhere((s) => s.type == 'albums', orElse: () => domain.HomeFeedSection(title: '', type: 'albums', items: const [])).items.cast<domain.Album>().toList() ?? const <domain.Album>[];

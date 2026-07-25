@@ -111,7 +111,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     DALogger.info('YouTubeMusicAdapter: Searching for "$query"');
 
     try {
-      final results = await _ytClient.search.searchContent(query);
+      final results = await _ytClient.search.searchContent(query).timeout(const Duration(seconds: 10));
 
       final songs = <Song>[];
       final albums = <Album>[];
@@ -173,7 +173,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   Future<List<Artist>> searchArtists(String query) async {
     _checkInitialized();
     try {
-      final results = await _ytClient.search.searchContent(query, filter: yt.TypeFilters.channel);
+      final results = await _ytClient.search.searchContent(query, filter: yt.TypeFilters.channel).timeout(const Duration(seconds: 10));
       final artists = <Artist>[];
       for (final result in results) {
         if (result is yt.SearchChannel) {
@@ -461,7 +461,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
 
       if (songs.isEmpty) {
         try {
-          final songResults = await _ytClient.search.searchContent('trending songs', filter: yt.TypeFilters.video);
+          final songResults = await _ytClient.search.searchContent('trending songs', filter: yt.TypeFilters.video).timeout(const Duration(seconds: 10));
           songs.addAll(songResults.whereType<yt.SearchVideo>().map((v) {
             final song = Song(
               id: v.id.value,
@@ -805,7 +805,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     } catch (e, stack) {
       DALogger.error('YouTubeMusicAdapter: Failed to retrieve artist details for ID: "$id"', e, stack);
       try {
-        final channel = await _ytClient.channels.get(id);
+        final channel = await _ytClient.channels.get(id).timeout(const Duration(seconds: 10));
         return Artist(
           id: channel.id.value,
           name: channel.title,
@@ -865,7 +865,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     DALogger.info('YouTubeMusicAdapter: Loading video metadata for Song ID: "$id"');
 
     try {
-      final video = await _ytClient.videos.get(id);
+      final video = await _ytClient.videos.get(id).timeout(const Duration(seconds: 10));
       final song = _mapToSong(
         id: video.id.value,
         rawTitle: video.title,
@@ -886,10 +886,10 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     DALogger.info('YouTubeMusicAdapter: Resolving captions for Lyrics ID: "$id"');
 
     try {
-      final manifest = await _ytClient.videos.closedCaptions.getManifest(id);
+      final manifest = await _ytClient.videos.closedCaptions.getManifest(id).timeout(const Duration(seconds: 10));
       if (manifest.tracks.isNotEmpty) {
         final track = manifest.tracks.first;
-        final captions = await _ytClient.videos.closedCaptions.get(track);
+        final captions = await _ytClient.videos.closedCaptions.get(track).timeout(const Duration(seconds: 10));
         final lines = captions.captions.map((c) => c.text).join('\n');
         return Lyrics(
           songId: id,
@@ -918,8 +918,8 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     DALogger.info('YouTubeMusicAdapter: Loading related tracks for ID: "$id"');
 
     try {
-      final video = await _ytClient.videos.get(id);
-      final related = await _ytClient.videos.getRelatedVideos(video);
+      final video = await _ytClient.videos.get(id).timeout(const Duration(seconds: 10));
+      final related = await _ytClient.videos.getRelatedVideos(video).timeout(const Duration(seconds: 10));
       if (related != null) {
         return related.map((v) {
           final song = Song(
@@ -1149,7 +1149,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       fallbackQuery = _cleanQuery(originalArtist, originalTitle);
     } else {
       try {
-        final video = await _ytClient.videos.get(id);
+        final video = await _ytClient.videos.get(id).timeout(const Duration(seconds: 10));
         originalTitle = video.title;
         originalArtist = video.author;
         originalAlbum = 'yt_album_unknown';
@@ -1200,7 +1200,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       if (fallbackQuery != null) {
         try {
           DALogger.info('YouTubeMusicAdapter: Searching fallback for: "$fallbackQuery"');
-          final searchResults = await _ytClient.search.searchContent(fallbackQuery);
+          final searchResults = await _ytClient.search.searchContent(fallbackQuery).timeout(const Duration(seconds: 10));
           final candidates = searchResults.whereType<yt.SearchVideo>().toList();
           final fallbackVideo = rankFallbackCandidates(
             candidates: candidates,
@@ -1338,8 +1338,8 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         };
 
         request.write(json.encode(payload));
-        final response = await request.close();
-        final rawBody = await response.transform(utf8.decoder).join();
+        final response = await request.close().timeout(const Duration(seconds: 10));
+        final rawBody = await response.transform(utf8.decoder).join().timeout(const Duration(seconds: 10));
         final body = json.decode(rawBody) as Map<String, dynamic>;
 
         if (body['error'] != null) {
@@ -1490,8 +1490,8 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
 
       final reqBodyStr = json.encode(payload);
       request.write(reqBodyStr);
-      final response = await request.close();
-      final rawBody = await response.transform(utf8.decoder).join();
+      final response = await request.close().timeout(const Duration(seconds: 10));
+      final rawBody = await response.transform(utf8.decoder).join().timeout(const Duration(seconds: 10));
       final body = json.decode(rawBody) as Map<String, dynamic>;
 
       final sentCookie = request.headers.value('Cookie');
@@ -1836,8 +1836,8 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
 
 
   Future<Album> _getAlbumFallback(String id) async {
-    final playlist = await _ytClient.playlists.get(id);
-    final videos = await _ytClient.playlists.getVideos(playlist.id).toList();
+    final playlist = await _ytClient.playlists.get(id).timeout(const Duration(seconds: 10));
+    final videos = await _ytClient.playlists.getVideos(playlist.id).toList().timeout(const Duration(seconds: 10));
 
     Duration totalDuration = Duration.zero;
     for (final v in videos) {

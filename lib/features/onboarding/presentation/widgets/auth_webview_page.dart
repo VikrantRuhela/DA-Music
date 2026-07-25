@@ -56,12 +56,6 @@ class _AuthWebViewPageState extends ConsumerState<AuthWebViewPage> {
         _checkWindowsCookiesQuick();
       });
 
-      // Start periodic polling timer (1 second interval) to catch authentication tokens immediately
-      _pollTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-        if (!mounted || _isCheckingSession) return;
-        await _checkWindowsCookiesQuick();
-      });
-
       await controller.loadUrl(
         'https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https://music.youtube.com/',
       );
@@ -140,7 +134,10 @@ class _AuthWebViewPageState extends ConsumerState<AuthWebViewPage> {
     if (_isCheckingSession) return;
 
     if (url.startsWith('https://music.youtube.com')) {
-      _isCheckingSession = true;
+      setState(() {
+        _isCheckingSession = true;
+        _isLoading = true;
+      });
       DALogger.info('[Auth Webview] Redirect to music.youtube.com detected. Extracting cookies...');
 
       try {
@@ -179,15 +176,39 @@ class _AuthWebViewPageState extends ConsumerState<AuthWebViewPage> {
           DALogger.info('[Auth Webview] Session validation result: $success');
 
           if (success && mounted) {
-            _pollTimer?.cancel();
             Navigator.of(context).pop(true);
             return;
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Failed to verify session. Please try logging in again.'),
+                  backgroundColor: Colors.redAccent,
+                  duration: Duration(seconds: 4),
+                ),
+              );
+            }
           }
+        } else {
+          DALogger.warning('[Auth Webview] music.youtube.com reached but core keys were missing in cookies.');
         }
       } catch (e, s) {
         DALogger.error('[Auth Webview] Exception during cookie extraction', e, s);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error during session verification: $e'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
       } finally {
-        _isCheckingSession = false;
+        if (mounted) {
+          setState(() {
+            _isCheckingSession = false;
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -216,9 +237,22 @@ class _AuthWebViewPageState extends ConsumerState<AuthWebViewPage> {
                 : const SizedBox.shrink()
           else if (_mobileController != null)
             mobile_wv.WebViewWidget(controller: _mobileController!),
-          if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
+          if (_isLoading || _isCheckingSession)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(color: Colors.redAccent),
+                    const SizedBox(height: 16),
+                    Text(
+                      _isCheckingSession ? 'Verifying session, please wait...' : 'Loading login page...',
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
             ),
         ],
       ),
