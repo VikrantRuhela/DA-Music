@@ -15,6 +15,7 @@ import '../../taste_engine/presentation/music_dna_page.dart';
 import '../../taste_engine/presentation/taste_settings_page.dart';
 import '../../onboarding/presentation/widgets/auth_webview_page.dart';
 import '../../onboarding/presentation/widgets/cookie_login_dialog.dart';
+import 'about_page.dart';
 
 final diagnosticLoggingProvider = StateProvider<bool>((ref) {
   return DALogger.activeLevel == LogLevel.debug;
@@ -236,6 +237,22 @@ class SettingsPage extends ConsumerWidget {
                     },
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: DATokens.spacingLarge),
+            _buildSectionHeader(context, 'About'),
+            DACard(
+              child: ListTile(
+                leading: Icon(Icons.info_outline, color: colors.primary),
+                title: Text('About DA Tunes', style: typography.title.copyWith(fontSize: 15.0)),
+                subtitle: Text('Version details, features, credits, and open source', style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary)),
+                trailing: const Icon(Icons.chevron_right, size: 20.0),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AboutPage()),
+                  );
+                },
               ),
             ),
           ],
