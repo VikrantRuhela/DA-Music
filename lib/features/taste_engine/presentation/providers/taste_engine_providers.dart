@@ -23,6 +23,7 @@ class TasteEngineState {
   final bool excludeDownloads;
   final List<Map<String, dynamic>> logs;
   final bool isLoading;
+  final bool isInitialized;
 
   const TasteEngineState({
     this.dna = const MusicDNA(),
@@ -31,6 +32,7 @@ class TasteEngineState {
     this.excludeDownloads = false,
     this.logs = const [],
     this.isLoading = false,
+    this.isInitialized = false,
   });
 
   TasteEngineState copyWith({
@@ -40,6 +42,7 @@ class TasteEngineState {
     bool? excludeDownloads,
     List<Map<String, dynamic>>? logs,
     bool? isLoading,
+    bool? isInitialized,
   }) {
     return TasteEngineState(
       dna: dna ?? this.dna,
@@ -48,6 +51,7 @@ class TasteEngineState {
       excludeDownloads: excludeDownloads ?? this.excludeDownloads,
       logs: logs ?? this.logs,
       isLoading: isLoading ?? this.isLoading,
+      isInitialized: isInitialized ?? this.isInitialized,
     );
   }
 }
@@ -126,6 +130,7 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
         excludeDownloads: excludeDownloads,
         logs: logs,
         isLoading: false,
+        isInitialized: true,
       );
       DALogger.info('TasteEngineNotifier: Taste engine state initialized successfully. Favorite genres: ${dna.favoriteGenres}');
     } catch (e, stack) {
@@ -303,9 +308,10 @@ final tasteEngineNotifierProvider = StateNotifierProvider<TasteEngineNotifier, T
 final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) async {
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
   final excludeDownloads = ref.watch(tasteEngineNotifierProvider.select((s) => s.excludeDownloads));
+  ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
   if (!isPersonalizationEnabled) return const [];
 
-  final tasteState = ref.watch(tasteEngineNotifierProvider);
+  final tasteState = ref.read(tasteEngineNotifierProvider);
   final sourceManager = ref.watch(sourceManagerProvider);
   final downloadRepo = ref.watch(downloadRepositoryProvider);
   final downloadedSongs = await downloadRepo.getDownloadedSongs();
@@ -360,6 +366,7 @@ final genericHomeFeedProvider = FutureProvider<domain.HomeFeed>((ref) async {
 
 final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) async {
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
+  ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
 
   List<domain.Album> ytmAlbums = [];
   try {
@@ -371,7 +378,7 @@ final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) asyn
   if (!isPersonalizationEnabled) return ytmAlbums;
 
   final sourceManager = ref.watch(sourceManagerProvider);
-  final tasteState = ref.watch(tasteEngineNotifierProvider);
+  final tasteState = ref.read(tasteEngineNotifierProvider);
   return RecommendationEngine.generateAlbumRecommendations(
     dna: tasteState.dna,
     sourceManager: sourceManager,
@@ -381,6 +388,7 @@ final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) asyn
 
 final personalizedPlaylistsProvider = FutureProvider<List<domain.Playlist>>((ref) async {
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
+  ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
 
   List<domain.Playlist> ytmPlaylists = [];
   try {
@@ -392,7 +400,7 @@ final personalizedPlaylistsProvider = FutureProvider<List<domain.Playlist>>((ref
   if (!isPersonalizationEnabled) return ytmPlaylists;
 
   final sourceManager = ref.watch(sourceManagerProvider);
-  final tasteState = ref.watch(tasteEngineNotifierProvider);
+  final tasteState = ref.read(tasteEngineNotifierProvider);
   return RecommendationEngine.generatePlaylistRecommendations(
     dna: tasteState.dna,
     sourceManager: sourceManager,
@@ -417,6 +425,7 @@ class RecommendationSection {
 final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
   print('[HOME] Controller initialized');
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
+  ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
   
   final sourceManager = ref.watch(sourceManagerProvider);
   
@@ -454,7 +463,7 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
     ];
   }
 
-  final tasteState = ref.watch(tasteEngineNotifierProvider);
+  final tasteState = ref.read(tasteEngineNotifierProvider);
   final dna = tasteState.dna;
   final logs = tasteState.logs;
 

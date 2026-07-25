@@ -32,25 +32,22 @@ class LocalStreamProxy {
     final targetUri = Uri.parse(targetUrl);
     final client = HttpClient();
 
-    // Try standard dual-stack connection first (crucial for IPv6-only networks like Jio)
+    // Try forcing IPv4 connection first (crucial to bypass IPv6 CDN blocks on cellular networks like Jio/Airtel)
     client.connectionFactory = (Uri url, String? proxyHost, int? proxyPort) async {
       final host = proxyHost ?? url.host;
       final port = proxyPort ?? (url.port != 0 ? url.port : (url.scheme == 'https' ? 443 : 80));
       
       Socket socket;
       try {
-        socket = await Socket.connect(host, port);
-      } catch (_) {
-        try {
-          final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
-          if (addresses.isNotEmpty) {
-            socket = await Socket.connect(addresses.first, port);
-          } else {
-            rethrow;
-          }
-        } catch (e2) {
+        final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
+        if (addresses.isNotEmpty) {
+          socket = await Socket.connect(addresses.first, port);
+        } else {
           socket = await Socket.connect(host, port);
         }
+      } catch (_) {
+        // Fallback to standard dual-stack connection
+        socket = await Socket.connect(host, port);
       }
 
       if (url.scheme.toLowerCase() == 'https') {
