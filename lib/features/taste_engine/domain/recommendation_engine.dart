@@ -7,11 +7,11 @@ import '../../../../domain/entities/value_objects.dart' as domain;
 import 'music_dna.dart';
 
 class RecommendationEngine {
-  static bool _isValidMusicCandidate(
+  static bool isValidMusicCandidate(
     String title,
     String artist,
     Duration duration, {
-    required void Function(String reason) onReject,
+    void Function(String reason)? onReject,
   }) {
     final titleLower = title.toLowerCase();
     final artistLower = artist.toLowerCase();
@@ -19,11 +19,11 @@ class RecommendationEngine {
     // 1. Duration check: songs are generally between 45 seconds and 12 minutes
     final durationSecs = duration.inSeconds;
     if (durationSecs < 45) {
-      onReject('Duration too short ($durationSecs s)');
+      if (onReject != null) onReject('Duration too short ($durationSecs s)');
       return false;
     }
     if (durationSecs > 720) {
-      onReject('Duration too long ($durationSecs s)');
+      if (onReject != null) onReject('Duration too long ($durationSecs s)');
       return false;
     }
 
@@ -41,7 +41,7 @@ class RecommendationEngine {
 
     for (final kw in negativeKeywords) {
       if (titleLower.contains(kw) || artistLower.contains(kw)) {
-        onReject('Contains negative keyword "$kw"');
+        if (onReject != null) onReject('Contains negative keyword "$kw"');
         return false;
       }
     }
@@ -55,7 +55,7 @@ class RecommendationEngine {
 
     for (final phrase in suspectPhrases) {
       if (titleLower.contains(phrase)) {
-        onReject('Contains suspect non-music phrase "$phrase"');
+        if (onReject != null) onReject('Contains suspect non-music phrase "$phrase"');
         return false;
       }
     }
@@ -119,7 +119,7 @@ class RecommendationEngine {
       if (seenIds.contains(song.id)) return;
 
       String? rejectReason;
-      final isValid = _isValidMusicCandidate(
+      final isValid = isValidMusicCandidate(
         song.title,
         song.artist,
         song.duration,
@@ -311,6 +311,183 @@ class RecommendationEngine {
     final finalResult = balanced.take(12).toList();
     if (finalResult.isEmpty) {
       return downloadedSongs.take(12).toList();
+    }
+    return finalResult;
+  }
+
+  static Future<List<model.Song>> generateTrendingRecommendations({
+    required MusicDNA dna,
+    required SourceManager sourceManager,
+    List<model.Song> genericSongs = const [],
+  }) async {
+    final List<model.Song> results = [];
+    final Set<String> seenIds = {};
+
+    final Map<String, bool> fromTrendingSearch = {};
+    final Map<String, bool> fromGlobalTrending = {};
+    final Map<String, String> candidateSources = {};
+
+    void addCandidate(model.Song song, {required String source, bool isSearch = false, bool isGlobal = false}) {
+      if (seenIds.contains(song.id)) return;
+
+      String? rejectReason;
+      final isValid = isValidMusicCandidate(
+        song.title,
+        song.artist,
+        song.duration,
+        onReject: (reason) => rejectReason = reason,
+      );
+
+      if (!isValid) {
+        print(' [Recommendation Engine] REJECTED Trending Candidate Song ID: ${song.id} | Source: $source | Title: "${song.title}" | Artist: "${song.artist}" | Reason: $rejectReason');
+        return;
+      }
+
+      results.add(song);
+      seenIds.add(song.id);
+      candidateSources[song.id] = source;
+      if (isSearch) fromTrendingSearch[song.id] = true;
+      if (isGlobal) fromGlobalTrending[song.id] = true;
+    }
+
+    // 1. Gather candidates from global trending/recommended
+    for (final song in genericSongs) {
+      addCandidate(song, source: 'Global Home Recommended', isGlobal: true);
+    }
+
+    // 2. Gather candidates from searches based on user's favorite genres
+    try {
+      final adapter = sourceManager.activeAdapter;
+      for (final genre in dna.favoriteGenres.take(3)) {
+        final searchRes = await adapter.search('trending $genre music');
+        for (final song in searchRes.songs) {
+          final mapped = model.Song(
+            id: song.id,
+            title: song.title,
+            artist: song.artistId,
+            album: song.albumId,
+            duration: song.duration.value,
+            artworkUrl: song.artwork.url,
+            source: song.sourceId,
+            lyrics: null,
+          );
+          addCandidate(mapped, source: 'Trending Genre Search ($genre)', isSearch: true);
+        }
+      }
+
+      // 3. Gather candidates from searches based on user's top artists
+      for (final artist in dna.topArtists.take(2)) {
+        final searchRes = await adapter.search('trending $artist');
+        for (final song in searchRes.songs) {
+          final mapped = model.Song(
+            id: song.id,
+            title: song.title,
+            artist: song.artistId,
+            album: song.albumId,
+            duration: song.duration.value,
+            artworkUrl: song.artwork.url,
+            source: song.sourceId,
+            lyrics: null,
+          );
+          addCandidate(mapped, source: 'Trending Artist Search ($artist)', isSearch: true);
+        }
+      }
+    } catch (_) {}
+
+    final List<MapEntry<model.Song, double>> scoredSongs = [];
+
+    for (final song in results) {
+      double personalizationScore = 0.0;
+      double genreScore = 0.0;
+      double similarityScore = 0.0;
+      double trendingBonus = 0.0;
+
+      // A. Artist Match
+      final artistAff = dna.artistAffinities[song.artist] ?? 0.0;
+      if (dna.topArtists.contains(song.artist)) {
+        personalizationScore += 25.0;
+        similarityScore += 10.0;
+      }
+      personalizationScore += artistAff * 15.0;
+      similarityScore += artistAff * 5.0;
+
+      // B. Genre Match
+      for (final genre in dna.favoriteGenres) {
+        final genreLower = genre.toLowerCase();
+        final titleLower = song.title.toLowerCase();
+        final artistLower = song.artist.toLowerCase();
+
+        bool matchesGenre = false;
+        if (titleLower.contains(genreLower) || artistLower.contains(genreLower)) {
+          matchesGenre = true;
+        } else if (genreLower == 'hip-hop' || genreLower == 'hip hop' || genreLower == 'rap') {
+          if (titleLower.contains('rap') || titleLower.contains('hiphop') || titleLower.contains('trap') || titleLower.contains('beat')) {
+            matchesGenre = true;
+          }
+        } else if (genreLower == 'pop') {
+          if (titleLower.contains('pop') || titleLower.contains('hits') || titleLower.contains('chart')) {
+            matchesGenre = true;
+          }
+        } else if (genreLower == 'rock' || genreLower == 'metal') {
+          if (titleLower.contains('rock') || titleLower.contains('metal') || titleLower.contains('guitar') || titleLower.contains('band')) {
+            matchesGenre = true;
+          }
+        }
+
+        if (matchesGenre) {
+          genreScore += 15.0;
+          similarityScore += 5.0;
+        }
+
+        final genreAff = dna.genreAffinities[genre] ?? 0.0;
+        genreScore += genreAff * 8.0;
+      }
+
+      // C. Song Match
+      if (dna.topSongs.contains(song.title)) {
+        personalizationScore += 30.0;
+      }
+      final songAff = dna.songAffinities[song.title] ?? 0.0;
+      personalizationScore += songAff * 12.0;
+
+      // D. Trending Source Weight
+      if (fromGlobalTrending[song.id] == true) {
+        trendingBonus += 5.0;
+      }
+      if (fromTrendingSearch[song.id] == true) {
+        trendingBonus += 8.0;
+      }
+
+      final finalScore = personalizationScore + genreScore + similarityScore + trendingBonus;
+
+      print(' [Recommendation Engine] CANDIDATE Song ID: ${song.id} | Source: ${candidateSources[song.id]} | Title: "${song.title}" | Artist: "${song.artist}" | Personalization Score: $personalizationScore | Genre Score: $genreScore | Similarity Score: $similarityScore | Trending Bonus: $trendingBonus | Final Score: $finalScore');
+
+      scoredSongs.add(MapEntry(song, finalScore));
+    }
+
+    scoredSongs.sort((a, b) => b.value.compareTo(a.value));
+
+    final Map<String, int> artistCounts = {};
+    final List<model.Song> balanced = [];
+
+    for (final entry in scoredSongs) {
+      final song = entry.key;
+      final score = entry.value;
+      final artist = song.artist;
+      final count = artistCounts[artist] ?? 0;
+
+      if (count < 2) {
+        balanced.add(song);
+        artistCounts[artist] = count + 1;
+        print(' [Recommendation Engine] SELECTED Trending Song ID: ${song.id} | Title: "${song.title}" | Artist: "${song.artist}" | Final Score: $score | Reason: High taste match score');
+      } else {
+        print(' [Recommendation Engine] SKIPPED Candidate Trending Song ID: ${song.id} | Title: "${song.title}" | Artist: "${song.artist}" | Reason: Artist diversity limit reached');
+      }
+    }
+
+    final finalResult = balanced.take(10).toList();
+    if (finalResult.isEmpty) {
+      return genericSongs.take(10).toList();
     }
     return finalResult;
   }

@@ -424,9 +424,7 @@ class RecommendationSection {
     required this.type,
     required this.items,
   });
-}
-
-final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
+}final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
   print('[HOME] Controller initialized');
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
   final isInitialized = ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
@@ -440,7 +438,16 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
     genericFeed = await ref.watch(genericHomeFeedProvider.future);
   } catch (_) {}
 
-  final genericSongs = genericFeed?.sections.firstWhere((s) => s.type == 'recommended', orElse: () => domain.HomeFeedSection(title: '', type: 'recommended', items: const [])).items.cast<domain.Song>().toList() ?? const <domain.Song>[];
+  final rawGenericSongs = genericFeed?.sections.firstWhere((s) => s.type == 'recommended', orElse: () => domain.HomeFeedSection(title: '', type: 'recommended', items: const [])).items.cast<domain.Song>().toList() ?? const <domain.Song>[];
+  // Filter non-music content from generic recommended songs
+  final genericSongs = rawGenericSongs.where((song) {
+    return RecommendationEngine.isValidMusicCandidate(
+      song.title,
+      song.artistId,
+      song.duration.value,
+    );
+  }).toList();
+
   final genericAlbums = genericFeed?.sections.firstWhere((s) => s.type == 'albums', orElse: () => domain.HomeFeedSection(title: '', type: 'albums', items: const [])).items.cast<domain.Album>().toList() ?? const <domain.Album>[];
   final genericPlaylists = genericFeed?.sections.firstWhere((s) => s.type == 'playlists', orElse: () => domain.HomeFeedSection(title: '', type: 'playlists', items: const [])).items.cast<domain.Playlist>().toList() ?? const <domain.Playlist>[];
 
@@ -562,7 +569,20 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
     final becauseItems = <domain.Song>[];
     try {
       final searchRes = await sourceManager.activeAdapter.search('$targetArtist hits');
-      becauseItems.addAll(searchRes.songs.take(10));
+      final filtered = searchRes.songs.where((song) {
+        String? reason;
+        final ok = RecommendationEngine.isValidMusicCandidate(
+          song.title,
+          song.artistId,
+          song.duration.value,
+          onReject: (r) => reason = r,
+        );
+        if (!ok) {
+          print(' [Home Provider] REJECTED "Because You Listened" Candidate "${song.title}": $reason');
+        }
+        return ok;
+      }).toList();
+      becauseItems.addAll(filtered.take(10));
     } catch (_) {}
     if (becauseItems.isNotEmpty) {
       sections.add(RecommendationSection(
@@ -611,7 +631,20 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
     final similarArtistItems = <domain.Song>[];
     try {
       final searchRes = await sourceManager.activeAdapter.search('$secondArtist hits');
-      similarArtistItems.addAll(searchRes.songs.take(10));
+      final filtered = searchRes.songs.where((song) {
+        String? reason;
+        final ok = RecommendationEngine.isValidMusicCandidate(
+          song.title,
+          song.artistId,
+          song.duration.value,
+          onReject: (r) => reason = r,
+        );
+        if (!ok) {
+          print(' [Home Provider] REJECTED "Similar Artist" Candidate "${song.title}": $reason');
+        }
+        return ok;
+      }).toList();
+      similarArtistItems.addAll(filtered.take(10));
     } catch (_) {}
     if (similarArtistItems.isNotEmpty) {
       sections.add(RecommendationSection(
@@ -652,15 +685,40 @@ final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>
     }
   }
 
-  final trendingItems = <domain.Song>[];
-  final favoriteGenre = dna.favoriteGenres.isNotEmpty ? dna.favoriteGenres.first : 'Pop';
+  final List<domain.Song> trendingItems = [];
   try {
-    final searchRes = await sourceManager.activeAdapter.search('trending $favoriteGenre');
-    trendingItems.addAll(searchRes.songs.take(10));
+    final List<Song> ytmGenericSongs = genericSongs.map<Song>((s) => Song(
+      id: s.id,
+      title: s.title,
+      artist: s.artistId,
+      album: s.albumId,
+      duration: s.duration.value,
+      artworkUrl: s.thumbnail.url,
+      source: s.sourceId,
+      lyrics: null,
+    )).toList();
+
+    final recTrending = await RecommendationEngine.generateTrendingRecommendations(
+      dna: dna,
+      sourceManager: sourceManager,
+      genericSongs: ytmGenericSongs,
+    );
+
+    trendingItems.addAll(recTrending.map((s) => domain.Song(
+      id: s.id,
+      title: s.title,
+      artistId: s.artist,
+      albumId: s.album,
+      duration: domain.DurationValue(s.duration),
+      thumbnail: domain.Artwork(s.artworkUrl ?? ''),
+      artwork: domain.Artwork(s.artworkUrl ?? ''),
+      sourceId: s.source,
+    )));
   } catch (_) {}
+
   sections.add(RecommendationSection(
     title: 'Trending for You',
-    subtitle: 'Popular $favoriteGenre hits trending now',
+    subtitle: 'Popular hits trending now',
     type: 'trending',
     items: trendingItems.isNotEmpty ? trendingItems : genericSongs,
   ));
