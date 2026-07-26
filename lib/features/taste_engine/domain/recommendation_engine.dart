@@ -39,14 +39,34 @@ class RecommendationEngine {
       'relaxing sounds', 'rain sounds', 'white noise', 'study beats compilation',
       '10 hours', '1 hour', 'loop', 'extended version', 'slowed + reverb compilation',
       'mashup', 'mixtape', 'jukebox', 'nonstop', 'audio jukebox', 'album zip',
-      'full audio', 'songs collection', 'all songs', 'top 10', 'top 20', 'top 50',
-      'greatest hits', 'full album', 'best of'
+      'full audio', 'songs collection', 'all songs', 'greatest hits', 'full album', 'best of'
     ];
 
     for (final kw in negativeKeywords) {
       if (titleLower.contains(kw) || artistLower.contains(kw)) {
         if (onReject != null) onReject('Contains negative keyword "$kw"');
         return false;
+      }
+    }
+
+    if (titleLower.contains('music mix')) {
+      if (onReject != null) onReject('Contains compilation phrase "music mix"');
+      return false;
+    }
+    if (titleLower.contains('hot 50')) {
+      if (onReject != null) onReject('Contains compilation phrase "hot 50"');
+      return false;
+    }
+
+    final numericPattern = RegExp(r'\b(hot|top)\s*(\d+)\b', caseSensitive: false);
+    for (final match in numericPattern.allMatches(titleLower)) {
+      final numberStr = match.group(2);
+      if (numberStr != null) {
+        final val = int.tryParse(numberStr);
+        if (val != null && val >= 1 && val <= 100) {
+          if (onReject != null) onReject('Contains compilation pattern "${match.group(0)}"');
+          return false;
+        }
       }
     }
 

@@ -95,6 +95,52 @@ void main() {
         isFalse,
       );
 
+      // New numeric compilation filters check
+      expect(
+        RecommendationEngine.isValidMusicCandidate(
+          'Punjabi Music Mix 2026',
+          'Singer Name',
+          const Duration(minutes: 4),
+        ),
+        isFalse,
+      );
+
+      expect(
+        RecommendationEngine.isValidMusicCandidate(
+          'Punjabi Hits Hot 50',
+          'Singer Name',
+          const Duration(minutes: 4),
+        ),
+        isFalse,
+      );
+
+      expect(
+        RecommendationEngine.isValidMusicCandidate(
+          'Hot 25 Songs of the Week',
+          'Singer Name',
+          const Duration(minutes: 4),
+        ),
+        isFalse,
+      );
+
+      expect(
+        RecommendationEngine.isValidMusicCandidate(
+          'Top 10 Punjabi Tracks',
+          'Singer Name',
+          const Duration(minutes: 4),
+        ),
+        isFalse,
+      );
+
+      expect(
+        RecommendationEngine.isValidMusicCandidate(
+          'Top 101 Punjabi Tracks', // > 100 should not be rejected by numeric filter
+          'Singer Name',
+          const Duration(minutes: 4),
+        ),
+        isTrue,
+      );
+
       // Standard song check
       expect(
         RecommendationEngine.isValidMusicCandidate(
