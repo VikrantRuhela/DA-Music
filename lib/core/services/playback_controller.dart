@@ -15,6 +15,11 @@ import '../../domain/entities/queue.dart' as domain;
 import '../../domain/entities/value_objects.dart' as domain;
 import '../../shared/models/music_models.dart';
 import '../../shared/models/playback_state.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/taste_engine/presentation/providers/taste_engine_providers.dart';
+import '../../features/taste_engine/domain/recommendation_engine.dart';
+import '../../data/repositories/download_repository.dart';
+import '../../shared/providers/library_providers.dart';
 
 /// Central playback controller orchestrating queue, repeat modes and state transitions.
 class PlaybackController extends ChangeNotifier {
@@ -39,15 +44,27 @@ class PlaybackController extends ChangeNotifier {
 
   final List<Song> _queueSongs = [];
   int _currentIndex = -1;
+  final Ref? _ref;
+  bool _isGeneratingSmartQueue = false;
+  bool _isAppendingAutoplay = false;
 
   PlaybackController(
     this._playbackEngine, [
+    this._ref,
     this._sourceManager,
     this._artistRepository,
     this._albumRepository,
     this._recommendationRepository,
   ]) {
     _init();
+  }
+
+  bool get _isSmartQueueActive {
+    if (_ref == null) return true;
+    final state = _ref!.read(tasteEngineNotifierProvider);
+    if (!state.isSmartQueueEnabled) return false;
+    if (_settings.repeatMode != RepeatMode.off) return false;
+    return true;
   }
 
   void _init() {
@@ -60,6 +77,11 @@ class PlaybackController extends ChangeNotifier {
       if (_currentIndex >= 0 && _currentIndex < _queueSongs.length) {
         _status = PlaybackStatus.playing;
         _startPositionTimer();
+
+        // Check if we need to append autoplay recommendations!
+        if ((_queueSongs.length - 1 - _currentIndex) <= 5) {
+          _appendSmartAutoplayRecommendations();
+        }
       } else {
         _status = PlaybackStatus.idle;
         _stopPositionTimer();
@@ -139,21 +161,43 @@ class PlaybackController extends ChangeNotifier {
   // Actions
   Future<void> setQueue(List<Song> songs, {int startIndex = 0, bool autoPlay = true}) async {
     final copiedSongs = List<Song>.from(songs);
-    _queueSongs.clear();
-    _queueSongs.addAll(copiedSongs);
-    _currentIndex = copiedSongs.isEmpty ? -1 : startIndex.clamp(0, copiedSongs.length - 1);
+    
+    if (_isSmartQueueActive && copiedSongs.isNotEmpty) {
+      final seedSong = copiedSongs[startIndex];
+      _queueSongs.clear();
+      _queueSongs.add(seedSong);
+      _currentIndex = 0;
 
-    final domainQueue = domain.Queue(
-      songs: _queueSongs.map((s) => _mapToDomain(s)).toList(),
-      currentIndex: _currentIndex,
-      repeatMode: _mapRepeatToDomain(_settings.repeatMode),
-      shuffleEnabled: _settings.isShuffle,
-    );
+      final domainQueue = domain.Queue(
+        songs: _queueSongs.map((s) => _mapToDomain(s)).toList(),
+        currentIndex: _currentIndex,
+        repeatMode: _mapRepeatToDomain(_settings.repeatMode),
+        shuffleEnabled: _settings.isShuffle,
+      );
 
-    _eventController.add(clean.QueueChanged(domainQueue));
-    notifyListeners();
+      _eventController.add(clean.QueueChanged(domainQueue));
+      notifyListeners();
 
-    await _runAction('playQueue', () => _playbackEngine.playQueue(domainQueue));
+      await _runAction('playQueue', () => _playbackEngine.playQueue(domainQueue));
+      
+      _generateSmartAutoQueue(seedSong);
+    } else {
+      _queueSongs.clear();
+      _queueSongs.addAll(copiedSongs);
+      _currentIndex = copiedSongs.isEmpty ? -1 : startIndex.clamp(0, copiedSongs.length - 1);
+
+      final domainQueue = domain.Queue(
+        songs: _queueSongs.map((s) => _mapToDomain(s)).toList(),
+        currentIndex: _currentIndex,
+        repeatMode: _mapRepeatToDomain(_settings.repeatMode),
+        shuffleEnabled: _settings.isShuffle,
+      );
+
+      _eventController.add(clean.QueueChanged(domainQueue));
+      notifyListeners();
+
+      await _runAction('playQueue', () => _playbackEngine.playQueue(domainQueue));
+    }
   }
 
   Future<void> selectSong(Song song) async {
@@ -181,90 +225,153 @@ class PlaybackController extends ChangeNotifier {
   }
 
   Future<void> _generateSmartAutoQueue(Song song) async {
-    final sourceManager = _sourceManager;
-    final albumRepository = _albumRepository;
-    final artistRepository = _artistRepository;
-    final recommendationRepository = _recommendationRepository;
+    if (!_isSmartQueueActive) return;
+    if (_isGeneratingSmartQueue) return;
+    _isGeneratingSmartQueue = true;
 
-    if (sourceManager == null) return;
+    DALogger.info('PlaybackController: Generating Smart Auto Queue for "${song.title}"');
+
     try {
-      final List<Song> candidates = [];
-      final Set<String> seenIds = {song.id};
-
-      final adapter = sourceManager.activeAdapter as YouTubeMusicAdapter;
-
-      // Priority 1: Same Album (if not Single or empty)
-      if (song.album.isNotEmpty && song.album != 'Single' && albumRepository != null) {
-        try {
-          final albums = await albumRepository.getAlbumsByQuery(song.album);
-          if (albums.isNotEmpty) {
-            final matched = albums.firstWhere(
-              (a) => a.artistId.toLowerCase() == song.artist.toLowerCase() ||
-                     a.title.toLowerCase() == song.album.toLowerCase(),
-              orElse: () => albums.first,
-            );
-            // Fetch tracks of that album
-            final playlist = await sourceManager.getPlaylist(matched.id);
-            for (final trackId in playlist.songIds) {
-              final s = await sourceManager.getSong(trackId);
-              final mapped = _mapFromDomain(s);
-              if (!seenIds.contains(mapped.id)) {
-                candidates.add(mapped);
-                seenIds.add(mapped.id);
-              }
-            }
-          }
-        } catch (e) {
-          DALogger.warning('SmartAutoQueue: Failed to load album tracks: $e');
-        }
+      final ref = _ref;
+      if (ref == null) {
+        _isGeneratingSmartQueue = false;
+        return;
       }
 
-      // Priority 2: Same Artist
-      if (song.artist.isNotEmpty && artistRepository != null) {
-        try {
-          final artists = await artistRepository.getArtistsByQuery(song.artist);
-          if (artists.isNotEmpty) {
-            final matchedArtist = artists.firstWhere(
-              (a) => a.name.toLowerCase() == song.artist.toLowerCase(),
-              orElse: () => artists.first,
-            );
-            await artistRepository.getArtistById(matchedArtist.id);
-            final artistSongs = adapter.getArtistSongs(matchedArtist.id);
-            for (final track in artistSongs) {
-              final mapped = _mapFromDomain(track);
-              if (!seenIds.contains(mapped.id)) {
-                candidates.add(mapped);
-                seenIds.add(mapped.id);
-              }
-            }
-          }
-        } catch (e) {
-          DALogger.warning('SmartAutoQueue: Failed to load artist tracks: $e');
-        }
+      final tasteState = ref.read(tasteEngineNotifierProvider);
+      final downloadRepo = ref.read(downloadRepositoryProvider);
+      final libraryManager = ref.read(libraryManagerProvider);
+
+      final downloadedList = await downloadRepo.getDownloadedSongs();
+      final likedList = libraryManager.likedSongs;
+
+      final List<Song> recentlyPlayed = [];
+      for (final log in tasteState.logs.reversed) {
+        final id = log['songId'] as String? ?? '';
+        if (id.isEmpty || id == 'search_query') continue;
+        recentlyPlayed.add(Song(
+          id: id,
+          title: log['songTitle'] ?? '',
+          artist: log['artist'] ?? '',
+          album: log['album'] ?? '',
+          duration: Duration(milliseconds: log['durationMs'] ?? 0),
+          artworkUrl: log['artworkUrl'] ?? '',
+          source: log['source'] ?? 'youtube_music',
+          lyrics: null,
+        ));
+        if (recentlyPlayed.length >= 20) break;
       }
 
-      // Priority 3: Similar songs / recommendations
-      if (recommendationRepository != null) {
-        try {
-          final recommendations = await recommendationRepository.getRecommendations(song.id);
-          for (final track in recommendations) {
-            final mapped = _mapFromDomain(track);
-            if (!seenIds.contains(mapped.id)) {
-              candidates.add(mapped);
-              seenIds.add(mapped.id);
-            }
-          }
-        } catch (e) {
-          DALogger.warning('SmartAutoQueue: Failed to load recommendations: $e');
-        }
-      }
+      final candidates = await RecommendationEngine.generateSmartQueue(
+        seedSong: song,
+        dna: tasteState.dna,
+        sourceManager: _sourceManager!,
+        downloadedSongs: downloadedList,
+        likedSongs: likedList,
+        recentlyPlayedSongs: recentlyPlayed,
+      );
 
       if (candidates.isNotEmpty) {
         final List<Song> newQueue = [song, ...candidates];
-        await reorderQueue(newQueue, 0);
+        
+        _queueSongs.clear();
+        _queueSongs.addAll(newQueue);
+        _currentIndex = 0;
+
+        final domainQueue = domain.Queue(
+          songs: _queueSongs.map((s) => _mapToDomain(s)).toList(),
+          currentIndex: _currentIndex,
+          repeatMode: _mapRepeatToDomain(_settings.repeatMode),
+          shuffleEnabled: _settings.isShuffle,
+        );
+
+        _eventController.add(clean.QueueChanged(domainQueue));
+        notifyListeners();
+        await _runAction('playQueue', () => _playbackEngine.playQueue(domainQueue));
       }
-    } catch (e) {
-      DALogger.error('SmartAutoQueue generation failed', e);
+    } catch (e, stack) {
+      DALogger.error('SmartAutoQueue generation failed', e, stack);
+    } finally {
+      _isGeneratingSmartQueue = false;
+    }
+  }
+
+  Future<void> _appendSmartAutoplayRecommendations() async {
+    if (!_isSmartQueueActive) return;
+    if (_isAppendingAutoplay) return;
+    _isAppendingAutoplay = true;
+
+    final current = currentSong;
+    if (current == null) {
+      _isAppendingAutoplay = false;
+      return;
+    }
+
+    DALogger.info('PlaybackController: Nearing end of queue. Fetching autoplay recommendations based on "${current.title}"...');
+
+    try {
+      final ref = _ref;
+      if (ref == null) {
+        _isAppendingAutoplay = false;
+        return;
+      }
+
+      final tasteState = ref.read(tasteEngineNotifierProvider);
+      final downloadRepo = ref.read(downloadRepositoryProvider);
+      final libraryManager = ref.read(libraryManagerProvider);
+
+      final downloadedList = await downloadRepo.getDownloadedSongs();
+      final likedList = libraryManager.likedSongs;
+
+      final List<Song> recentlyPlayed = [];
+      for (final log in tasteState.logs.reversed) {
+        final id = log['songId'] as String? ?? '';
+        if (id.isEmpty || id == 'search_query') continue;
+        recentlyPlayed.add(Song(
+          id: id,
+          title: log['songTitle'] ?? '',
+          artist: log['artist'] ?? '',
+          album: log['album'] ?? '',
+          duration: Duration(milliseconds: log['durationMs'] ?? 0),
+          artworkUrl: log['artworkUrl'] ?? '',
+          source: log['source'] ?? 'youtube_music',
+          lyrics: null,
+        ));
+        if (recentlyPlayed.length >= 20) break;
+      }
+
+      final candidates = await RecommendationEngine.generateSmartQueue(
+        seedSong: current,
+        dna: tasteState.dna,
+        sourceManager: _sourceManager!,
+        downloadedSongs: downloadedList,
+        likedSongs: likedList,
+        recentlyPlayedSongs: recentlyPlayed,
+      );
+
+      final Set<String> alreadyQueuedIds = _queueSongs.map((s) => s.id).toSet();
+      final List<Song> newCandidates = candidates.where((s) => !alreadyQueuedIds.contains(s.id)).toList();
+
+      if (newCandidates.isNotEmpty) {
+        DALogger.info('PlaybackController: Appending ${newCandidates.length} new autoplay tracks to queue.');
+        
+        _queueSongs.addAll(newCandidates);
+
+        final domainQueue = domain.Queue(
+          songs: _queueSongs.map((s) => _mapToDomain(s)).toList(),
+          currentIndex: _currentIndex,
+          repeatMode: _mapRepeatToDomain(_settings.repeatMode),
+          shuffleEnabled: _settings.isShuffle,
+        );
+
+        _eventController.add(clean.QueueChanged(domainQueue));
+        notifyListeners();
+        await _runAction('playQueue', () => _playbackEngine.playQueue(domainQueue));
+      }
+    } catch (e, stack) {
+      DALogger.error('Autoplay recommendations append failed', e, stack);
+    } finally {
+      _isAppendingAutoplay = false;
     }
   }
 

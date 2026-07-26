@@ -17,6 +17,7 @@ final playbackControllerProvider = ChangeNotifierProvider<PlaybackController>((r
   final recommendationRepo = ref.watch(recommendationRepositoryProvider);
   return PlaybackController(
     engine,
+    ref,
     sourceManager,
     artistRepo,
     albumRepo,

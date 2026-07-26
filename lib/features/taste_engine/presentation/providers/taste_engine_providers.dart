@@ -22,6 +22,7 @@ class TasteEngineState {
   final bool isLearningPaused;
   final bool isPersonalizationEnabled;
   final bool excludeDownloads;
+  final bool isSmartQueueEnabled;
   final List<Map<String, dynamic>> logs;
   final bool isLoading;
   final bool isInitialized;
@@ -31,6 +32,7 @@ class TasteEngineState {
     this.isLearningPaused = false,
     this.isPersonalizationEnabled = true,
     this.excludeDownloads = false,
+    this.isSmartQueueEnabled = true,
     this.logs = const [],
     this.isLoading = false,
     this.isInitialized = false,
@@ -41,6 +43,7 @@ class TasteEngineState {
     bool? isLearningPaused,
     bool? isPersonalizationEnabled,
     bool? excludeDownloads,
+    bool? isSmartQueueEnabled,
     List<Map<String, dynamic>>? logs,
     bool? isLoading,
     bool? isInitialized,
@@ -50,6 +53,7 @@ class TasteEngineState {
       isLearningPaused: isLearningPaused ?? this.isLearningPaused,
       isPersonalizationEnabled: isPersonalizationEnabled ?? this.isPersonalizationEnabled,
       excludeDownloads: excludeDownloads ?? this.excludeDownloads,
+      isSmartQueueEnabled: isSmartQueueEnabled ?? this.isSmartQueueEnabled,
       logs: logs ?? this.logs,
       isLoading: isLoading ?? this.isLoading,
       isInitialized: isInitialized ?? this.isInitialized,
@@ -108,6 +112,7 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
       final isLearningPaused = prefs.getBool('taste_learning_paused') ?? false;
       final isPersonalizationEnabled = prefs.getBool('taste_personalization_enabled') ?? true;
       final excludeDownloads = prefs.getBool('taste_exclude_downloads') ?? false;
+      final isSmartQueueEnabled = prefs.getBool('taste_smart_queue_enabled') ?? true;
 
       DALogger.info('TasteEngineNotifier: Loading history logs...');
       final logs = await _historyRepo.loadLogs();
@@ -129,6 +134,7 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
         isLearningPaused: isLearningPaused,
         isPersonalizationEnabled: isPersonalizationEnabled,
         excludeDownloads: excludeDownloads,
+        isSmartQueueEnabled: isSmartQueueEnabled,
         logs: logs,
         isLoading: false,
         isInitialized: true,
@@ -284,6 +290,12 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('taste_exclude_downloads', exclude);
     state = state.copyWith(excludeDownloads: exclude);
+  }
+
+  Future<void> setSmartQueueEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('taste_smart_queue_enabled', enabled);
+    state = state.copyWith(isSmartQueueEnabled: enabled);
   }
 
   Future<void> clearHistory() async {

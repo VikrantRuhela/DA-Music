@@ -718,4 +718,336 @@ class RecommendationEngine {
 
     return balanced.isEmpty ? ytmPlaylists : balanced.take(12).toList();
   }
+
+  static const Map<String, List<String>> similarArtistsMap = {
+    'karan aujla': ['ap dhillon', 'shubh', 'sidhu moose wala', 'diljit dosanjh', 'amrit maan'],
+    'ap dhillon': ['karan aujla', 'shubh', 'sidhu moose wala', 'diljit dosanjh', 'gurinder gill'],
+    'shubh': ['karan aujla', 'ap dhillon', 'sidhu moose wala', 'diljit dosanjh', 'prophec'],
+    'sidhu moose wala': ['karan aujla', 'ap dhillon', 'shubh', 'diljit dosanjh', 'amrit maan'],
+    'diljit dosanjh': ['karan aujla', 'ap dhillon', 'shubh', 'sidhu moose wala', 'amrinder gill'],
+    'eminem': ['drake', 'tupac', 'kanye west', 'lil wayne', 'snoop dogg', 'dr. dre', '50 cent'],
+    'drake': ['eminem', 'kanye west', 'lil wayne', 'travis scott', 'future', 'the weeknd'],
+    'beatles': ['queen', 'pink floyd', 'led zeppelin', 'the rolling stones', 'david bowie'],
+    'queen': ['beatles', 'pink floyd', 'led zeppelin', 'elton john', 'david bowie'],
+  };
+
+  static String detectGenre(String artist, String songTitle) {
+    final artistLower = artist.toLowerCase();
+    final titleLower = songTitle.toLowerCase();
+    if (artistLower.contains('aujla') ||
+        artistLower.contains('dosanjh') ||
+        artistLower.contains('sidhu') ||
+        artistLower.contains('maan') ||
+        artistLower.contains('singh') ||
+        artistLower.contains('amrit')) {
+      return 'Punjabi';
+    }
+    if (artistLower.contains('eminem') ||
+        artistLower.contains('drake') ||
+        artistLower.contains('tupac') ||
+        artistLower.contains('kanye') ||
+        artistLower.contains('wayne') ||
+        artistLower.contains('snoop')) {
+      return 'Hip-Hop';
+    }
+    if (artistLower.contains('beatles') ||
+        artistLower.contains('queen') ||
+        artistLower.contains('pink floyd') ||
+        artistLower.contains('led zeppelin')) {
+      return 'Rock';
+    }
+    if (artistLower.contains('lo-fi') ||
+        titleLower.contains('lofi') ||
+        titleLower.contains('relax') ||
+        titleLower.contains('study')) {
+      return 'Lo-fi';
+    }
+    return 'Pop'; // default fallback
+  }
+
+  static bool isAlternativeVersion(String titleA, String titleB) {
+    final cleanA = _normalizeTitle(titleA);
+    final cleanB = _normalizeTitle(titleB);
+    if (cleanA == cleanB) return true;
+
+    final versionKeywords = ['remix', 'live', 'slowed', 'reverb', 'cover', 'instrumental', 'acoustic', 'version', 'edit', 'mix'];
+    if (cleanA.contains(cleanB) || cleanB.contains(cleanA)) {
+      for (final kw in versionKeywords) {
+        if (cleanA.contains(kw) || cleanB.contains(kw)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  static String _normalizeTitle(String title) {
+    return title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  static String _buildReason(
+    double artistScore,
+    double genreScore,
+    double similarArtistScore,
+    double historyScore,
+    String seedArtist,
+    String genre,
+  ) {
+    if (artistScore > 0) return 'Same Artist ($seedArtist)';
+    if (similarArtistScore > 0) return 'Similar Artist related to $seedArtist';
+    if (historyScore > 4.0) return 'Liked/Downloaded song in your History';
+    if (genreScore > 0) return 'Matches current genre ($genre)';
+    return 'Popular trending in $genre';
+  }
+
+  static Future<List<model.Song>> generateSmartQueue({
+    required model.Song seedSong,
+    required MusicDNA dna,
+    required SourceManager sourceManager,
+    List<model.Song> downloadedSongs = const [],
+    List<model.Song> likedSongs = const [],
+    List<model.Song> recentlyPlayedSongs = const [],
+  }) async {
+    final List<model.Song> candidates = [];
+    final Set<String> seenIds = {seedSong.id};
+
+    final adapter = sourceManager.activeAdapter;
+    final detectedGenre = detectGenre(seedSong.artist, seedSong.title);
+
+    final searchFutures = <Future<void>>[];
+
+    // 1. Same Artist
+    if (seedSong.artist.isNotEmpty && seedSong.artist != 'Unknown Artist') {
+      searchFutures.add(() async {
+        try {
+          final res = await adapter.search(seedSong.artist);
+          for (final s in res.songs) {
+            candidates.add(model.Song(
+              id: s.id,
+              title: s.title,
+              artist: s.artistId,
+              album: s.albumId,
+              duration: s.duration.value,
+              artworkUrl: s.artwork.url,
+              source: s.sourceId,
+              lyrics: null,
+            ));
+          }
+        } catch (_) {}
+      }());
+    }
+
+    // 2. Similar Artists
+    final artistLower = seedSong.artist.toLowerCase().trim();
+    List<String> similarArtists = [];
+    for (final entry in similarArtistsMap.entries) {
+      if (artistLower.contains(entry.key) || entry.key.contains(artistLower)) {
+        similarArtists = entry.value;
+        break;
+      }
+    }
+    if (similarArtists.isEmpty) {
+      similarArtists = dna.topArtists.where((a) => a.toLowerCase() != artistLower).toList();
+    }
+    
+    for (final simArtist in similarArtists.take(2)) {
+      searchFutures.add(() async {
+        try {
+          final res = await adapter.search(simArtist);
+          for (final s in res.songs) {
+            candidates.add(model.Song(
+              id: s.id,
+              title: s.title,
+              artist: s.artistId,
+              album: s.albumId,
+              duration: s.duration.value,
+              artworkUrl: s.artwork.url,
+              source: s.sourceId,
+              lyrics: null,
+            ));
+          }
+        } catch (_) {}
+      }());
+    }
+
+    // 3. Same Genre / Trending Genre
+    searchFutures.add(() async {
+      try {
+        final res = await adapter.search('$detectedGenre hits');
+        for (final s in res.songs) {
+          candidates.add(model.Song(
+            id: s.id,
+            title: s.title,
+            artist: s.artistId,
+            album: s.albumId,
+            duration: s.duration.value,
+            artworkUrl: s.artwork.url,
+            source: s.sourceId,
+            lyrics: null,
+          ));
+        }
+      } catch (_) {}
+    }());
+
+    searchFutures.add(() async {
+      try {
+        final res = await adapter.search('trending $detectedGenre');
+        for (final s in res.songs) {
+          candidates.add(model.Song(
+            id: s.id,
+            title: s.title,
+            artist: s.artistId,
+            album: s.albumId,
+            duration: s.duration.value,
+            artworkUrl: s.artwork.url,
+            source: s.sourceId,
+            lyrics: null,
+          ));
+        }
+      } catch (_) {}
+    }());
+
+    await Future.wait(searchFutures).timeout(const Duration(seconds: 4), onTimeout: () => []);
+
+    final List<MapEntry<model.Song, Map<String, dynamic>>> scoredCandidates = [];
+
+    for (final song in candidates) {
+      if (seenIds.contains(song.id)) continue;
+      
+      String? rejectReason;
+      final isValid = isValidMusicCandidate(
+        song.title,
+        song.artist,
+        song.duration,
+        onReject: (reason) => rejectReason = reason,
+      );
+
+      if (!isValid) {
+        continue;
+      }
+
+      if (isAlternativeVersion(song.title, seedSong.title)) {
+        continue;
+      }
+
+      // 1. Same Artist (40% weight -> max score 40.0)
+      double artistScore = 0.0;
+      if (song.artist.toLowerCase().trim() == seedSong.artist.toLowerCase().trim()) {
+        artistScore = 40.0;
+      }
+
+      // 2. Same Genre (25% weight -> max score 25.0)
+      double genreScore = 0.0;
+      final songGenre = detectGenre(song.artist, song.title);
+      if (songGenre.toLowerCase() == detectedGenre.toLowerCase()) {
+        genreScore = 25.0;
+      } else if ((songGenre == 'Punjabi' && detectedGenre == 'Pop') || (songGenre == 'Pop' && detectedGenre == 'Punjabi')) {
+        genreScore = 12.5;
+      }
+
+      // 3. Similar Artists (15% weight -> max score 15.0)
+      double similarArtistScore = 0.0;
+      if (similarArtists.any((a) => song.artist.toLowerCase().contains(a.toLowerCase()) || a.toLowerCase().contains(song.artist.toLowerCase()))) {
+        similarArtistScore = 15.0;
+      }
+
+      // 4. Personal History (10% weight -> max score 10.0)
+      double historyScore = 0.0;
+      final isLiked = likedSongs.any((s) => s.id == song.id);
+      final isDownloaded = downloadedSongs.any((s) => s.id == song.id);
+      final playCount = recentlyPlayedSongs.where((s) => s.id == song.id).length;
+
+      if (isLiked) historyScore += 4.0;
+      if (isDownloaded) historyScore += 3.0;
+      if (playCount > 0) historyScore += 2.0;
+      if (dna.topArtists.contains(song.artist)) historyScore += 1.0;
+      if (historyScore > 10.0) historyScore = 10.0;
+
+      // 5. Trending (10% weight -> max score 10.0)
+      double trendingScore = 0.0;
+      if (dna.favoriteGenres.contains(songGenre)) {
+        trendingScore = 10.0;
+      } else {
+        trendingScore = 5.0;
+      }
+
+      final double finalScore = artistScore + genreScore + similarArtistScore + historyScore + trendingScore;
+
+      scoredCandidates.add(MapEntry(song, {
+        'song': song,
+        'finalScore': finalScore,
+        'artistScore': artistScore,
+        'genreScore': genreScore,
+        'similarArtistScore': similarArtistScore,
+        'historyScore': historyScore,
+        'trendingScore': trendingScore,
+        'detectedGenre': songGenre,
+        'reason': _buildReason(artistScore, genreScore, similarArtistScore, historyScore, seedSong.artist, songGenre),
+      }));
+      seenIds.add(song.id);
+    }
+
+    scoredCandidates.sort((a, b) => (b.value['finalScore'] as double).compareTo(a.value['finalScore'] as double));
+
+    final Map<String, int> artistCounts = {};
+    final List<model.Song> finalSmartQueue = [];
+
+    // ignore: avoid_print
+    print('=== SMART QUEUE GENERATION DIAGNOSTICS ===');
+    // ignore: avoid_print
+    print('- Seed Song: "${seedSong.title}" by ${seedSong.artist}');
+    // ignore: avoid_print
+    print('- Seed Artist: ${seedSong.artist}');
+    // ignore: avoid_print
+    print('- Seed Genre: $detectedGenre');
+    // ignore: avoid_print
+    print('- Total Candidates Evaluated: ${scoredCandidates.length}');
+    // ignore: avoid_print
+    print('-------------------------------------------');
+
+    for (final entry in scoredCandidates) {
+      final song = entry.key;
+      final metrics = entry.value;
+      final artist = song.artist;
+      final count = artistCounts[artist] ?? 0;
+
+      if (count < 2) {
+        finalSmartQueue.add(song);
+        artistCounts[artist] = count + 1;
+
+        // ignore: avoid_print
+        print(' [Smart Queue] SELECTED Candidate:');
+        // ignore: avoid_print
+        print('   - Title: "${song.title}"');
+        // ignore: avoid_print
+        print('   - Artist: "${song.artist}"');
+        // ignore: avoid_print
+        print('   - Genre: "${metrics['detectedGenre']}"');
+        // ignore: avoid_print
+        print('   - Score Breakdown:');
+        // ignore: avoid_print
+        print('     * Artist Score: ${metrics['artistScore']} / 40.0');
+        // ignore: avoid_print
+        print('     * Genre Score: ${metrics['genreScore']} / 25.0');
+        // ignore: avoid_print
+        print('     * Similar Artist: ${metrics['similarArtistScore']} / 15.0');
+        // ignore: avoid_print
+        print('     * History: ${metrics['historyScore']} / 10.0');
+        // ignore: avoid_print
+        print('     * Trending: ${metrics['trendingScore']} / 10.0');
+        // ignore: avoid_print
+        print('     * FINAL RANKING: ${metrics['finalScore']} / 100.0');
+        // ignore: avoid_print
+        print('   - Reason: ${metrics['reason']}');
+        // ignore: avoid_print
+        print('-------------------------------------------');
+      }
+    }
+
+    return finalSmartQueue;
+  }
 }

@@ -79,6 +79,18 @@ class TasteSettingsPage extends ConsumerWidget {
                     },
                     colors: colors,
                   ),
+                  const Divider(height: 1, color: Colors.white10),
+                  _buildSwitchTile(
+                    context: context,
+                    icon: Icons.queue_music_outlined,
+                    title: 'Smart Queue (Autoplay)',
+                    subtitle: 'Autoplay endless recommended tracks based on currently playing song',
+                    value: state.isSmartQueueEnabled,
+                    onChanged: (val) {
+                      notifier.setSmartQueueEnabled(val);
+                    },
+                    colors: colors,
+                  ),
                 ],
               ),
             ),

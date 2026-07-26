@@ -1809,7 +1809,10 @@ class _ImmersiveActionRow extends ConsumerWidget {
             color: colors.textSecondary,
             iconSize: 24.0,
             tooltip: 'Queue',
-            onPressed: () => context.push('/queue'),
+            onPressed: () {
+              ref.read(immersiveModeProvider.notifier).state = false;
+              context.push('/queue');
+            },
           ),
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
