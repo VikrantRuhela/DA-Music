@@ -74,5 +74,36 @@ void main() {
         isFalse,
       );
     });
+
+    test('Compilation Video and Title Duplication Filtering tests', () {
+      // Compilation videos check
+      expect(
+        RecommendationEngine.isValidMusicCandidate(
+          'Best of Punjabi Songs 2026 Compilation Jukebox',
+          'T-Series',
+          const Duration(minutes: 5),
+        ),
+        isFalse,
+      );
+
+      expect(
+        RecommendationEngine.isValidMusicCandidate(
+          'Punjabi Nonstop Mashup Mixtape',
+          'Speed Records',
+          const Duration(minutes: 6),
+        ),
+        isFalse,
+      );
+
+      // Standard song check
+      expect(
+        RecommendationEngine.isValidMusicCandidate(
+          'At Peace',
+          'Karan Aujla',
+          const Duration(minutes: 3),
+        ),
+        isTrue,
+      );
+    });
   });
 }

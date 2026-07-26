@@ -28,7 +28,7 @@ class RecommendationEngine {
       return false;
     }
 
-    // 2. Negative keyword check for non-music video content
+    // 2. Negative keyword check for non-music video content and multi-song compilations
     final negativeKeywords = [
       'vlog', 'tutorial', 'gameplay', 'shorts', 'meme', 'funny', 'reaction',
       'commentary', 'ceiling', 'podcast', 'unboxing', 'lesson', 'how to',
@@ -37,7 +37,10 @@ class RecommendationEngine {
       'interview', 'talk show', 'gaming', 'stream', 'live stream', 'livestream',
       'test', 'commercial', 'haul', 'asmr', 'meditation', 'sleep music',
       'relaxing sounds', 'rain sounds', 'white noise', 'study beats compilation',
-      '10 hours', '1 hour', 'loop', 'extended version', 'slowed + reverb compilation'
+      '10 hours', '1 hour', 'loop', 'extended version', 'slowed + reverb compilation',
+      'mashup', 'mixtape', 'jukebox', 'nonstop', 'audio jukebox', 'album zip',
+      'full audio', 'songs collection', 'all songs', 'top 10', 'top 20', 'top 50',
+      'greatest hits', 'full album', 'best of'
     ];
 
     for (final kw in negativeKeywords) {
@@ -956,10 +959,18 @@ class RecommendationEngine {
     await Future.wait(searchFutures).timeout(const Duration(seconds: 4), onTimeout: () => []);
 
     final List<MapEntry<model.Song, Map<String, dynamic>>> scoredCandidates = [];
+    final Set<String> seenNormalizedTitles = {
+      _normalizeTitle(seedSong.title)
+    };
 
     for (final song in candidates) {
       if (seenIds.contains(song.id)) continue;
       
+      final normalizedTitle = _normalizeTitle(song.title);
+      if (seenNormalizedTitles.contains(normalizedTitle)) {
+        continue;
+      }
+
       String? rejectReason;
       final isValid = isValidMusicCandidate(
         song.title,
@@ -985,19 +996,19 @@ class RecommendationEngine {
         continue;
       }
 
-      // 1. Same Artist (40% weight -> max score 40.0)
-      double artistScore = 0.0;
-      if (song.artist.toLowerCase().trim() == seedSong.artist.toLowerCase().trim()) {
-        artistScore = 40.0;
-      }
-
-      // 2. Same Genre (25% weight -> max score 25.0)
+      // 1. Same Genre (40% weight -> max score 40.0)
       double genreScore = 0.0;
       final songGenre = detectGenre(song.artist, song.title);
       if (songGenre.toLowerCase() == detectedGenre.toLowerCase()) {
-        genreScore = 25.0;
+        genreScore = 40.0;
       } else if ((songGenre == 'Punjabi' && detectedGenre == 'Pop') || (songGenre == 'Pop' && detectedGenre == 'Punjabi')) {
-        genreScore = 12.5;
+        genreScore = 20.0;
+      }
+
+      // 2. Same Artist (25% weight -> max score 25.0)
+      double artistScore = 0.0;
+      if (song.artist.toLowerCase().trim() == seedSong.artist.toLowerCase().trim()) {
+        artistScore = 25.0;
       }
 
       // 3. Similar Artists (15% weight -> max score 15.0)
@@ -1040,6 +1051,7 @@ class RecommendationEngine {
         'reason': _buildReason(artistScore, genreScore, similarArtistScore, historyScore, seedSong.artist, songGenre),
       }));
       seenIds.add(song.id);
+      seenNormalizedTitles.add(normalizedTitle);
     }
 
     scoredCandidates.sort((a, b) => (b.value['finalScore'] as double).compareTo(a.value['finalScore'] as double));
