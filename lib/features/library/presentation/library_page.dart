@@ -13,6 +13,7 @@ import '../../../shared/models/music_models.dart';
 import '../../local_library/presentation/local_library_tab.dart';
 import '../../../shared/widgets/da_image.dart';
 import '../../../core/services/logger_service.dart';
+import '../../../core/services/playback_controller.dart';
 
 final playlistDetailProvider = FutureProvider.family<Playlist, String>((ref, id) async {
   final sourceManager = ref.read(sourceManagerProvider);
@@ -372,6 +373,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                             songs,
                             startIndex: index,
                             autoPlay: true,
+                            queueMode: QueueMode.playlist,
                           );
                     },
                     leading: ClipRRect(
@@ -532,6 +534,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     songs,
                     startIndex: index,
                     autoPlay: true,
+                    queueMode: QueueMode.playlist,
                   );
             },
             leading: ClipRRect(
@@ -787,6 +790,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                             downloadedSongs,
                             startIndex: index,
                             autoPlay: true,
+                            queueMode: QueueMode.playlist,
                           );
                     },
                     leading: ClipRRect(

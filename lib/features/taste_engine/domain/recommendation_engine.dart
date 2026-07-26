@@ -5,6 +5,7 @@ import '../../../../domain/entities/album.dart' as domain;
 import '../../../../domain/entities/playlist.dart' as domain;
 import '../../../../domain/entities/value_objects.dart' as domain;
 import 'music_dna.dart';
+import '../../../../core/services/youtube_music_adapter.dart';
 
 class RecommendationEngine {
   static bool isValidMusicCandidate(
@@ -731,6 +732,47 @@ class RecommendationEngine {
     'queen': ['beatles', 'pink floyd', 'led zeppelin', 'elton john', 'david bowie'],
   };
 
+  static const Map<String, List<String>> verifiedArtistChannelIds = {
+    'shubh': [
+      'UCtGbExCzlwmsyWKpxLnyEww', // Official Artist Channel (OAC)
+      'UCFzC-gq9Z_xG4Vz_d9J5QSw', // Topic channel
+    ],
+    'karan aujla': [
+      'UC7G2-92nQn-C_3C0_02j1-w',
+      'UCxH0M1t0-NqYFz_y2n6B27w', // Topic
+    ],
+  };
+
+  static const Map<String, List<String>> nonMusicChannelIds = {
+    'shubh': [
+      'UCs38d2LpL2hY3_qM9g3vBdw',
+      'UC8hS21S3N_R7T3X6J8kQxrw',
+    ],
+  };
+
+  static bool isOfficialMusicChannel(String? channelId, String channelTitle, String artist) {
+    final titleLower = channelTitle.toLowerCase();
+    if (titleLower.endsWith(' - topic') || titleLower.contains('vevo') || titleLower.contains('official')) {
+      return true;
+    }
+    if (channelId != null) {
+      final artistLower = artist.toLowerCase().trim();
+      final verifiedIds = verifiedArtistChannelIds[artistLower];
+      if (verifiedIds != null && verifiedIds.contains(channelId)) {
+        return true;
+      }
+      final blacklistIds = nonMusicChannelIds[artistLower];
+      if (blacklistIds != null && blacklistIds.contains(channelId)) {
+        return false;
+      }
+    }
+    final ignoreWords = ['gaming', 'vlogs', 'vlog', 'plays', 'streamer', 'clips', 'shorts', 'reaction', 'comedy', 'funny'];
+    for (final word in ignoreWords) {
+      if (titleLower.contains(word)) return false;
+    }
+    return true;
+  }
+
   static String detectGenre(String artist, String songTitle) {
     final artistLower = artist.toLowerCase();
     final titleLower = songTitle.toLowerCase();
@@ -931,6 +973,15 @@ class RecommendationEngine {
       }
 
       if (isAlternativeVersion(song.title, seedSong.title)) {
+        continue;
+      }
+
+      final candidateChannelId = YouTubeMusicAdapter.videoChannelIdMap[song.id];
+      final candidateAuthor = YouTubeMusicAdapter.videoAuthorMap[song.id] ?? song.artist;
+      final isOfficial = isOfficialMusicChannel(candidateChannelId, candidateAuthor, seedSong.artist);
+      if (!isOfficial) {
+        // ignore: avoid_print
+        print(' [Smart Queue] REJECTED Candidate (Identity Resolution): "${song.title}" | Author: "$candidateAuthor" | Channel ID: $candidateChannelId');
         continue;
       }
 

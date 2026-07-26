@@ -55,5 +55,24 @@ void main() {
       final similarArtistsList = RecommendationEngine.similarArtistsMap[artistLower] ?? [];
       expect(similarArtistsList, contains('ap dhillon'));
     });
+
+    test('Official Artist Channel / Identity Resolution tests', () {
+      final streamerChannelId = 'UCs38d2LpL2hY3_qM9g3vBdw';
+      expect(
+        RecommendationEngine.isOfficialMusicChannel(streamerChannelId, 'Shubh Gaming', 'Shubh'),
+        isFalse,
+      );
+
+      final officialTopicChannelId = 'UCFzC-gq9Z_xG4Vz_d9J5QSw';
+      expect(
+        RecommendationEngine.isOfficialMusicChannel(officialTopicChannelId, 'Shubh - Topic', 'Shubh'),
+        isTrue,
+      );
+
+      expect(
+        RecommendationEngine.isOfficialMusicChannel(null, 'Shubh Plays Roblox', 'Shubh'),
+        isFalse,
+      );
+    });
   });
 }

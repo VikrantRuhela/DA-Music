@@ -6,6 +6,7 @@ import '../../../shared/providers/player_providers.dart';
 import '../../../shared/providers/library_providers.dart';
 import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/widgets/da_image.dart';
+import '../../../core/services/playback_controller.dart';
 
 class FavoritesPage extends ConsumerWidget {
   const FavoritesPage({super.key});
@@ -59,6 +60,7 @@ class FavoritesPage extends ConsumerWidget {
                             favorites,
                             startIndex: index,
                             autoPlay: true,
+                            queueMode: QueueMode.playlist,
                           );
                     },
                     leading: ClipRRect(

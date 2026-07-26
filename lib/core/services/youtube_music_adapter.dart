@@ -32,6 +32,9 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
 
   yt.YoutubeExplode get ytClientForTesting => _ytClient;
 
+  static final Map<String, String> videoChannelIdMap = {};
+  static final Map<String, String> videoAuthorMap = {};
+
   // Caches for artist details
   final Map<String, List<Song>> _artistSongs = {};
   final Map<String, List<Album>> _artistAlbums = {};
@@ -130,6 +133,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
             rawTitle: result.title,
             rawArtist: result.author,
             duration: _parseDuration(result.duration),
+            channelId: result.channelId,
           );
           _songCache[song.id] = song;
           songs.add(song);
@@ -764,6 +768,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
                     rawArtist: trackArtist,
                     duration: _parseDurationString(durationStr),
                     albumId: cleanAlbum,
+                    channelId: id,
                   );
                   songs.add(song);
                   _songCache[song.id] = song;
@@ -931,6 +936,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         rawTitle: video.title,
         rawArtist: video.author,
         duration: video.duration ?? const Duration(minutes: 3),
+        channelId: video.channelId.value,
       );
       _songCache[id] = song;
       return song;
@@ -1473,12 +1479,19 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
               continue;
             }
 
+            final runs = (videoRenderer['longBylineText'] ?? videoRenderer['shortBylineText'])?['runs'] as List?;
+            String? rendererChannelId;
+            if (runs != null && runs.isNotEmpty) {
+              rendererChannelId = runs[0]['navigationEndpoint']?['browseEndpoint']?['browseId'] as String?;
+            }
+
             final song = _mapToSong(
               id: videoId,
               rawTitle: trackTitle,
               rawArtist: trackArtist,
               duration: _parseDurationString(durationStr),
               albumId: 'Radio Mix',
+              channelId: rendererChannelId,
             );
             songs.add(song);
             _songCache[song.id] = song;
@@ -1806,12 +1819,14 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
             cleanAlbum = _extractAlbumNameFromFlexColumns(item) ?? 'Single';
           }
 
+          final rendererChannelId = _extractChannelIdFromListItem(item);
           final song = _mapToSong(
             id: videoId,
             rawTitle: trackTitle,
             rawArtist: trackArtist,
             duration: _parseDurationString(durationStr),
             albumId: cleanAlbum,
+            channelId: rendererChannelId,
           );
           songs.add(song);
           _songCache[song.id] = song;
@@ -1995,6 +2010,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
           rawArtist: trackArtist,
           duration: v.duration ?? const Duration(minutes: 3),
           albumId: 'Single',
+          channelId: v.channelId.value,
         );
       }).toList();
 
@@ -2045,13 +2061,37 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     return (title: title, artist: artist);
   }
 
+  String? _extractChannelIdFromListItem(Map<String, dynamic> item) {
+    final flexColumns = item['flexColumns'] as List?;
+    if (flexColumns == null) return null;
+    for (final column in flexColumns) {
+      final runs = column['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
+      if (runs == null) continue;
+      for (final run in runs) {
+        final pageType = run['navigationEndpoint']?['browseEndpoint']?['browseEndpointContextSupportedConfigs']?['browseEndpointContextMusicConfig']?['pageType'] as String?;
+        if (pageType == 'MUSIC_PAGE_TYPE_ARTIST') {
+          final browseId = run['navigationEndpoint']?['browseEndpoint']?['browseId'] as String?;
+          if (browseId != null && browseId.isNotEmpty) {
+            return browseId;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   Song _mapToSong({
     required String id,
     required String rawTitle,
     required String rawArtist,
     required Duration duration,
     String albumId = 'yt_album_unknown',
+    String? channelId,
   }) {
+    if (channelId != null) {
+      videoChannelIdMap[id] = channelId;
+    }
+    videoAuthorMap[id] = rawArtist;
     final cleaned = _cleanTitleAndArtist(rawTitle, rawArtist);
     return Song(
       id: id,

@@ -11,6 +11,7 @@ import '../../../../shared/models/music_models.dart' as shared;
 import '../../../../shared/utils/artist_navigation.dart';
 import '../../../../shared/utils/song_options.dart';
 import '../../../../shared/widgets/da_image.dart';
+import '../../../../core/services/playback_controller.dart';
 
 final albumDetailsProvider = FutureProvider.family<({Album album, List<Song> songs}), String>((ref, albumId) async {
   final albumRepo = ref.watch(albumRepositoryProvider);
@@ -144,7 +145,7 @@ class AlbumPage extends ConsumerWidget {
                               source: s.sourceId,
                               lyrics: null,
                             )).toList();
-                            ref.read(playbackControllerProvider).setQueue(modelSongs, autoPlay: true);
+                            ref.read(playbackControllerProvider).setQueue(modelSongs, autoPlay: true, queueMode: QueueMode.album);
                           },
                           icon: const Icon(Icons.play_arrow),
                           label: const Text('Play Album'),
@@ -184,7 +185,7 @@ class AlbumPage extends ConsumerWidget {
                         source: s.sourceId,
                         lyrics: null,
                       )).toList();
-                      ref.read(playbackControllerProvider).setQueue(modelSongs, startIndex: index, autoPlay: true);
+                      ref.read(playbackControllerProvider).setQueue(modelSongs, startIndex: index, autoPlay: true, queueMode: QueueMode.album);
                     },
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(DATokens.radiusSmall),

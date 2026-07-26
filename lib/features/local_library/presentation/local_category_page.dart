@@ -9,6 +9,7 @@ import '../../../shared/widgets/da_card.dart';
 import '../../../shared/widgets/da_image.dart';
 import '../../../shared/utils/song_options.dart';
 import '../data/local_library_repository.dart';
+import '../../../core/services/playback_controller.dart';
 
 enum LocalCategory {
   songs,
@@ -163,7 +164,7 @@ class LocalCategoryPage extends ConsumerWidget {
           child: DACard(
             child: ListTile(
               onTap: () {
-                ref.read(playbackControllerProvider).setQueue(songs, startIndex: idx, autoPlay: true);
+                ref.read(playbackControllerProvider).setQueue(songs, startIndex: idx, autoPlay: true, queueMode: QueueMode.playlist);
               },
               contentPadding: const EdgeInsets.symmetric(horizontal: DATokens.spacingMedium, vertical: 4),
               leading: ClipRRect(

@@ -21,6 +21,8 @@ import '../../features/taste_engine/domain/recommendation_engine.dart';
 import '../../data/repositories/download_repository.dart';
 import '../../shared/providers/library_providers.dart';
 
+enum QueueMode { smart, playlist, album }
+
 /// Central playback controller orchestrating queue, repeat modes and state transitions.
 class PlaybackController extends ChangeNotifier {
   final PlaybackEngine _playbackEngine;
@@ -47,6 +49,7 @@ class PlaybackController extends ChangeNotifier {
   final Ref? _ref;
   bool _isGeneratingSmartQueue = false;
   bool _isAppendingAutoplay = false;
+  QueueMode _currentQueueMode = QueueMode.smart;
 
   PlaybackController(
     this._playbackEngine, [
@@ -59,11 +62,14 @@ class PlaybackController extends ChangeNotifier {
     _init();
   }
 
+  QueueMode get currentQueueMode => _currentQueueMode;
+
   bool get _isSmartQueueActive {
     if (_ref == null) return true;
     final state = _ref!.read(tasteEngineNotifierProvider);
     if (!state.isSmartQueueEnabled) return false;
     if (_settings.repeatMode != RepeatMode.off) return false;
+    if (_currentQueueMode == QueueMode.playlist || _currentQueueMode == QueueMode.album) return false;
     return true;
   }
 
@@ -159,7 +165,13 @@ class PlaybackController extends ChangeNotifier {
   }
 
   // Actions
-  Future<void> setQueue(List<Song> songs, {int startIndex = 0, bool autoPlay = true}) async {
+  Future<void> setQueue(
+    List<Song> songs, {
+    int startIndex = 0,
+    bool autoPlay = true,
+    QueueMode queueMode = QueueMode.smart,
+  }) async {
+    _currentQueueMode = queueMode;
     final copiedSongs = List<Song>.from(songs);
     
     if (_isSmartQueueActive && copiedSongs.isNotEmpty) {

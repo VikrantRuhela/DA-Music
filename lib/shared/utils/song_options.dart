@@ -11,6 +11,7 @@ import 'artist_navigation.dart';
 import '../widgets/more_options/menu_action.dart';
 import '../widgets/more_options/more_options_menu.dart';
 import '../widgets/more_options/song_info_sheet.dart';
+import '../../core/services/playback_controller.dart';
 
 Rect _getWidgetBounds(BuildContext context) {
   try {
@@ -224,7 +225,7 @@ void showAlbumOptionsMenu(BuildContext context, WidgetRef ref, Album album) {
       icon: Icons.play_arrow,
       onTap: () {
         if (album.songs.isNotEmpty) {
-          ref.read(playbackControllerProvider).setQueue(album.songs, startIndex: 0);
+          ref.read(playbackControllerProvider).setQueue(album.songs, startIndex: 0, queueMode: QueueMode.album);
         }
       },
     ),
@@ -234,7 +235,7 @@ void showAlbumOptionsMenu(BuildContext context, WidgetRef ref, Album album) {
       onTap: () {
         if (album.songs.isNotEmpty) {
           final shuffled = List<Song>.from(album.songs)..shuffle();
-          ref.read(playbackControllerProvider).setQueue(shuffled, startIndex: 0);
+          ref.read(playbackControllerProvider).setQueue(shuffled, startIndex: 0, queueMode: QueueMode.album);
         }
       },
     ),
@@ -287,7 +288,7 @@ void showPlaylistOptionsMenu(BuildContext context, WidgetRef ref, Playlist playl
       icon: Icons.play_arrow,
       onTap: () {
         if (playlist.songs.isNotEmpty) {
-          ref.read(playbackControllerProvider).setQueue(playlist.songs, startIndex: 0);
+          ref.read(playbackControllerProvider).setQueue(playlist.songs, startIndex: 0, queueMode: QueueMode.playlist);
         }
       },
     ),
@@ -297,7 +298,7 @@ void showPlaylistOptionsMenu(BuildContext context, WidgetRef ref, Playlist playl
       onTap: () {
         if (playlist.songs.isNotEmpty) {
           final shuffled = List<Song>.from(playlist.songs)..shuffle();
-          ref.read(playbackControllerProvider).setQueue(shuffled, startIndex: 0);
+          ref.read(playbackControllerProvider).setQueue(shuffled, startIndex: 0, queueMode: QueueMode.playlist);
         }
       },
     ),
