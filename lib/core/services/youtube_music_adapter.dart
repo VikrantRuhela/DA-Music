@@ -112,6 +112,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   Future<SearchResult> search(String query) async {
     _checkInitialized();
     DALogger.info('YouTubeMusicAdapter: Searching for "$query"');
+    DALogger.info('[GUEST RECOMMENDATIONS] Recommendation API request: search for "$query"');
 
     try {
       final results = await _ytClient.search.searchContent(query).timeout(const Duration(seconds: 10));
@@ -160,15 +161,20 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         }
       }
 
-      return SearchResult(
+      final res = SearchResult(
         songs: songs,
         albums: albums,
         artists: artists,
         playlists: playlists,
         topResult: songs.isNotEmpty ? songs.first : null,
       );
+
+      final totalItems = songs.length + albums.length + playlists.length;
+      DALogger.info('[GUEST RECOMMENDATIONS] API response count: $totalItems items (songs: ${songs.length}, playlists: ${playlists.length})');
+      return res;
     } catch (e, stack) {
       DALogger.error('YouTubeMusicAdapter: Search failed for "$query"', e, stack);
+      DALogger.error('[GUEST RECOMMENDATIONS] API request failed for query "$query"', e, stack);
       throw SourceException('Search request failed: $e', e.toString());
     }
   }
@@ -185,6 +191,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       request.headers.set('Content-Type', 'application/json');
       request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
+      final gl = await _getGuestRegionCode();
       final payload = {
         'query': query,
         'context': {
@@ -192,7 +199,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
             'clientName': 'WEB_REMIX',
             'clientVersion': '1.20260707.01.00',
             'hl': 'en',
-            'gl': 'US',
+            'gl': gl,
           }
         },
         'params': 'EgWKAQIgAWoKEAkQChAFEAMQBA%3D%3D' // Restrict search results to Artists
@@ -263,6 +270,11 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     
     try {
       final prefs = await SharedPreferences.getInstance();
+      final isGuest = prefs.getBool('ytm_guest_mode') ?? false;
+      if (isGuest) {
+        return headers; // Return generic headers without cookies or auth tokens
+      }
+
       String? cookies = prefs.getString('ytm_cookies');
       if (cookies == null || cookies.trim().isEmpty) {
         cookies = await SecureCredentialStore().readCookies();
@@ -289,6 +301,31 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     return headers;
   }
 
+  Future<String> _getGuestRegionCode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final region = prefs.getString('ytm_guest_region') ?? 'United States';
+      switch (region) {
+        case 'India':
+          return 'IN';
+        case 'United Kingdom':
+          return 'GB';
+        case 'Canada':
+          return 'CA';
+        case 'Australia':
+          return 'AU';
+        case 'Japan':
+          return 'JP';
+        case 'South Korea':
+          return 'KR';
+        default:
+          return 'US';
+      }
+    } catch (_) {
+      return 'US';
+    }
+  }
+
   Duration _parseDurationString(String text) {
     if (text.isEmpty) return const Duration(minutes: 3);
     final parts = text.split(':');
@@ -312,6 +349,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
 
     try {
       final headers = await _getHomeHeaders();
+      final gl = await _getGuestRegionCode();
       
       print('[HOME] Sending request');
       final response = await http.post(
@@ -323,7 +361,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
               "clientName": "WEB_REMIX",
               "clientVersion": "1.20260304.03.00",
               "hl": "en",
-              "gl": "US"
+              "gl": gl
             }
           },
           "browseId": "FEmusic_home"
@@ -1241,10 +1279,8 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       final audioStreamInfo = audioStreams.withHighestBitrate();
       final streamUrl = audioStreamInfo.url.toString();
 
-      final isPlayable = await _isStreamPlayable(streamUrl);
-      if (!isPlayable) {
-        throw Exception('Stream URL returned 403 Forbidden or is unplayable.');
-      }
+      // Bypassed synchronous _isStreamPlayable pre-flight check to enable instant stream URL resolution.
+      // Any unplayable/forbidden stream URLs will be caught and resolved dynamically by the audio player.
 
       return AudioStream(
         id: id,
@@ -1805,7 +1841,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
           
           final itemThumbs = (item['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
                               item['thumbnail']?['thumbnails']) as List?;
-          final thumbUrl = itemThumbs != null && itemThumbs.isNotEmpty ? itemThumbs[0]['url'] as String : coverUrl;
+          final thumbUrl = itemThumbs != null && itemThumbs.isNotEmpty ? itemThumbs.last['url'] as String : coverUrl;
 
           final cached = _songCache[videoId];
           if (cached != null) {
@@ -2049,8 +2085,20 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     final splitMatch = RegExp(r'^(.+?)\s*-\s*(.+)$');
     final match = splitMatch.firstMatch(title);
     if (match != null) {
-      artist = match.group(1)!.trim();
-      title = match.group(2)!.trim();
+      final part1 = match.group(1)!.trim();
+      final part2 = match.group(2)!.trim();
+      
+      final artistLower = rawArtist.toLowerCase().trim();
+      // If the second part contains the rawArtist, then Part 1 is the title and Part 2 is the artist!
+      if (part2.toLowerCase().contains(artistLower) || 
+          artistLower.contains(part2.toLowerCase()) ||
+          artistLower.replaceAll(RegExp(r'\s+'), '').contains(part2.toLowerCase().replaceAll(RegExp(r'\s+'), ''))) {
+        title = part1;
+        artist = part2;
+      } else {
+        artist = part1;
+        title = part2;
+      }
     }
 
     // Clean artist if it contains VEVO or Topic suffixes

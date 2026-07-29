@@ -132,8 +132,9 @@ class StreamResolver {
     try {
       final raw = await _sourceManager.getAudioStream(trackId);
 
+      final artworkUrlStr = lastResolvedSong?.artwork.url ?? '';
       final resolvedUrl = _proxy != null && _proxy.port > 0
-          ? 'http://127.0.0.1:${_proxy.port}/stream?url=${Uri.encodeComponent(raw.streamUrl)}&trackId=${Uri.encodeComponent(trackId)}'
+          ? 'http://127.0.0.1:${_proxy.port}/stream?url=${Uri.encodeComponent(raw.streamUrl)}&trackId=${Uri.encodeComponent(trackId)}&artworkUrl=${Uri.encodeComponent(artworkUrlStr)}'
           : raw.streamUrl;
 
       stream = AudioStream(
@@ -156,6 +157,9 @@ class StreamResolver {
 
       // Cache it
       _streamCache[trackId] = stream.copyWith(isCached: true);
+      if (_streamCache.length > 30) {
+        _streamCache.remove(_streamCache.keys.first);
+      }
 
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       DALogger.info('StreamResolver: Resolved stream in ${duration}ms');

@@ -11,6 +11,7 @@ import '../../../../../shared/models/playback_state.dart';
 import '../../../../../shared/models/music_models.dart';
 import '../../../../../shared/utils/song_options.dart';
 import '../../../../../shared/widgets/da_image.dart';
+import '../../../../../core/services/device_memory_manager.dart';
 import 'immersive_player.dart';
 
 class _RoundedTrackShape extends SliderTrackShape {
@@ -218,6 +219,10 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
   Widget build(BuildContext context) {
     final currentSong = ref.watch(currentSongProvider);
     if (currentSong == null) {
+      _controller.value = 0.0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(immersiveModeProvider.notifier).state = false;
+      });
       return const SizedBox.shrink();
     }
     final bool isYoutubeUpload = currentSong.source == 'youtube' ||
@@ -261,60 +266,67 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
 
     final codec = _getCodec(currentSong);
     final artworkUrl = currentSong.artworkUrl;
+    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
 
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        final t = _animation.value;
-        if (t == 0.0 && !isImmersive) {
-          return _buildMiniPlayerLayout(context, currentSong, colors, typography, isPlaying, progress);
+    return PopScope(
+      canPop: !isImmersive,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && isImmersive) {
+          _controller.animateTo(0.0, duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic).then((_) {
+            ref.read(immersiveModeProvider.notifier).state = false;
+          });
         }
+      },
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          final t = _animation.value;
+          if (t == 0.0 && !isImmersive) {
+            return _buildMiniPlayerLayout(context, currentSong, colors, typography, isPlaying, progress);
+          }
 
-        final double screenHeight = MediaQuery.of(context).size.height;
-        final double screenWidth = MediaQuery.of(context).size.width;
+          final double screenHeight = MediaQuery.of(context).size.height;
+          final double screenWidth = MediaQuery.of(context).size.width;
 
-        final double bottomPadding = MediaQuery.of(context).padding.bottom;
-        final double bottom = (1.0 - t) * (82.0 + bottomPadding);
-        final double height = 64.0 + t * (screenHeight - 64.0 - bottom);
-        final double left = (1.0 - t) * 16.0;
-        final double right = (1.0 - t) * 16.0;
-        final double radius = (1.0 - t) * DATokens.radiusLarge;
+          final double bottomPadding = MediaQuery.of(context).padding.bottom;
+          final double bottom = (1.0 - t) * (82.0 + bottomPadding);
+          final double height = 64.0 + t * (screenHeight - 64.0 - bottom);
+          final double left = (1.0 - t) * 16.0;
+          final double right = (1.0 - t) * 16.0;
+          final double radius = (1.0 - t) * DATokens.radiusLarge;
 
-        final double miniOpacity = (1.0 - t * 5.0).clamp(0.0, 1.0);
-        final double fullOpacity = ((t - 0.2) / 0.8).clamp(0.0, 1.0);
+          final double miniOpacity = (1.0 - t * 5.0).clamp(0.0, 1.0);
+          final double fullOpacity = ((t - 0.2) / 0.8).clamp(0.0, 1.0);
 
-        final double artWidth = 40.0 + t * (screenWidth - 40.0);
-        final double artHeight = 40.0 + t * (screenHeight * 0.58 - 40.0);
-        final double artLeft = 16.0 * (1.0 - t);
-        final double artTop = 12.0 * (1.0 - t);
-        final double artRadius = 8.0 * (1.0 - t);
+          final double artWidth = 40.0 + t * (screenWidth - 40.0);
+          final double artHeight = 40.0 + t * (screenHeight * 0.58 - 40.0);
+          final double artLeft = 16.0 * (1.0 - t);
+          final double artTop = 12.0 * (1.0 - t);
+          final double artRadius = 8.0 * (1.0 - t);
 
-        return Positioned(
-          left: left,
-          right: right,
-          bottom: bottom,
-          height: height,
-          child: GestureDetector(
-            onVerticalDragUpdate: (details) {
-              final delta = details.primaryDelta ?? 0.0;
-              _controller.value -= delta / screenHeight;
-            },
-            onVerticalDragEnd: (details) {
-              final velocity = details.primaryVelocity ?? 0.0;
-              if (velocity.abs() > 300) {
-                if (velocity > 0) {
-                  ref.read(immersiveModeProvider.notifier).state = false;
+          return Positioned(
+            left: left,
+            right: right,
+            bottom: bottom,
+            height: height,
+            child: GestureDetector(
+              onVerticalDragUpdate: (details) {
+                final delta = details.primaryDelta ?? 0.0;
+                _controller.value -= delta / screenHeight;
+              },
+              onVerticalDragEnd: (details) {
+                final velocity = details.primaryVelocity ?? 0.0;
+                final shouldClose = velocity > 300 || (velocity >= -300 && _controller.value < 0.6);
+                if (shouldClose) {
+                  _controller.animateTo(0.0, duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic).then((_) {
+                    ref.read(immersiveModeProvider.notifier).state = false;
+                  });
                 } else {
-                  ref.read(immersiveModeProvider.notifier).state = true;
+                  _controller.animateTo(1.0, duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic).then((_) {
+                    ref.read(immersiveModeProvider.notifier).state = true;
+                  });
                 }
-              } else {
-                if (_controller.value > 0.5) {
-                  ref.read(immersiveModeProvider.notifier).state = true;
-                } else {
-                  ref.read(immersiveModeProvider.notifier).state = false;
-                }
-              }
-            },
+              },
             child: Container(
               decoration: BoxDecoration(
                 color: colors.background.withOpacity(0.6 + t * 0.4),
@@ -338,7 +350,10 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(radius),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+                  filter: ImageFilter.blur(
+                    sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+                    sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+                  ),
                   child: Stack(
                     children: [
                       if (t > 0.01)
@@ -360,24 +375,65 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                                     accentColor: colors.accent,
                                   ),
                                 ),
-                                // Layer 2: 40% opacity blurred artwork overlay
-                                if (artworkUrl != null && artworkUrl.isNotEmpty) ...[
-                                  Positioned.fill(
-                                    child: Opacity(
-                                      opacity: 0.40,
-                                      child: DAImage(
-                                        url: artworkUrl,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned.fill(
-                                    child: BackdropFilter(
-                                      filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
-                                      child: Container(color: Colors.transparent),
-                                    ),
-                                  ),
-                                ],
+                                 // Layer 2: Adaptive background rendering based on device capability & style
+                                 if (artworkUrl != null && artworkUrl.isNotEmpty) ...[
+                                   if (!isLowRam || (style == PlayerStyle.vinyl || style == PlayerStyle.minimal)) ...[
+                                     Positioned.fill(
+                                       child: Opacity(
+                                         opacity: 0.40,
+                                         child: DAImage(
+                                           url: artworkUrl,
+                                           fit: BoxFit.cover,
+                                         ),
+                                       ),
+                                     ),
+                                     Positioned.fill(
+                                       child: BackdropFilter(
+                                         filter: ImageFilter.blur(
+                                           sigmaX: isLowRam ? 32.0 : 40.0,
+                                           sigmaY: isLowRam ? 32.0 : 40.0,
+                                         ),
+                                         child: Container(color: Colors.transparent),
+                                       ),
+                                     ),
+                                   ] else ...[
+                                     Positioned.fill(
+                                       child: Container(
+                                         decoration: BoxDecoration(
+                                           gradient: LinearGradient(
+                                             begin: Alignment.topCenter,
+                                             end: Alignment.bottomCenter,
+                                             colors: [
+                                               colors.gradientStart.withValues(alpha: 0.8),
+                                               colors.gradientMiddle,
+                                               colors.gradientEnd,
+                                             ],
+                                           ),
+                                         ),
+                                       ),
+                                     ),
+                                     Positioned.fill(
+                                       child: ShaderMask(
+                                         shaderCallback: (rect) {
+                                           return LinearGradient(
+                                             begin: Alignment.topCenter,
+                                             end: Alignment.bottomCenter,
+                                             colors: [
+                                               Colors.black.withValues(alpha: 0.35),
+                                               Colors.transparent,
+                                             ],
+                                             stops: const [0.0, 0.7],
+                                           ).createShader(rect);
+                                         },
+                                         blendMode: BlendMode.dstIn,
+                                         child: DAImage(
+                                           url: artworkUrl,
+                                           fit: BoxFit.cover,
+                                         ),
+                                       ),
+                                     ),
+                                   ],
+                                 ],
                               ],
                             ),
                           ),
@@ -388,60 +444,56 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                           top: artTop,
                           width: artWidth,
                           height: artHeight,
-                          child: SwipeableArtwork(
-                            onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
-                            onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(artRadius),
-                              child: ShaderMask(
-                                shaderCallback: (rect) {
-                                  return const LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.white,
-                                      Colors.white,
-                                      Colors.transparent,
-                                    ],
-                                    stops: [0.0, 0.88, 1.0],
-                                  ).createShader(rect);
-                                },
-                                blendMode: BlendMode.dstIn,
-                                child: Stack(
-                                  children: [
-                                    Positioned.fill(
-                                      child: Transform.scale(
-                                        scale: isYoutubeUpload ? (1.0 + t * 0.35) : 1.0,
-                                        child: DAImage(
-                                          url: artworkUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) => Container(color: colors.surfaceCard),
-                                        ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(artRadius),
+                            child: ShaderMask(
+                              shaderCallback: (rect) {
+                                return const LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.white,
+                                    Colors.white,
+                                    Colors.transparent,
+                                  ],
+                                  stops: [0.0, 0.88, 1.0],
+                                ).createShader(rect);
+                              },
+                              blendMode: BlendMode.dstIn,
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: Transform.scale(
+                                      scale: isYoutubeUpload ? (1.0 + t * 0.35) : 1.0,
+                                      child: DAImage(
+                                        url: artworkUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => Container(color: colors.surfaceCard),
                                       ),
                                     ),
-                                    if (t > 0.01)
-                                      Positioned.fill(
-                                        child: Opacity(
-                                          opacity: fullOpacity,
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                begin: Alignment.topCenter,
-                                                end: Alignment.bottomCenter,
-                                                colors: [
-                                                  colors.background.withValues(alpha: 0.0),
-                                                  colors.background.withValues(alpha: 0.15),
-                                                  colors.background.withValues(alpha: 0.55),
-                                                  colors.background,
-                                                ],
-                                                stops: const [0.0, 0.45, 0.75, 1.0],
-                                              ),
+                                  ),
+                                  if (t > 0.01)
+                                    Positioned.fill(
+                                      child: Opacity(
+                                        opacity: fullOpacity,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topCenter,
+                                              end: Alignment.bottomCenter,
+                                              colors: [
+                                                colors.background.withValues(alpha: 0.0),
+                                                colors.background.withValues(alpha: 0.15),
+                                                colors.background.withValues(alpha: 0.55),
+                                                colors.background,
+                                              ],
+                                              stops: const [0.0, 0.45, 0.75, 1.0],
                                             ),
                                           ),
                                         ),
                                       ),
-                                  ],
-                                ),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
@@ -562,8 +614,9 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildImmersiveExpandedLayout(
     BuildContext context,
@@ -586,69 +639,73 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                currentSong.title,
-                style: typography.title.copyWith(
-                  fontSize: 24.0,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4.0),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      currentSong.artist,
-                      style: typography.body.copyWith(
-                        fontSize: 15.0,
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+          SwipeableArtwork(
+            onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
+            onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  currentSong.title,
+                  style: typography.title.copyWith(
+                    fontSize: 24.0,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
                   ),
-                  if (currentSong.album.isNotEmpty) ...[
-                    Text(
-                      ' • ',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                    ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4.0),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
                     Flexible(
                       child: Text(
-                        currentSong.album,
+                        currentSong.artist,
                         style: typography.body.copyWith(
                           fontSize: 15.0,
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: Colors.white.withValues(alpha: 0.7),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ],
-                  Text(
-                    ' • ',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                  ),
-                  Text(
-                    codec.toUpperCase(),
-                    style: typography.caption.copyWith(
-                      fontSize: 11.0,
-                      color: colors.primary,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
+                    if (currentSong.album.isNotEmpty) ...[
+                      Text(
+                        ' • ',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                      ),
+                      Flexible(
+                        child: Text(
+                          currentSong.album,
+                          style: typography.body.copyWith(
+                            fontSize: 15.0,
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                    Text(
+                      ' • ',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    Text(
+                      codec.toUpperCase(),
+                      style: typography.caption.copyWith(
+                        fontSize: 11.0,
+                        color: colors.primary,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           Column(
             mainAxisSize: MainAxisSize.min,
@@ -818,7 +875,10 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
           child: ClipRRect(
             borderRadius: BorderRadius.circular(DATokens.radiusLarge),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+              filter: ImageFilter.blur(
+                sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+                sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+              ),
               child: Stack(
                 children: [
                   Padding(

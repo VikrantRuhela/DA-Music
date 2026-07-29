@@ -10,6 +10,7 @@ import '../../../shared/providers/player_providers.dart';
 import '../../../core/services/lyrics_controller.dart';
 import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/widgets/da_image.dart';
+import '../../../core/services/device_memory_manager.dart';
 
 class AnimatedBackgroundOrbs extends StatefulWidget {
   final String artworkUrl;
@@ -157,7 +158,8 @@ class LyricLineWidget extends StatelessWidget {
               textAlign: TextAlign.center,
             );
 
-            if (blurValue > 0.05) {
+            final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+            if (!isLowRam && blurValue > 0.05) {
               textContent = ImageFiltered(
                 imageFilter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
                 child: Opacity(
@@ -381,7 +383,10 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
             ),
             Positioned.fill(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 45.0, sigmaY: 45.0),
+                filter: ImageFilter.blur(
+                  sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(45.0),
+                  sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(45.0),
+                ),
                 child: Container(
                   color: Colors.black.withValues(alpha: 0.55),
                 ),
@@ -560,7 +565,10 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
       ),
       clipBehavior: Clip.antiAlias,
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+        filter: ImageFilter.blur(
+          sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(20.0),
+          sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(20.0),
+        ),
         child: ShaderMask(
           shaderCallback: (rect) {
             return const LinearGradient(

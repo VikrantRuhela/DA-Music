@@ -8,6 +8,7 @@ import '../../../../shared/models/playback_state.dart';
 import '../../../../shared/animations/interactive_scale.dart';
 import '../../../../shared/utils/song_options.dart';
 import '../../../../shared/widgets/da_image.dart';
+import '../../../../core/services/device_memory_manager.dart';
 
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
@@ -71,7 +72,10 @@ class MiniPlayer extends ConsumerWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(DATokens.radiusLarge),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+              filter: ImageFilter.blur(
+                sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+                sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+              ),
               child: Column(
                 children: [
                   Expanded(

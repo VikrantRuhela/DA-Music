@@ -151,5 +151,12 @@ void main() {
         isTrue,
       );
     });
+
+    test('Session-Aware consistency and language check', () {
+      expect(RecommendationEngine.detectLanguage('Karan Aujla', 'Softly'), 'Punjabi');
+      expect(RecommendationEngine.detectLanguage('Arijit Singh', 'Tum Hi Ho'), 'Hindi');
+      expect(RecommendationEngine.detectLanguage('BTS', 'Dynamite'), 'Korean');
+      expect(RecommendationEngine.detectLanguage('Taylor Swift', 'Blank Space'), 'English');
+    });
   });
 }

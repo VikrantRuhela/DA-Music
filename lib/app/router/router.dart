@@ -15,6 +15,7 @@ import '../../features/album/presentation/album_page.dart';
 import '../../features/artist/presentation/artist_page.dart';
 import '../../shared/widgets/app_shell.dart';
 import '../../features/onboarding/presentation/welcome_page.dart';
+import '../../features/onboarding/presentation/guest_onboarding_page.dart';
 import '../../shared/providers/backend_providers.dart';
 
 // Global navigator key
@@ -33,13 +34,26 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isLoggedIn = sessionManager.isLoggedIn;
       final isGuestMode = sessionManager.isGuestMode;
+      final isGuestOnboardingCompleted = sessionManager.isGuestOnboardingCompleted;
       final isGoingToWelcome = state.matchedLocation == '/welcome';
+      final isGoingToOnboarding = state.matchedLocation == '/onboarding';
 
       if (!isLoggedIn && !isGuestMode) {
         return '/welcome';
       }
 
+      if (isGuestMode && !isGuestOnboardingCompleted) {
+        if (!isGoingToOnboarding) {
+          return '/onboarding';
+        }
+        return null;
+      }
+
       if (isGoingToWelcome && (isLoggedIn || isGuestMode)) {
+        return '/';
+      }
+
+      if (isGoingToOnboarding && (isLoggedIn || (isGuestMode && isGuestOnboardingCompleted))) {
         return '/';
       }
 
@@ -49,6 +63,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/welcome',
         builder: (context, state) => const WelcomePage(),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, state) => const GuestOnboardingPage(),
       ),
       ShellRoute(
         navigatorKey: shellNavigatorKey,

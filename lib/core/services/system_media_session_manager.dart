@@ -6,6 +6,7 @@ import 'playback_controller.dart';
 import '../../shared/models/music_models.dart';
 import '../../shared/models/playback_state.dart' as clean;
 import 'logger_service.dart';
+import '../../shared/providers/library_providers.dart';
 
 /// Global reference to bridge audio_service callbacks back to the controller.
 class SystemMediaSessionManager {
@@ -13,6 +14,11 @@ class SystemMediaSessionManager {
   static MyAudioHandler? _audioHandler;
   static StreamSubscription? _controllerSubscription;
   static Timer? _positionTimer;
+
+  static clean.PlaybackStatus? _lastStatus;
+  static String? _lastSongId;
+  static bool? _lastIsPlaying;
+  static bool? _lastIsBuffering;
 
   static Future<void> initialize(PlaybackController playbackController) async {
     controller = playbackController;
@@ -43,11 +49,18 @@ class SystemMediaSessionManager {
     final c = controller;
     if (c == null) return;
 
+    // Reset tracking variables on new setup
+    _lastStatus = null;
+    _lastSongId = null;
+    _lastIsPlaying = null;
+    _lastIsBuffering = null;
+
     // Listen to changes on PlaybackController
     c.addListener(_onControllerStateChanged);
     _onControllerStateChanged(); // update immediately with current state
+  }
 
-    // Set up a timer to sync play position smoothly
+  static void _startPositionTimer() {
     _positionTimer?.cancel();
     _positionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final activeController = controller;
@@ -57,10 +70,15 @@ class SystemMediaSessionManager {
       final song = activeController.currentSong;
       final isPlaying = activeController.status == clean.PlaybackStatus.playing;
 
-      if (song != null && _audioHandler != null) {
+      if (isPlaying && song != null && _audioHandler != null) {
         _audioHandler!.updatePlaybackPosition(position, isPlaying);
       }
     });
+  }
+
+  static void _stopPositionTimer() {
+    _positionTimer?.cancel();
+    _positionTimer = null;
   }
 
   static void _onControllerStateChanged() {
@@ -71,19 +89,37 @@ class SystemMediaSessionManager {
     final isPlaying = c.status == clean.PlaybackStatus.playing;
     final isBuffering = c.status == clean.PlaybackStatus.buffering;
 
-    if (song != null && _audioHandler != null) {
-      final duration = song.duration;
-      final position = c.position;
+    final songIdChanged = song?.id != _lastSongId;
+    final statusChanged = c.status != _lastStatus || isPlaying != _lastIsPlaying || isBuffering != _lastIsBuffering;
+    final isSeeking = c.isSeeking;
 
-      _audioHandler!.updateMetadata(song, duration);
-      _audioHandler!.updatePlaybackState(isPlaying, isBuffering, position);
-    } else if (_audioHandler != null) {
-      // Stopped / Idle
-      _audioHandler!.playbackState.add(_audioHandler!.playbackState.value.copyWith(
-        playing: false,
-        processingState: AudioProcessingState.idle,
-        speed: 0.0,
-      ));
+    if (songIdChanged || statusChanged || isSeeking) {
+      _lastSongId = song?.id;
+      _lastStatus = c.status;
+      _lastIsPlaying = isPlaying;
+      _lastIsBuffering = isBuffering;
+
+      if (song != null && _audioHandler != null) {
+        final duration = song.duration;
+        final position = c.position;
+
+        _audioHandler!.updateMetadata(song, duration);
+        _audioHandler!.updatePlaybackState(isPlaying, isBuffering, position);
+
+        if (isPlaying) {
+          _startPositionTimer();
+        } else {
+          _stopPositionTimer();
+        }
+      } else if (_audioHandler != null) {
+        // Stopped / Idle
+        _stopPositionTimer();
+        _audioHandler!.playbackState.add(_audioHandler!.playbackState.value.copyWith(
+          playing: false,
+          processingState: AudioProcessingState.idle,
+          speed: 0.0,
+        ));
+      }
     }
   }
 
@@ -197,7 +233,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       controls: [
         MediaControl.skipToPrevious,
         if (isPlaying) MediaControl.pause else MediaControl.play,
-        MediaControl.stop,
         MediaControl.skipToNext,
       ],
       systemActions: const {
@@ -206,7 +241,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         MediaAction.skipToNext,
         MediaAction.skipToPrevious,
       },
-      androidCompactActionIndices: const [0, 1, 3],
+      androidCompactActionIndices: const [0, 1, 2],
       processingState: isBuffering ? AudioProcessingState.buffering : AudioProcessingState.ready,
       playing: isPlaying,
       updatePosition: position,
@@ -250,5 +285,20 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> seek(Duration position) async {
     SystemMediaSessionManager.controller?.seek(position);
+  }
+
+  @override
+  Future<dynamic> onCustomAction(String name, Map<String, dynamic>? extras) async {
+    if (name == "toggle_favorite") {
+      final c = SystemMediaSessionManager.controller;
+      if (c != null) {
+        final current = c.currentSong;
+        final ref = c.ref;
+        if (current != null && ref != null) {
+          ref.read(libraryManagerProvider.notifier).toggleLikeSong(current);
+        }
+      }
+    }
+    return null;
   }
 }

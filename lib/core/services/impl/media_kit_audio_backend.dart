@@ -121,8 +121,10 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
       await p.dispose();
     }
     _state = 'disposed';
-    _eventController.add(const PlatformEngineDisposed());
-    _eventController.close();
+    if (!_eventController.isClosed) {
+      _eventController.add(const PlatformEngineDisposed());
+      _eventController.close();
+    }
   }
 
   @override

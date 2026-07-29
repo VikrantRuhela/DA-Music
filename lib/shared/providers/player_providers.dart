@@ -15,6 +15,7 @@ final playbackControllerProvider = ChangeNotifierProvider<PlaybackController>((r
   final artistRepo = ref.watch(artistRepositoryProvider);
   final albumRepo = ref.watch(albumRepositoryProvider);
   final recommendationRepo = ref.watch(recommendationRepositoryProvider);
+  final prefetchManager = ref.watch(playbackPrefetchManagerProvider);
   return PlaybackController(
     engine,
     ref,
@@ -22,6 +23,7 @@ final playbackControllerProvider = ChangeNotifierProvider<PlaybackController>((r
     artistRepo,
     albumRepo,
     recommendationRepo,
+    prefetchManager,
   );
 });
 

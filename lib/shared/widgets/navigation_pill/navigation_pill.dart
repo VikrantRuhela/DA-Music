@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'navigation_pill_controller.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../app/theme/tokens.dart';
+import '../../../../core/services/device_memory_manager.dart';
 
 class NavigationPill extends StatelessWidget {
   const NavigationPill({super.key});
@@ -40,7 +41,10 @@ class NavigationPill extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(DATokens.radiusLarge),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                filter: ImageFilter.blur(
+                  sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(12.0),
+                  sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(12.0),
+                ),
                 child: Stack(
                   children: [
                     AnimatedPositioned(

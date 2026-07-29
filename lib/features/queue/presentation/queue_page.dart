@@ -80,11 +80,7 @@ class QueuePage extends ConsumerWidget {
                     ),
                     child: ListTile(
                       onTap: () {
-                        ref.read(playbackControllerProvider).setQueue(
-                          queue,
-                          startIndex: index,
-                          autoPlay: true,
-                        );
+                        ref.read(playbackControllerProvider).skipToQueueIndex(index);
                       },
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(DATokens.radiusSmall),

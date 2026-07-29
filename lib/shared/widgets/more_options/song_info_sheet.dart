@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/music_models.dart';
 import '../../../core/extensions/context_extensions.dart';
 import '../../../app/theme/tokens.dart';
+import '../../../core/services/device_memory_manager.dart';
 
 class SongInfoSheet extends StatelessWidget {
   final Song song;
@@ -63,7 +64,10 @@ class SongInfoSheet extends StatelessWidget {
           top: Radius.circular(28.0),
         ),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+          filter: ImageFilter.blur(
+            sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+            sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+          ),
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(DATokens.spacingLarge),

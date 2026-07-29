@@ -64,7 +64,7 @@ class DownloadManager extends ChangeNotifier {
   final StreamResolver _streamResolver;
   final DownloadRepository _repository;
   final Map<String, DownloadTask> _tasks = {};
-  bool _isWorkerRunning = false;
+  final Set<String> _runningTaskIds = {};
   String _preferredQuality = 'High';
 
   DownloadManager(this._streamResolver, this._repository) {
@@ -185,23 +185,27 @@ class DownloadManager extends ChangeNotifier {
   }
 
   void _processQueue() {
-    if (_isWorkerRunning) return;
+    final activeCount = _tasks.values.where((t) => t.status == DownloadStatus.downloading).length;
+    final maxConcurrent = 3;
+    if (activeCount >= maxConcurrent) return;
 
-    final queuedTask = _tasks.values.firstWhere(
-      (t) => t.status == DownloadStatus.queued,
-      orElse: () => const DownloadTask(songId: '', title: '', artist: '', status: DownloadStatus.failed),
-    );
+    final queuedTasks = _tasks.values.where((t) => t.status == DownloadStatus.queued).toList();
+    if (queuedTasks.isEmpty) return;
 
-    if (queuedTask.songId.isNotEmpty) {
-      _isWorkerRunning = true;
-      _downloadWorker(queuedTask.songId);
+    final slotsAvailable = maxConcurrent - activeCount;
+    for (int i = 0; i < slotsAvailable && i < queuedTasks.length; i++) {
+      final task = queuedTasks[i];
+      if (!_runningTaskIds.contains(task.songId)) {
+        _runningTaskIds.add(task.songId);
+        _downloadWorker(task.songId);
+      }
     }
   }
 
   Future<void> _downloadWorker(String songId) async {
     final task = _tasks[songId];
     if (task == null) {
-      _isWorkerRunning = false;
+      _runningTaskIds.remove(songId);
       return;
     }
 
@@ -209,9 +213,15 @@ class DownloadManager extends ChangeNotifier {
     await _repository.saveDownloadTask(songId, DownloadStatus.downloading, task.progress, null);
 
     try {
+      final song = await _repository.getSongById(songId);
+      final providerId = song?.source ?? 'youtube_music';
+
       final stream = await _streamResolver.resolve(
         trackId: songId,
-        providerId: 'youtube_music',
+        providerId: providerId,
+        songTitle: song?.title,
+        artist: song?.artist,
+        duration: song?.duration,
       );
 
       final docDir = await getApplicationDocumentsDirectory();
@@ -237,6 +247,12 @@ class DownloadManager extends ChangeNotifier {
         request.headers.set(key, val);
       });
 
+      // Browser user agent to avoid throttling/403
+      request.headers.set(
+        'User-Agent',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
+
       if (isResume && existingBytes > 0) {
         request.headers.set('Range', 'bytes=$existingBytes-');
       }
@@ -256,6 +272,8 @@ class DownloadManager extends ChangeNotifier {
       final stopwatch = Stopwatch()..start();
       int lastCheckedBytes = downloadedBytes;
       int lastCheckedTimeMs = stopwatch.elapsedMilliseconds;
+      double lastSavedDbProgress = task.progress;
+      int lastSavedDbTimeMs = stopwatch.elapsedMilliseconds;
 
       await for (final chunk in response) {
         final currentTaskState = _tasks[songId];
@@ -275,6 +293,7 @@ class DownloadManager extends ChangeNotifier {
         final int nowMs = stopwatch.elapsedMilliseconds;
         final int timeDiffMs = nowMs - lastCheckedTimeMs;
 
+        // UI progress update (every 400ms in memory, very cheap)
         if (timeDiffMs >= 400) {
           final double progress = totalBytes > 0 ? (downloadedBytes / totalBytes) : 0.0;
           final int bytesInInterval = downloadedBytes - lastCheckedBytes;
@@ -298,7 +317,14 @@ class DownloadManager extends ChangeNotifier {
             etaSeconds: eta,
           ));
 
-          await _repository.saveDownloadTask(songId, DownloadStatus.downloading, progress, null);
+          // Throttled DB save (only write to DB if 10% progress has passed OR 3 seconds since last DB save)
+          final double progressDiff = progress - lastSavedDbProgress;
+          final int timeSinceLastDbSaveMs = nowMs - lastSavedDbTimeMs;
+          if (progressDiff >= 0.10 || timeSinceLastDbSaveMs >= 3000) {
+            await _repository.saveDownloadTask(songId, DownloadStatus.downloading, progress.clamp(0.0, 1.0), null);
+            lastSavedDbProgress = progress;
+            lastSavedDbTimeMs = nowMs;
+          }
 
           lastCheckedBytes = downloadedBytes;
           lastCheckedTimeMs = nowMs;
@@ -319,6 +345,32 @@ class DownloadManager extends ChangeNotifier {
             song,
             downloaded: true,
           );
+          if (song.artworkUrl != null && song.artworkUrl!.isNotEmpty) {
+            try {
+              final artFile = File(p.join(downloadsDir.path, '$songId.jpg'));
+              if (!artFile.existsSync()) {
+                final client = HttpClient();
+                client.connectionTimeout = const Duration(seconds: 10);
+                final req = await client.getUrl(Uri.parse(song.artworkUrl!));
+                req.headers.set(
+                  'User-Agent',
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                );
+                final res = await req.close();
+                if (res.statusCode == 200) {
+                  final tempArtFile = File(p.join(downloadsDir.path, '$songId.art.tmp'));
+                  if (tempArtFile.existsSync()) tempArtFile.deleteSync();
+                  final sink = tempArtFile.openWrite();
+                  await res.pipe(sink);
+                  await tempArtFile.rename(artFile.path);
+                  DALogger.info('DownloadManager: Saved downloaded artwork for "$songId".');
+                }
+                client.close();
+              }
+            } catch (e) {
+              DALogger.warning('DownloadManager: Failed to download artwork for "$songId": $e');
+            }
+          }
         }
 
         // Notify listeners after database is fully synchronized
@@ -345,7 +397,7 @@ class DownloadManager extends ChangeNotifier {
         await _repository.saveDownloadTask(songId, DownloadStatus.failed, currentTaskState.progress, null);
       }
     } finally {
-      _isWorkerRunning = false;
+      _runningTaskIds.remove(songId);
       _processQueue();
     }
   }

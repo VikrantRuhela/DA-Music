@@ -799,35 +799,86 @@ class RecommendationEngine {
   static String detectGenre(String artist, String songTitle) {
     final artistLower = artist.toLowerCase();
     final titleLower = songTitle.toLowerCase();
+    
+    // 1. Hindi / Bollywood
+    if (artistLower.contains('arijit') ||
+        artistLower.contains('shreya') ||
+        artistLower.contains('neha kakkar') ||
+        artistLower.contains('jubin') ||
+        artistLower.contains('badshah') ||
+        artistLower.contains('pritam') ||
+        artistLower.contains('rahman') ||
+        titleLower.contains('bollywood') ||
+        titleLower.contains('hindi')) {
+      return 'Hindi';
+    }
+
+    // 2. Punjabi
     if (artistLower.contains('aujla') ||
         artistLower.contains('dosanjh') ||
         artistLower.contains('sidhu') ||
         artistLower.contains('maan') ||
         artistLower.contains('singh') ||
-        artistLower.contains('amrit')) {
+        artistLower.contains('amrit') ||
+        artistLower.contains('dhillon') ||
+        artistLower.contains('shubh') ||
+        artistLower.contains('arjan')) {
       return 'Punjabi';
     }
+
+    // 3. K-Pop
+    if (artistLower.contains('bts') ||
+        artistLower.contains('blackpink') ||
+        artistLower.contains('twice') ||
+        artistLower.contains('exo') ||
+        artistLower.contains('stray kids') ||
+        titleLower.contains('k-pop') ||
+        titleLower.contains('kpop')) {
+      return 'K-Pop';
+    }
+
+    // 4. Hip-Hop / Rap
     if (artistLower.contains('eminem') ||
         artistLower.contains('drake') ||
         artistLower.contains('tupac') ||
         artistLower.contains('kanye') ||
         artistLower.contains('wayne') ||
-        artistLower.contains('snoop')) {
+        artistLower.contains('snoop') ||
+        titleLower.contains('hiphop') ||
+        titleLower.contains('hip-hop') ||
+        titleLower.contains('rap')) {
       return 'Hip-Hop';
     }
+
+    // 5. Rock
     if (artistLower.contains('beatles') ||
         artistLower.contains('queen') ||
         artistLower.contains('pink floyd') ||
-        artistLower.contains('led zeppelin')) {
+        artistLower.contains('led zeppelin') ||
+        titleLower.contains('rock') ||
+        titleLower.contains('metal')) {
       return 'Rock';
     }
+
+    // 6. Lo-fi / Chill
     if (artistLower.contains('lo-fi') ||
         titleLower.contains('lofi') ||
         titleLower.contains('relax') ||
-        titleLower.contains('study')) {
+        titleLower.contains('study') ||
+        titleLower.contains('chill') ||
+        titleLower.contains('ambient')) {
       return 'Lo-fi';
     }
+    
     return 'Pop'; // default fallback
+  }
+
+  static String detectLanguage(String artist, String songTitle) {
+    final genre = detectGenre(artist, songTitle);
+    if (genre == 'Punjabi') return 'Punjabi';
+    if (genre == 'Hindi') return 'Hindi';
+    if (genre == 'K-Pop') return 'Korean';
+    return 'English';
   }
 
   static bool isAlternativeVersion(String titleA, String titleB) {
@@ -847,8 +898,26 @@ class RecommendationEngine {
   }
 
   static String _normalizeTitle(String title) {
-    return title
-        .toLowerCase()
+    String clean = title.toLowerCase();
+    
+    // Remove content inside parentheses and brackets
+    clean = clean.replaceAll(RegExp(r'\s*\([^)]*\)'), '');
+    clean = clean.replaceAll(RegExp(r'\s*\[[^\]]*\]'), '');
+    clean = clean.replaceAll(RegExp(r'\s*\|.*$'), ''); // Remove everything after |
+    
+    // Remove typical alternative version keywords
+    final versionKeywords = [
+      'remix', 'live', 'slowed', 'reverb', 'cover', 'instrumental', 
+      'acoustic', 'version', 'edit', 'mix', 'sped up', 'spedup', 
+      'visualizer', 'clean', 'official video', 'lyric video', 
+      'music video', 'karaoke', 'tribute', 'parody', 'mashup'
+    ];
+    
+    for (final kw in versionKeywords) {
+      clean = clean.replaceAll(kw, '');
+    }
+    
+    return clean
         .replaceAll(RegExp(r'[^\w\s]'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
@@ -882,6 +951,41 @@ class RecommendationEngine {
 
     final adapter = sourceManager.activeAdapter;
     final detectedGenre = detectGenre(seedSong.artist, seedSong.title);
+
+    // Build dynamic listening session profile from seed song and recent log history
+    final List<model.Song> sessionHistory = [seedSong, ...recentlyPlayedSongs.take(9)];
+
+    final Map<String, double> sessionArtists = {};
+    for (int i = 0; i < sessionHistory.length; i++) {
+      final artist = sessionHistory[i].artist.trim();
+      if (artist.isEmpty || artist == 'Unknown Artist') continue;
+      final weight = 1.0 / (i + 1);
+      sessionArtists[artist] = (sessionArtists[artist] ?? 0.0) + weight;
+    }
+
+    final Map<String, double> sessionGenres = {};
+    for (int i = 0; i < sessionHistory.length; i++) {
+      final song = sessionHistory[i];
+      final g = detectGenre(song.artist, song.title);
+      final weight = 1.0 / (i + 1);
+      sessionGenres[g] = (sessionGenres[g] ?? 0.0) + weight;
+    }
+
+    final Map<String, double> sessionLanguages = {};
+    for (int i = 0; i < sessionHistory.length; i++) {
+      final song = sessionHistory[i];
+      final l = detectLanguage(song.artist, song.title);
+      final weight = 1.0 / (i + 1);
+      sessionLanguages[l] = (sessionLanguages[l] ?? 0.0) + weight;
+    }
+
+    final String primarySessionLanguage = sessionLanguages.isNotEmpty
+        ? (sessionLanguages.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key
+        : detectLanguage(seedSong.artist, seedSong.title);
+
+    final String primarySessionGenre = sessionGenres.isNotEmpty
+        ? (sessionGenres.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key
+        : detectedGenre;
 
     final searchFutures = <Future<void>>[];
 
@@ -983,6 +1087,70 @@ class RecommendationEngine {
       _normalizeTitle(seedSong.title)
     };
 
+    bool isSameArtist(String artistA, String artistB) {
+      final cleanA = artistA.toLowerCase().trim();
+      final cleanB = artistB.toLowerCase().trim();
+      if (cleanA == cleanB) return true;
+      if (cleanA == 'various' || cleanA == 'various artists' || cleanB == 'various' || cleanB == 'various artists') {
+        return false;
+      }
+      if (cleanA.contains(cleanB) || cleanB.contains(cleanA)) return true;
+      return false;
+    }
+
+    bool isCompatibleGenre(String genreA, String genreB) {
+      if (genreA == genreB) return true;
+      final compatiblePairs = {
+        'Pop': ['Lo-fi', 'Hindi', 'Punjabi', 'K-Pop'],
+        'Lo-fi': ['Pop'],
+        'Hip-Hop': ['Punjabi', 'Hindi', 'Rap'],
+        'Punjabi': ['Hip-Hop', 'Pop'],
+        'Hindi': ['Pop', 'Hip-Hop'],
+      };
+      final list = compatiblePairs[genreA];
+      return list != null && list.contains(genreB);
+    }
+
+    bool isCompatibleLanguage(String langA, String langB) {
+      if (langA == langB) return true;
+      if (langA == 'English' || langB == 'English') return true;
+      return false;
+    }
+
+    double calculateScore(model.Song song) {
+      double score = 0.0;
+      
+      // 1. Same Album boost
+      final cleanAlbum = song.album.toLowerCase().trim();
+      final seedAlbum = seedSong.album.toLowerCase().trim();
+      if (cleanAlbum.isNotEmpty && cleanAlbum == seedAlbum && cleanAlbum != 'single' && cleanAlbum != 'unknown album') {
+        score += 50.0;
+      }
+      
+      // 2. Personal History boost (liked or downloaded)
+      final isLiked = likedSongs.any((s) => s.id == song.id);
+      final isDownloaded = downloadedSongs.any((s) => s.id == song.id);
+      if (isLiked) score += 20.0;
+      if (isDownloaded) score += 15.0;
+
+      // 3. Play count boost
+      final playCount = recentlyPlayedSongs.where((s) => s.id == song.id).length;
+      score += playCount * 5.0;
+
+      // 4. DNA Artist / Genre affinities
+      final artistAff = dna.artistAffinities[song.artist] ?? 0.0;
+      score += artistAff * 10.0;
+      
+      final songGenre = detectGenre(song.artist, song.title);
+      final genreAff = dna.genreAffinities[songGenre] ?? 0.0;
+      score += genreAff * 5.0;
+
+      return score;
+    }
+
+    final List<MapEntry<model.Song, Map<String, dynamic>>> sameArtistCandidates = [];
+    final List<MapEntry<model.Song, Map<String, dynamic>>> similarGenreCandidates = [];
+
     for (final song in candidates) {
       if (seenIds.contains(song.id)) continue;
       
@@ -1011,73 +1179,76 @@ class RecommendationEngine {
       final candidateAuthor = YouTubeMusicAdapter.videoAuthorMap[song.id] ?? song.artist;
       final isOfficial = isOfficialMusicChannel(candidateChannelId, candidateAuthor, seedSong.artist);
       if (!isOfficial) {
-        // ignore: avoid_print
-        print(' [Smart Queue] REJECTED Candidate (Identity Resolution): "${song.title}" | Author: "$candidateAuthor" | Channel ID: $candidateChannelId');
         continue;
       }
 
-      // 1. Same Genre (40% weight -> max score 40.0)
-      double genreScore = 0.0;
       final songGenre = detectGenre(song.artist, song.title);
-      if (songGenre.toLowerCase() == detectedGenre.toLowerCase()) {
-        genreScore = 40.0;
-      } else if ((songGenre == 'Punjabi' && detectedGenre == 'Pop') || (songGenre == 'Pop' && detectedGenre == 'Punjabi')) {
-        genreScore = 20.0;
+      final songLanguage = detectLanguage(song.artist, song.title);
+
+      // Validate genre compatibility
+      if (!isCompatibleGenre(songGenre, primarySessionGenre)) {
+        continue;
       }
 
-      // 2. Same Artist (25% weight -> max score 25.0)
-      double artistScore = 0.0;
-      if (song.artist.toLowerCase().trim() == seedSong.artist.toLowerCase().trim()) {
-        artistScore = 25.0;
+      // Validate language compatibility
+      if (!isCompatibleLanguage(songLanguage, primarySessionLanguage)) {
+        continue;
       }
 
-      // 3. Similar Artists (15% weight -> max score 15.0)
-      double similarArtistScore = 0.0;
-      if (similarArtists.any((a) => song.artist.toLowerCase().contains(a.toLowerCase()) || a.toLowerCase().contains(song.artist.toLowerCase()))) {
-        similarArtistScore = 15.0;
-      }
+      final double score = calculateScore(song);
 
-      // 4. Personal History (10% weight -> max score 10.0)
-      double historyScore = 0.0;
-      final isLiked = likedSongs.any((s) => s.id == song.id);
-      final isDownloaded = downloadedSongs.any((s) => s.id == song.id);
-      final playCount = recentlyPlayedSongs.where((s) => s.id == song.id).length;
-
-      if (isLiked) historyScore += 4.0;
-      if (isDownloaded) historyScore += 3.0;
-      if (playCount > 0) historyScore += 2.0;
-      if (dna.topArtists.contains(song.artist)) historyScore += 1.0;
-      if (historyScore > 10.0) historyScore = 10.0;
-
-      // 5. Trending (10% weight -> max score 10.0)
-      double trendingScore = 0.0;
-      if (dna.favoriteGenres.contains(songGenre)) {
-        trendingScore = 10.0;
-      } else {
-        trendingScore = 5.0;
-      }
-
-      final double finalScore = artistScore + genreScore + similarArtistScore + historyScore + trendingScore;
-
-      scoredCandidates.add(MapEntry(song, {
+      final candidateData = {
         'song': song,
-        'finalScore': finalScore,
-        'artistScore': artistScore,
-        'genreScore': genreScore,
-        'similarArtistScore': similarArtistScore,
-        'historyScore': historyScore,
-        'trendingScore': trendingScore,
+        'finalScore': score,
         'detectedGenre': songGenre,
-        'reason': _buildReason(artistScore, genreScore, similarArtistScore, historyScore, seedSong.artist, songGenre),
-      }));
+        'reason': _buildReason(
+          isSameArtist(song.artist, seedSong.artist) ? 20.0 : 0.0,
+          songGenre == primarySessionGenre ? 40.0 : 0.0,
+          similarArtists.any((a) => song.artist.toLowerCase().contains(a.toLowerCase())) ? 15.0 : 0.0,
+          0.0,
+          seedSong.artist,
+          songGenre,
+        ),
+      };
+
+      if (isSameArtist(song.artist, seedSong.artist)) {
+        sameArtistCandidates.add(MapEntry(song, candidateData));
+      } else {
+        similarGenreCandidates.add(MapEntry(song, candidateData));
+      }
+
       seenIds.add(song.id);
       seenNormalizedTitles.add(normalizedTitle);
     }
 
-    scoredCandidates.sort((a, b) => (b.value['finalScore'] as double).compareTo(a.value['finalScore'] as double));
+    // Sort both descending by finalScore
+    sameArtistCandidates.sort((a, b) => (b.value['finalScore'] as double).compareTo(a.value['finalScore'] as double));
+    similarGenreCandidates.sort((a, b) => (b.value['finalScore'] as double).compareTo(a.value['finalScore'] as double));
 
-    final Map<String, int> artistCounts = {};
     final List<model.Song> finalSmartQueue = [];
+    final Set<String> addedIds = {};
+
+    void addSong(model.Song s, Map<String, dynamic> metrics) {
+      if (!addedIds.contains(s.id)) {
+        finalSmartQueue.add(s);
+        addedIds.add(s.id);
+        
+        // ignore: avoid_print
+        print(' [Smart Queue] SELECTED Candidate:');
+        // ignore: avoid_print
+        print('   - Title: "${s.title}"');
+        // ignore: avoid_print
+        print('   - Artist: "${s.artist}"');
+        // ignore: avoid_print
+        print('   - Genre: "${metrics['detectedGenre']}"');
+        // ignore: avoid_print
+        print('   - Rank Score: ${metrics['finalScore']}');
+        // ignore: avoid_print
+        print('   - Reason: ${metrics['reason']}');
+        // ignore: avoid_print
+        print('-------------------------------------------');
+      }
+    }
 
     // ignore: avoid_print
     print('=== SMART QUEUE GENERATION DIAGNOSTICS ===');
@@ -1088,46 +1259,86 @@ class RecommendationEngine {
     // ignore: avoid_print
     print('- Seed Genre: $detectedGenre');
     // ignore: avoid_print
-    print('- Total Candidates Evaluated: ${scoredCandidates.length}');
+    print('- Same Artist Candidates: ${sameArtistCandidates.length}');
+    // ignore: avoid_print
+    print('- Similar Genre Candidates: ${similarGenreCandidates.length}');
     // ignore: avoid_print
     print('-------------------------------------------');
 
-    for (final entry in scoredCandidates) {
+    // 1. Take up to 10 same artist songs (~70% of a 14-song queue)
+    int sameArtistCount = 0;
+    for (final entry in sameArtistCandidates) {
+      if (sameArtistCount >= 10) break;
+      addSong(entry.key, entry.value);
+      sameArtistCount++;
+    }
+
+    // 2. Take similar genre/mood/style songs (~30%), ensuring diversity of at most 1 song per artist
+    final Map<String, int> otherArtistCounts = {};
+    int similarGenreCount = 0;
+    final int targetGenreCount = 14 - finalSmartQueue.length; // Intelligently backfill up to 14 slots
+    
+    for (final entry in similarGenreCandidates) {
+      if (similarGenreCount >= targetGenreCount) break;
       final song = entry.key;
-      final metrics = entry.value;
-      final artist = song.artist;
-      final count = artistCounts[artist] ?? 0;
+      final count = otherArtistCounts[song.artist] ?? 0;
+      if (count < 1) {
+        addSong(song, entry.value);
+        otherArtistCounts[song.artist] = count + 1;
+        similarGenreCount++;
+      }
+    }
 
-      if (count < 2) {
-        finalSmartQueue.add(song);
-        artistCounts[artist] = count + 1;
+    // 3. Fallback: if we still haven't reached 14, relax the diversity limit to 2 songs per other artist
+    if (finalSmartQueue.length < 14) {
+      for (final entry in similarGenreCandidates) {
+        if (finalSmartQueue.length >= 14) break;
+        final song = entry.key;
+        if (!addedIds.contains(song.id)) {
+          final count = otherArtistCounts[song.artist] ?? 0;
+          if (count < 2) {
+            addSong(song, entry.value);
+            otherArtistCounts[song.artist] = count + 1;
+          }
+        }
+      }
+    }
 
-        // ignore: avoid_print
-        print(' [Smart Queue] SELECTED Candidate:');
-        // ignore: avoid_print
-        print('   - Title: "${song.title}"');
-        // ignore: avoid_print
-        print('   - Artist: "${song.artist}"');
-        // ignore: avoid_print
-        print('   - Genre: "${metrics['detectedGenre']}"');
-        // ignore: avoid_print
-        print('   - Score Breakdown:');
-        // ignore: avoid_print
-        print('     * Artist Score: ${metrics['artistScore']} / 40.0');
-        // ignore: avoid_print
-        print('     * Genre Score: ${metrics['genreScore']} / 25.0');
-        // ignore: avoid_print
-        print('     * Similar Artist: ${metrics['similarArtistScore']} / 15.0');
-        // ignore: avoid_print
-        print('     * History: ${metrics['historyScore']} / 10.0');
-        // ignore: avoid_print
-        print('     * Trending: ${metrics['trendingScore']} / 10.0');
-        // ignore: avoid_print
-        print('     * FINAL RANKING: ${metrics['finalScore']} / 100.0');
-        // ignore: avoid_print
-        print('   - Reason: ${metrics['reason']}');
-        // ignore: avoid_print
-        print('-------------------------------------------');
+    // 4. Ultimate fallback: if we still have space, just add any remaining candidates
+    if (finalSmartQueue.length < 14) {
+      for (final entry in sameArtistCandidates) {
+        if (finalSmartQueue.length >= 14) break;
+        addSong(entry.key, entry.value);
+      }
+    }
+    if (finalSmartQueue.length < 14) {
+      for (final entry in similarGenreCandidates) {
+        if (finalSmartQueue.length >= 14) break;
+        addSong(entry.key, entry.value);
+      }
+    }
+
+    // 5. Raw Fallback: if we still have space or queue is empty (due to strict filters), add raw candidates directly
+    if (finalSmartQueue.isEmpty) {
+      for (final song in candidates) {
+        if (finalSmartQueue.length >= 10) break;
+        if (song.id != seedSong.id && !addedIds.contains(song.id)) {
+          finalSmartQueue.add(song);
+          addedIds.add(song.id);
+        }
+      }
+    }
+
+    // 6. Database/History Fallback: if we STILL have nothing (e.g. no network results returned at all),
+    // use liked, downloaded or recently played songs to guarantee autoplay doesn't fail!
+    if (finalSmartQueue.isEmpty) {
+      final fallbackList = [...likedSongs, ...downloadedSongs, ...recentlyPlayedSongs];
+      for (final song in fallbackList) {
+        if (finalSmartQueue.length >= 10) break;
+        if (song.id != seedSong.id && !addedIds.contains(song.id)) {
+          finalSmartQueue.add(song);
+          addedIds.add(song.id);
+        }
       }
     }
 

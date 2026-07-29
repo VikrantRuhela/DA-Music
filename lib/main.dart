@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,8 +14,99 @@ import 'shared/providers/backend_providers.dart';
 import 'core/services/system_media_session_manager.dart';
 import 'core/services/session_manager.dart';
 import 'shared/providers/player_providers.dart';
+import 'shared/widgets/da_image.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:desktop_webview_window/desktop_webview_window.dart';
+
+import 'core/services/device_memory_manager.dart';
+
+class DnsCacheEntry {
+  final List<InternetAddress> ipv6;
+  final List<InternetAddress> ipv4;
+  final DateTime expiresAt;
+
+  DnsCacheEntry({required this.ipv6, required this.ipv4, required this.expiresAt});
+
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
+}
+
+final Map<String, DnsCacheEntry> _dnsCache = {};
+
+Future<Socket> connectDualStack(String host, int port) async {
+  try {
+    List<InternetAddress> ipv6Addresses = [];
+    List<InternetAddress> ipv4Addresses = [];
+
+    final cached = _dnsCache[host];
+    if (cached != null && !cached.isExpired) {
+      ipv6Addresses = cached.ipv6;
+      ipv4Addresses = cached.ipv4;
+    } else {
+      final ipv6Future = InternetAddress.lookup(host, type: InternetAddressType.IPv6)
+          .timeout(const Duration(milliseconds: 1500))
+          .catchError((_) => <InternetAddress>[]);
+      final ipv4Future = InternetAddress.lookup(host, type: InternetAddressType.IPv4)
+          .timeout(const Duration(milliseconds: 1500))
+          .catchError((_) => <InternetAddress>[]);
+      
+      final results = await Future.wait([ipv6Future, ipv4Future]);
+      ipv6Addresses = results[0];
+      ipv4Addresses = results[1];
+
+      if (ipv6Addresses.isNotEmpty || ipv4Addresses.isNotEmpty) {
+        _dnsCache[host] = DnsCacheEntry(
+          ipv6: ipv6Addresses,
+          ipv4: ipv4Addresses,
+          expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+        );
+      }
+    }
+    
+    if (ipv6Addresses.isEmpty && ipv4Addresses.isEmpty) {
+      return await Socket.connect(host, port);
+    }
+    
+    if (ipv6Addresses.isEmpty) {
+      return await Socket.connect(ipv4Addresses.first, port).timeout(const Duration(seconds: 4));
+    }
+    
+    if (ipv4Addresses.isEmpty) {
+      return await Socket.connect(ipv6Addresses.first, port).timeout(const Duration(seconds: 4));
+    }
+    
+    final completer = Completer<Socket>();
+    final totalAttempts = 2; // Race first IPv6 and first IPv4 addresses
+    int failures = 0;
+    
+    void tryConnect(InternetAddress addr) async {
+      try {
+        final socket = await Socket.connect(addr, port).timeout(const Duration(seconds: 4));
+        if (!completer.isCompleted) {
+          completer.complete(socket);
+        } else {
+          socket.destroy();
+        }
+      } catch (_) {
+        failures++;
+        if (failures >= totalAttempts && !completer.isCompleted) {
+          completer.completeError(Exception('Dual stack connection racing failed for $host'));
+        }
+      }
+    }
+
+    tryConnect(ipv6Addresses.first);
+    
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!completer.isCompleted) {
+      tryConnect(ipv4Addresses.first);
+    }
+    
+    return await completer.future;
+  } catch (_) {
+    return await Socket.connect(host, port);
+  }
+}
 
 class FallbackHttpOverrides extends HttpOverrides {
   @override
@@ -24,22 +116,7 @@ class FallbackHttpOverrides extends HttpOverrides {
       final host = proxyHost ?? url.host;
       final port = proxyPort ?? (url.port != 0 ? url.port : (url.scheme == 'https' ? 443 : 80));
       
-      Socket socket;
-      try {
-        // Try standard dual-stack connection first (crucial for IPv6-only networks like Jio) with a fail-fast 1.5s timeout
-        socket = await Socket.connect(host, port).timeout(const Duration(milliseconds: 1500));
-      } catch (_) {
-        try {
-          final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4);
-          if (addresses.isNotEmpty) {
-            socket = await Socket.connect(addresses.first, port);
-          } else {
-            rethrow;
-          }
-        } catch (e2) {
-          socket = await Socket.connect(host, port);
-        }
-      }
+      final socket = await connectDualStack(host, port);
 
       if (url.scheme.toLowerCase() == 'https') {
         final secureSocket = await SecureSocket.secure(socket, host: host);
@@ -54,6 +131,14 @@ class FallbackHttpOverrides extends HttpOverrides {
 void main([List<String> args = const []]) async {
   HttpOverrides.global = FallbackHttpOverrides();
   WidgetsFlutterBinding.ensureInitialized();
+  DeviceMemoryManager.instance.initialize();
+
+  try {
+    final tempDir = await getTemporaryDirectory();
+    DAImage.cacheDirPath = tempDir.path;
+    final docDir = await getApplicationDocumentsDirectory();
+    DAImage.documentsDirPath = docDir.path;
+  } catch (_) {}
   
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     if (runWebViewTitleBarWidget(args)) {

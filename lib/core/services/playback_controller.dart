@@ -5,6 +5,7 @@ import 'playback_result.dart';
 import 'playback_events.dart' as clean;
 import 'logger_service.dart';
 import 'source_manager.dart';
+import 'playback_prefetch_manager.dart';
 import 'youtube_music_adapter.dart';
 import '../../domain/repositories/artist_repository.dart';
 import '../../domain/repositories/album_repository.dart';
@@ -20,6 +21,7 @@ import '../../features/taste_engine/presentation/providers/taste_engine_provider
 import '../../features/taste_engine/domain/recommendation_engine.dart';
 import '../../data/repositories/download_repository.dart';
 import '../../shared/providers/library_providers.dart';
+import '../../shared/providers/player_providers.dart';
 
 enum QueueMode { smart, playlist, album }
 
@@ -30,6 +32,7 @@ class PlaybackController extends ChangeNotifier {
   final ArtistRepository? _artistRepository;
   final AlbumRepository? _albumRepository;
   final RecommendationRepository? _recommendationRepository;
+  final PlaybackPrefetchManager? _prefetchManager;
   
   final StreamController<clean.PlaybackEvent> _eventController =
       StreamController<clean.PlaybackEvent>.broadcast();
@@ -47,6 +50,7 @@ class PlaybackController extends ChangeNotifier {
   final List<Song> _queueSongs = [];
   int _currentIndex = -1;
   final Ref? _ref;
+  Ref? get ref => _ref;
   bool _isGeneratingSmartQueue = false;
   bool _isAppendingAutoplay = false;
   QueueMode _currentQueueMode = QueueMode.smart;
@@ -58,6 +62,7 @@ class PlaybackController extends ChangeNotifier {
     this._artistRepository,
     this._albumRepository,
     this._recommendationRepository,
+    this._prefetchManager,
   ]) {
     _init();
   }
@@ -65,11 +70,11 @@ class PlaybackController extends ChangeNotifier {
   QueueMode get currentQueueMode => _currentQueueMode;
 
   bool get _isSmartQueueActive {
+    if (_currentQueueMode == QueueMode.playlist || _currentQueueMode == QueueMode.album) return false;
+    if (_settings.repeatMode != RepeatMode.off) return false;
     if (_ref == null) return true;
     final state = _ref!.read(tasteEngineNotifierProvider);
     if (!state.isSmartQueueEnabled) return false;
-    if (_settings.repeatMode != RepeatMode.off) return false;
-    if (_currentQueueMode == QueueMode.playlist || _currentQueueMode == QueueMode.album) return false;
     return true;
   }
 
@@ -79,6 +84,7 @@ class PlaybackController extends ChangeNotifier {
       _queueSongs.clear();
       _queueSongs.addAll(queue.songs.map((s) => _mapFromDomain(s)));
       _currentIndex = queue.currentIndex;
+      _prefetchManager?.updateQueue(_queueSongs, _currentIndex);
 
       if (_currentIndex >= 0 && _currentIndex < _queueSongs.length) {
         _status = PlaybackStatus.playing;
@@ -91,6 +97,9 @@ class PlaybackController extends ChangeNotifier {
       } else {
         _status = PlaybackStatus.idle;
         _stopPositionTimer();
+        if (_ref != null) {
+          _ref!.read(immersiveModeProvider.notifier).state = false;
+        }
       }
 
       // Print the required event details
@@ -130,6 +139,7 @@ class PlaybackController extends ChangeNotifier {
   double get bufferProgress => _bufferProgress;
   PlayerSettings get settings => _settings;
   double get playbackSpeed => _playbackSpeed;
+  bool get isSeeking => _isSeeking;
 
   // State Machine Validation
   bool _validateTransition(PlaybackStatus targetStatus) {
@@ -210,6 +220,23 @@ class PlaybackController extends ChangeNotifier {
 
       await _runAction('playQueue', () => _playbackEngine.playQueue(domainQueue));
     }
+  }
+
+  Future<void> skipToQueueIndex(int index) async {
+    if (index < 0 || index >= _queueSongs.length) return;
+    _currentIndex = index;
+
+    final domainQueue = domain.Queue(
+      songs: _queueSongs.map((s) => _mapToDomain(s)).toList(),
+      currentIndex: _currentIndex,
+      repeatMode: _mapRepeatToDomain(_settings.repeatMode),
+      shuffleEnabled: _settings.isShuffle,
+    );
+
+    _eventController.add(clean.QueueChanged(domainQueue));
+    notifyListeners();
+
+    await _runAction('playQueue', () => _playbackEngine.playQueue(domainQueue));
   }
 
   Future<void> selectSong(Song song) async {
@@ -447,6 +474,7 @@ class PlaybackController extends ChangeNotifier {
       if (_status == PlaybackStatus.playing) {
         if (!_isSeeking) {
           _currentPosition = _playbackEngine.currentPosition;
+          _prefetchManager?.onPositionUpdate(currentSong, _currentPosition);
           notifyListeners();
         }
       } else {
@@ -491,6 +519,9 @@ class PlaybackController extends ChangeNotifier {
   Future<void> stop() async {
     if (_validateTransition(PlaybackStatus.idle)) {
       _status = PlaybackStatus.idle;
+      if (_ref != null) {
+        _ref!.read(immersiveModeProvider.notifier).state = false;
+      }
       notifyListeners();
       _stopPositionTimer();
 

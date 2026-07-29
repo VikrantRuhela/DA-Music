@@ -12,6 +12,7 @@ import '../../../../../shared/models/playback_state.dart';
 import '../../../../../shared/models/music_models.dart';
 import '../../../../../shared/utils/song_options.dart';
 import '../../../../../shared/widgets/da_image.dart';
+import '../../../../../core/services/device_memory_manager.dart';
 import '../../../../../shared/widgets/custom_title_bar.dart';
 import '../../../../../core/services/lyrics_controller.dart';
 import '../vinyl_player_widget.dart';
@@ -127,6 +128,8 @@ class ImmersivePlayer extends ConsumerWidget {
 
     final currentSong = ref.watch(currentSongProvider);
     final artworkUrl = currentSong?.artworkUrl;
+    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+    final isVinylOrMinimal = style == PlayerStyle.vinyl || style == PlayerStyle.minimal;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -145,23 +148,65 @@ class ImmersivePlayer extends ConsumerWidget {
               accentColor: colors.accent,
             ),
           ),
-          // Layer 2: 40% opacity blurred artwork overlay
+
+          // Layer 2: Adaptive background rendering based on device capability & style
           if (artworkUrl != null && artworkUrl.isNotEmpty) ...[
-            Positioned.fill(
-              child: Opacity(
-                opacity: 0.40,
-                child: DAImage(
-                  url: artworkUrl,
-                  fit: BoxFit.cover,
+            if (!isLowRam || isVinylOrMinimal) ...[
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.40,
+                  child: DAImage(
+                    url: artworkUrl,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
-            ),
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
-                child: Container(color: Colors.transparent),
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(
+                    sigmaX: isLowRam ? 32.0 : 40.0,
+                    sigmaY: isLowRam ? 32.0 : 40.0,
+                  ),
+                  child: Container(color: Colors.transparent),
+                ),
               ),
-            ),
+            ] else ...[
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        colors.gradientStart.withValues(alpha: 0.8),
+                        colors.gradientMiddle,
+                        colors.gradientEnd,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: ShaderMask(
+                  shaderCallback: (rect) {
+                    return LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.35),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.7],
+                    ).createShader(rect);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: DAImage(
+                    url: artworkUrl,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ],
           ],
           // The actual player UI
           Positioned.fill(
@@ -473,7 +518,10 @@ class _WindowsImmersivePlayerState extends ConsumerState<_WindowsImmersivePlayer
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(24.0),
                         child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                          filter: ImageFilter.blur(
+                            sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(12.0),
+                            sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(12.0),
+                          ),
                           child: Padding(
                             padding: const EdgeInsets.all(24.0),
                             child: Column(
@@ -1023,7 +1071,10 @@ class _WindowsLyricsTabState extends ConsumerState<_WindowsLyricsTab> {
       ),
       clipBehavior: Clip.antiAlias,
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+        filter: ImageFilter.blur(
+          sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+          sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(16.0),
+        ),
         child: ShaderMask(
           shaderCallback: (rect) {
             return const LinearGradient(
@@ -1166,11 +1217,7 @@ class _WindowsQueueTab extends ConsumerWidget {
                 ? Icon(Icons.volume_up, color: colors.primary, size: 20.0)
                 : null,
             onTap: () {
-              ref.read(playbackControllerProvider).setQueue(
-                    queue,
-                    startIndex: index,
-                    autoPlay: true,
-                  );
+              ref.read(playbackControllerProvider).skipToQueueIndex(index);
             },
           ),
         );
@@ -1261,51 +1308,47 @@ class _ImmersiveStylePlayerState extends ConsumerState<_ImmersiveStylePlayer> wi
             left: 0,
             right: 0,
             height: MediaQuery.of(context).size.height * 0.58,
-            child: SwipeableArtwork(
-              onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
-              onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
-              child: ShaderMask(
-                shaderCallback: (rect) {
-                  return const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.white,
-                      Colors.white,
-                      Colors.transparent,
-                    ],
-                    stops: [0.0, 0.88, 1.0],
-                  ).createShader(rect);
-                },
-                blendMode: BlendMode.dstIn,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: DAImage(
-                        url: artworkUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(color: colors.surfaceCard),
-                      ),
+            child: ShaderMask(
+              shaderCallback: (rect) {
+                return const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white,
+                    Colors.white,
+                    Colors.transparent,
+                  ],
+                  stops: [0.0, 0.88, 1.0],
+                ).createShader(rect);
+              },
+              blendMode: BlendMode.dstIn,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: DAImage(
+                      url: artworkUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(color: colors.surfaceCard),
                     ),
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              colors.gradientStart.withValues(alpha: 0.0),
-                              colors.gradientStart.withValues(alpha: 0.35),
-                              colors.gradientMiddle.withValues(alpha: 0.75),
-                              colors.gradientMiddle,
-                            ],
-                            stops: const [0.0, 0.45, 0.75, 1.0],
-                          ),
+                  ),
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            colors.gradientStart.withValues(alpha: 0.0),
+                            colors.gradientStart.withValues(alpha: 0.35),
+                            colors.gradientMiddle.withValues(alpha: 0.75),
+                            colors.gradientMiddle,
+                          ],
+                          stops: const [0.0, 0.45, 0.75, 1.0],
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1331,58 +1374,62 @@ class _ImmersiveStylePlayerState extends ConsumerState<_ImmersiveStylePlayer> wi
                       ),
                       const Spacer(flex: 4),
                       Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              currentSong?.title ?? 'No Track Selected',
-                              style: typography.title.copyWith(
-                                fontSize: 26.0,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: 0.5,
+                        child: SwipeableArtwork(
+                          onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
+                          onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                currentSong?.title ?? 'No Track Selected',
+                                style: typography.title.copyWith(
+                                  fontSize: 26.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6.0),
-                            Text(
-                              currentSong?.artist ?? 'Unknown Artist',
-                              style: typography.body.copyWith(
-                                fontSize: 16.0,
-                                color: Colors.white.withValues(alpha: 0.65),
+                              const SizedBox(height: 6.0),
+                              Text(
+                                currentSong?.artist ?? 'Unknown Artist',
+                                style: typography.body.copyWith(
+                                  fontSize: 16.0,
+                                  color: Colors.white.withValues(alpha: 0.65),
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 12.0),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(12.0),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.waves, size: 12.0, color: Colors.white.withValues(alpha: 0.6)),
-                                  const SizedBox(width: 4.0),
-                                  Text(
-                                    codec.toUpperCase(),
-                                    style: typography.caption.copyWith(
-                                      fontSize: 10.0,
-                                      color: Colors.white.withValues(alpha: 0.8),
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.8,
+                              const SizedBox(height: 12.0),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(12.0),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.waves, size: 12.0, color: Colors.white.withValues(alpha: 0.6)),
+                                    const SizedBox(width: 4.0),
+                                    Text(
+                                      codec.toUpperCase(),
+                                      style: typography.caption.copyWith(
+                                        fontSize: 10.0,
+                                        color: Colors.white.withValues(alpha: 0.8),
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.8,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 36.0),
@@ -1533,22 +1580,26 @@ class _VinylStylePlayer extends ConsumerWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: DATokens.spacingLarge),
-          child: Column(
-            children: [
-              Text(
-                currentSong?.title ?? 'No Track Selected',
-                style: typography.title.copyWith(fontSize: 22.0, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4.0),
-              Text(
-                currentSong?.artist ?? 'Choose a track to play',
-                style: typography.body.copyWith(color: colors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-            ],
+          child: SwipeableArtwork(
+            onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
+            onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
+            child: Column(
+              children: [
+                Text(
+                  currentSong?.title ?? 'No Track Selected',
+                  style: typography.title.copyWith(fontSize: 22.0, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4.0),
+                Text(
+                  currentSong?.artist ?? 'Choose a track to play',
+                  style: typography.body.copyWith(color: colors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: DATokens.spacingLarge),
@@ -1586,11 +1637,7 @@ class _VinylStylePlayer extends ConsumerWidget {
                         children: [
                           Expanded(
                             flex: 11,
-                            child: SwipeableArtwork(
-                              onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
-                              onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
-                              child: const VinylPlayerWidget(),
-                            ),
+                            child: const VinylPlayerWidget(),
                           ),
                           const SizedBox(width: DATokens.spacingLarge),
                           Expanded(
@@ -1607,11 +1654,7 @@ class _VinylStylePlayer extends ConsumerWidget {
                         child: Column(
                           children: [
                             const SizedBox(height: DATokens.spacingMedium),
-                            SwipeableArtwork(
-                              onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
-                              onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
-                              child: const VinylPlayerWidget(),
-                            ),
+                            const VinylPlayerWidget(),
                             const SizedBox(height: DATokens.spacingMedium),
                             rightControlsSide,
                           ],
@@ -1685,33 +1728,38 @@ class _MinimalStylePlayerState extends ConsumerState<_MinimalStylePlayer> {
               const Spacer(),
               if (currentSong?.artworkUrl != null)
                 Center(
-                  child: SwipeableArtwork(
-                    onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
-                    onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20.0),
-                      child: DAImage(
-                        url: currentSong?.artworkUrl,
-                        width: 240.0,
-                        height: 240.0,
-                        fit: BoxFit.cover,
-                      ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20.0),
+                    child: DAImage(
+                      url: currentSong?.artworkUrl,
+                      width: 240.0,
+                      height: 240.0,
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ),
               const SizedBox(height: 40.0),
-              Text(
-                currentSong?.title ?? 'No Track Selected',
-                style: typography.title.copyWith(fontSize: 20.0, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6.0),
-              Text(
-                currentSong?.artist ?? 'Unknown Artist',
-                style: typography.body.copyWith(color: colors.textSecondary),
-                textAlign: TextAlign.center,
+              SwipeableArtwork(
+                onSwipeLeft: () => ref.read(playbackControllerProvider).next(),
+                onSwipeRight: () => ref.read(playbackControllerProvider).previous(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      currentSong?.title ?? 'No Track Selected',
+                      style: typography.title.copyWith(fontSize: 20.0, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6.0),
+                    Text(
+                      currentSong?.artist ?? 'Unknown Artist',
+                      style: typography.body.copyWith(color: colors.textSecondary),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 40.0),
               SliderTheme(

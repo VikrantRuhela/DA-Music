@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:da_tunes/main.dart';
 import 'package:da_tunes/features/home/presentation/widgets/greeting_widget.dart';
@@ -56,8 +57,17 @@ class FakeSecureCredentialStore extends SecureCredentialStore {
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    const channel = MethodChannel('plugins.flutter.io/path_provider');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (methodCall) async {
+      return '.';
+    });
+
     final sessionManager = SessionManager(FakeSecureCredentialStore());
-    sessionManager.setGuestMode(true);
+    await sessionManager.restoreSession();
+    await sessionManager.setGuestMode(true);
+    await sessionManager.completeGuestOnboarding();
 
     await tester.pumpWidget(
       ProviderScope(
@@ -85,7 +95,7 @@ void main() {
     );
 
     // Allow navigation/router microtasks to resolve
-    await tester.pumpAndSettle();
+    await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
     // Verify that our welcome greeting is found on the home page.

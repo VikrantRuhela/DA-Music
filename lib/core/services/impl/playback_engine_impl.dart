@@ -51,6 +51,9 @@ class PlaybackEngineImpl implements PlaybackEngine {
         _backendEventSub = _backend.eventStream.listen((event) {
           if (event is PlatformPlaybackCompleted) {
             next(isManual: false);
+          } else if (event is PlatformPlaybackError) {
+            DALogger.warning('PlaybackEngine: Platform playback error received: ${event.message}. Skipping to next...');
+            next(isManual: false);
           }
         });
       });
@@ -74,6 +77,9 @@ class PlaybackEngineImpl implements PlaybackEngine {
 
         final docDir = await getApplicationDocumentsDirectory();
         final localFile = File(p.join(docDir.path, 'da_tunes_downloads', '${song.id}.mp3'));
+        
+        final tempDir = await getTemporaryDirectory();
+        final cachedFile = File(p.join(tempDir.path, 'da_tunes_cache', '${song.id}.mp3'));
 
         if (localFile.existsSync()) {
           if (_currentlyLoadingSongId != targetSongId) {
@@ -82,6 +88,13 @@ class PlaybackEngineImpl implements PlaybackEngine {
           }
           DALogger.info('PlaybackEngine: Playing local offline file: ${localFile.path}');
           await _backend.load(localFile.path);
+        } else if (cachedFile.existsSync()) {
+          if (_currentlyLoadingSongId != targetSongId) {
+            DALogger.info('PlaybackEngine: load($targetSongId) discarded because a newer load request started.');
+            return;
+          }
+          DALogger.info('PlaybackEngine: Playing local cached file: ${cachedFile.path}');
+          await _backend.load(cachedFile.path);
         } else {
           final stream = await _streamResolver.resolve(
             trackId: song.id,
@@ -146,7 +159,12 @@ class PlaybackEngineImpl implements PlaybackEngine {
         int nextIndex = queue.currentIndex;
 
         if (!isManual && queue.repeatMode == RepeatMode.one) {
-          await load(queue.songs[queue.currentIndex]);
+          final loadResult = await load(queue.songs[queue.currentIndex]);
+          if (loadResult is PlaybackFailureResult) {
+            DALogger.warning('PlaybackEngine: Repeat-one track failed to load. Skipping to next...');
+            await next(isManual: false);
+            return;
+          }
           await play();
           return;
         }
@@ -184,7 +202,12 @@ class PlaybackEngineImpl implements PlaybackEngine {
 
         _queue = queue.copyWith(currentIndex: nextIndex);
         _queueController.add(_queue!);
-        await load(_queue!.songs[nextIndex]);
+        final loadResult = await load(_queue!.songs[nextIndex]);
+        if (loadResult is PlaybackFailureResult) {
+          DALogger.warning('PlaybackEngine: Failed to load track $nextIndex. Skipping to next...');
+          await next(isManual: false);
+          return;
+        }
         await play();
       });
 

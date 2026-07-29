@@ -186,6 +186,7 @@ class SearchPage extends ConsumerStatefulWidget {
 
 class _SearchPageState extends ConsumerState<SearchPage> {
   late final TextEditingController _controller;
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
@@ -196,10 +197,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ref.read(searchPageProvider.notifier).onQueryChanged(widget.initialQuery);
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _focusNode.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -232,6 +239,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ),
                 child: TextField(
                   controller: _controller,
+                  focusNode: _focusNode,
+                  autofocus: true,
                   onChanged: (val) => ref.read(searchPageProvider.notifier).onQueryChanged(val),
                   style: theme.typography.body.copyWith(color: theme.textPrimary),
                   decoration: InputDecoration(

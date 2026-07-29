@@ -351,6 +351,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               ),
             )
           : ListView.builder(
+              cacheExtent: 800.0,
+              addRepaintBoundaries: true,
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(
                 horizontal: DATokens.spacingMedium,

@@ -212,12 +212,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
-    print('[HOME] initState()');
+    DALogger.info('[GUEST HOME] Home screen initialized.');
   }
 
   @override
   Widget build(BuildContext context) {
-    print('[HOME] Widget rebuilding');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       print('[HOME] Render completed');
     });
@@ -252,19 +251,17 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
           data: (sections) {
+            DALogger.info('[GUEST HOME] Home feed created successfully. Section count: ${sections.length}');
             final List<Widget> children = [
               const Padding(
                 padding: EdgeInsets.only(bottom: DATokens.spacingMedium),
                 child: GreetingWidget(),
               ),
-              const Padding(
-                padding: EdgeInsets.only(bottom: DATokens.spacingLarge),
-                child: SearchWidget(),
-              ),
             ];
 
             for (final section in sections) {
               if (section.items.isEmpty) continue;
+              if (section.type == 'because_you_listened' || section.type == 'made_for_you') continue;
 
               final List<Widget> cards = [];
 
@@ -359,6 +356,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             if (scaleMode == MotionScaleMode.disabled) {
               listWidget = ListView.builder(
                 key: const ValueKey('list'),
+                cacheExtent: 800.0,
+                addRepaintBoundaries: true,
                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 padding: EdgeInsets.only(
                   left: DATokens.spacingLarge,
@@ -374,6 +373,8 @@ class _HomePageState extends ConsumerState<HomePage> {
 
               listWidget = ListView.builder(
                 key: const ValueKey('list_animated'),
+                cacheExtent: 800.0,
+                addRepaintBoundaries: true,
                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 padding: EdgeInsets.only(
                   left: DATokens.spacingLarge,
@@ -393,6 +394,12 @@ class _HomePageState extends ConsumerState<HomePage> {
 
             return RefreshIndicator(
               onRefresh: () async {
+                try {
+                  final storage = ref.read(storageServiceProvider);
+                  await storage.remove('ytm_cache_personalized_sections');
+                  await storage.remove('ytm_cache_home_feed');
+                } catch (_) {}
+                
                 ref.invalidate(personalizedRecommendationsProvider);
                 ref.invalidate(personalizedAlbumsProvider);
                 ref.invalidate(personalizedPlaylistsProvider);

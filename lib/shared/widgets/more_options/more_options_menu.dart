@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'menu_action.dart';
 import '../da_image.dart';
 import '../../../core/extensions/context_extensions.dart';
+import '../../../core/services/device_memory_manager.dart';
 
 class FloatingMoreOptionsRoute extends PopupRoute<void> {
   final Widget child;
@@ -52,8 +53,9 @@ class FloatingMoreOptionsRoute extends PopupRoute<void> {
     return AnimatedBuilder(
       animation: animation,
       builder: (context, childWidget) {
+        final effectiveBlur = DeviceMemoryManager.instance.getRecommendedBlurSigma(blur.value);
         return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur.value, sigmaY: blur.value),
+          filter: ImageFilter.blur(sigmaX: effectiveBlur, sigmaY: effectiveBlur),
           child: Opacity(
             opacity: opacity.value,
             child: Transform.translate(

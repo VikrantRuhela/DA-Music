@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/listening_history_repository.dart';
@@ -129,8 +130,65 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
         likedSongs: likes,
       );
 
+      final sessionManager = _ref.read(sessionManagerProvider);
+      final isGuestMode = sessionManager.isGuestMode;
+
+      var finalDna = dna;
+      if (isGuestMode) {
+        final guestGenres = prefs.getStringList('ytm_guest_genres') ?? const [];
+        final guestArtists = prefs.getStringList('ytm_guest_artists') ?? const [];
+        final guestLanguages = prefs.getStringList('ytm_guest_languages') ?? const [];
+        
+        if (guestGenres.isNotEmpty || guestArtists.isNotEmpty || guestLanguages.isNotEmpty) {
+          final mergedTopArtists = List<String>.from(dna.topArtists);
+          for (final artist in guestArtists) {
+            if (!mergedTopArtists.contains(artist)) {
+              mergedTopArtists.add(artist);
+            }
+          }
+          
+          final mergedFavoriteGenres = List<String>.from(dna.favoriteGenres);
+          for (final genre in guestGenres) {
+            if (!mergedFavoriteGenres.contains(genre)) {
+              mergedFavoriteGenres.add(genre);
+            }
+          }
+
+          final Map<String, double> mergedArtistAffinities = Map<String, double>.from(dna.artistAffinities);
+          for (final artist in guestArtists) {
+            mergedArtistAffinities[artist] = (mergedArtistAffinities[artist] ?? 0.0) + 1.0;
+          }
+
+          final Map<String, double> mergedGenreAffinities = Map<String, double>.from(dna.genreAffinities);
+          for (final genre in guestGenres) {
+            mergedGenreAffinities[genre] = (mergedGenreAffinities[genre] ?? 0.0) + 1.0;
+          }
+          
+          finalDna = MusicDNA(
+            topArtists: mergedTopArtists,
+            topAlbums: dna.topAlbums,
+            topSongs: dna.topSongs,
+            favoriteGenres: mergedFavoriteGenres,
+            favoriteLanguages: guestLanguages.isNotEmpty ? guestLanguages : dna.favoriteLanguages,
+            favoriteDecades: dna.favoriteDecades,
+            listeningMood: dna.listeningMood,
+            peakListeningTime: dna.peakListeningTime,
+            averageSessionLengthMinutes: dna.averageSessionLengthMinutes,
+            replayRate: dna.replayRate,
+            skipRate: dna.skipRate,
+            completionRate: dna.completionRate,
+            downloadCount: dna.downloadCount,
+            favoriteCount: dna.favoriteCount,
+            artistAffinities: mergedArtistAffinities,
+            genreAffinities: mergedGenreAffinities,
+            songAffinities: dna.songAffinities,
+            albumAffinities: dna.albumAffinities,
+          );
+        }
+      }
+
       state = TasteEngineState(
-        dna: dna,
+        dna: finalDna,
         isLearningPaused: isLearningPaused,
         isPersonalizationEnabled: isPersonalizationEnabled,
         excludeDownloads: excludeDownloads,
@@ -306,6 +364,10 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
   Future<void> resetMusicDNA() async {
     await clearHistory();
   }
+
+  Future<void> reload() async {
+    await _init();
+  }
 }
 
 final listeningHistoryRepositoryProvider = Provider<ListeningHistoryRepository>((ref) {
@@ -325,7 +387,7 @@ final personalizedRecommendationsProvider = FutureProvider<List<Song>>((ref) asy
   if (!isInitialized) return const [];
   if (!isPersonalizationEnabled) return const [];
 
-  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final tasteState = ref.watch(tasteEngineNotifierProvider);
   final sourceManager = ref.watch(sourceManagerProvider);
   final downloadRepo = ref.watch(downloadRepositoryProvider);
   final downloadedSongs = await downloadRepo.getDownloadedSongs();
@@ -359,8 +421,11 @@ final genericHomeFeedProvider = FutureProvider<domain.HomeFeed>((ref) async {
   DALogger.info('genericHomeFeedProvider: Fetching generic home feed...');
   try {
     final feed = await sourceManager.getHome();
-    DALogger.info('genericHomeFeedProvider: Successfully loaded from sourceManager.');
-    return feed;
+    if (feed.sections.isNotEmpty && feed.sections.any((s) => s.items.isNotEmpty)) {
+      DALogger.info('genericHomeFeedProvider: Successfully loaded from sourceManager.');
+      return feed;
+    }
+    throw Exception('Home feed returned from sourceManager is empty');
   } catch (e, stack) {
     DALogger.error('genericHomeFeedProvider: Failed to load from sourceManager, trying offline cache fallback', e, stack);
     try {
@@ -374,6 +439,75 @@ final genericHomeFeedProvider = FutureProvider<domain.HomeFeed>((ref) async {
     } catch (cacheErr, cacheStack) {
       DALogger.error('genericHomeFeedProvider: Failed to load offline cache fallback', cacheErr, cacheStack);
     }
+
+    // Build a fallback HomeFeed using public anonymous search endpoints
+    DALogger.info('genericHomeFeedProvider: Offline cache is empty, generating search-based fallback feed...');
+    try {
+      final adapter = sourceManager.activeAdapter;
+      
+      // 1. Fetch songs
+      final songsRes = await adapter.search('trending music hits');
+      final fallbackSongs = songsRes.songs.map((s) => domain.Song(
+        id: s.id,
+        title: s.title,
+        artistId: s.artistId,
+        albumId: s.albumId,
+        duration: s.duration,
+        thumbnail: s.thumbnail,
+        artwork: s.artwork,
+        sourceId: s.sourceId,
+      )).toList();
+
+      // 2. Fetch albums
+      final albumsRes = await adapter.search('top albums');
+      final fallbackAlbums = albumsRes.albums.map((a) => domain.Album(
+        id: a.id,
+        title: a.title,
+        artistId: a.artistId,
+        cover: a.cover,
+        year: a.year,
+        trackCount: a.trackCount,
+        duration: a.duration,
+      )).toList();
+
+      // 3. Fetch playlists
+      final playlistsRes = await adapter.search('popular playlist mixes');
+      final fallbackPlaylists = playlistsRes.playlists.map((p) => domain.Playlist(
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        cover: p.cover,
+        owner: p.owner,
+        songIds: p.songIds,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      )).toList();
+
+      final fallbackFeed = domain.HomeFeed(
+        sections: [
+          domain.HomeFeedSection(
+            title: 'Recommended for You',
+            type: 'recommended',
+            items: fallbackSongs,
+          ),
+          domain.HomeFeedSection(
+            title: 'Trending Albums',
+            type: 'albums',
+            items: fallbackAlbums,
+          ),
+          domain.HomeFeedSection(
+            title: 'Featured Playlists',
+            type: 'playlists',
+            items: fallbackPlaylists,
+          ),
+        ],
+      );
+      
+      return fallbackFeed;
+    } catch (fallbackErr, fallbackStack) {
+      DALogger.error('genericHomeFeedProvider: Failed to generate search-based fallback feed', fallbackErr, fallbackStack);
+    }
+
     return domain.HomeFeed(sections: []);
   }
 });
@@ -393,7 +527,7 @@ final personalizedAlbumsProvider = FutureProvider<List<domain.Album>>((ref) asyn
   if (!isPersonalizationEnabled) return ytmAlbums;
 
   final sourceManager = ref.watch(sourceManagerProvider);
-  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final tasteState = ref.watch(tasteEngineNotifierProvider);
   return RecommendationEngine.generateAlbumRecommendations(
     dna: tasteState.dna,
     sourceManager: sourceManager,
@@ -416,7 +550,7 @@ final personalizedPlaylistsProvider = FutureProvider<List<domain.Playlist>>((ref
   if (!isPersonalizationEnabled) return ytmPlaylists;
 
   final sourceManager = ref.watch(sourceManagerProvider);
-  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final tasteState = ref.watch(tasteEngineNotifierProvider);
   return RecommendationEngine.generatePlaylistRecommendations(
     dna: tasteState.dna,
     sourceManager: sourceManager,
@@ -437,18 +571,36 @@ class RecommendationSection {
     required this.items,
   });
 }final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
-  print('[HOME] Controller initialized');
+  DALogger.info('[GUEST RECOMMENDATIONS] Initialization started.');
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
   final isInitialized = ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
   if (!isInitialized) return const [];
-  
+
+  final storage = ref.watch(storageServiceProvider);
+  try {
+    DALogger.info('[GUEST RECOMMENDATIONS] Loading from cache...');
+    final cached = await storage.getString('ytm_cache_personalized_sections');
+    if (cached != null && cached.isNotEmpty) {
+      final List<RecommendationSection> cachedSections = PersonalizedSectionsCacheSerializer.deserialize(cached);
+      if (cachedSections.isNotEmpty) {
+        DALogger.info('[GUEST RECOMMENDATIONS] Loaded personalized recommendations from cache. Section count: ${cachedSections.length}');
+        return cachedSections;
+      }
+    }
+  } catch (e, stack) {
+    DALogger.error('[GUEST RECOMMENDATIONS] Cache lookup failed', e, stack);
+  }
+
+  DALogger.info('[GUEST RECOMMENDATIONS] Cache miss. Generating fresh recommendations...');
   final sourceManager = ref.watch(sourceManagerProvider);
   
   DALogger.info('personalizedSectionsProvider: Fetching home feed genericFeed via genericHomeFeedProvider...');
   domain.HomeFeed? genericFeed;
   try {
     genericFeed = await ref.watch(genericHomeFeedProvider.future);
-  } catch (_) {}
+  } catch (e, stack) {
+    DALogger.error('[GUEST RECOMMENDATIONS] Failed to watch genericHomeFeedProvider', e, stack);
+  }
 
   final rawGenericSongs = genericFeed?.sections.firstWhere((s) => s.type == 'recommended', orElse: () => domain.HomeFeedSection(title: '', type: 'recommended', items: const [])).items.cast<domain.Song>().toList() ?? const <domain.Song>[];
   // Filter non-music content from generic recommended songs
@@ -487,7 +639,7 @@ class RecommendationSection {
     ];
   }
 
-  final tasteState = ref.read(tasteEngineNotifierProvider);
+  final tasteState = ref.watch(tasteEngineNotifierProvider);
   final dna = tasteState.dna;
   final logs = tasteState.logs;
 
@@ -556,7 +708,7 @@ class RecommendationSection {
 
   final madeForYouItems = <domain.Song>[];
   try {
-    final recSongs = await ref.read(personalizedRecommendationsProvider.future);
+    final recSongs = await ref.watch(personalizedRecommendationsProvider.future);
     madeForYouItems.addAll(recSongs.map((s) => domain.Song(
       id: s.id,
       title: s.title,
@@ -567,7 +719,9 @@ class RecommendationSection {
       artwork: domain.Artwork(s.artworkUrl ?? ''),
       sourceId: s.source,
     )));
-  } catch (_) {}
+  } catch (e, stack) {
+    DALogger.error('[GUEST RECOMMENDATIONS] Failed to load personalized recommendations', e, stack);
+  }
 
   sections.add(RecommendationSection(
     title: 'Made For You',
@@ -582,6 +736,14 @@ class RecommendationSection {
     try {
       final searchRes = await sourceManager.activeAdapter.search('$targetArtist hits');
       final filtered = searchRes.songs.where((song) {
+        final targetArtistLower = targetArtist.toLowerCase().trim();
+        final songArtistLower = song.artistId.toLowerCase().trim();
+        
+        // Ensure the track is actually by or features the target artist
+        if (!songArtistLower.contains(targetArtistLower) && !targetArtistLower.contains(songArtistLower)) {
+          return false;
+        }
+
         String? reason;
         final ok = RecommendationEngine.isValidMusicCandidate(
           song.title,
@@ -595,7 +757,9 @@ class RecommendationSection {
         return ok;
       }).toList();
       becauseItems.addAll(filtered.take(10));
-    } catch (_) {}
+    } catch (e, stack) {
+      DALogger.error('[GUEST RECOMMENDATIONS] Failed search for target artist $targetArtist hits', e, stack);
+    }
     if (becauseItems.isNotEmpty) {
       sections.add(RecommendationSection(
         title: 'Because You Listened To $targetArtist',
@@ -644,6 +808,14 @@ class RecommendationSection {
     try {
       final searchRes = await sourceManager.activeAdapter.search('$secondArtist hits');
       final filtered = searchRes.songs.where((song) {
+        final targetArtistLower = secondArtist.toLowerCase().trim();
+        final songArtistLower = song.artistId.toLowerCase().trim();
+        
+        // Ensure the track is actually by or features the second artist
+        if (!songArtistLower.contains(targetArtistLower) && !targetArtistLower.contains(songArtistLower)) {
+          return false;
+        }
+
         String? reason;
         final ok = RecommendationEngine.isValidMusicCandidate(
           song.title,
@@ -657,7 +829,9 @@ class RecommendationSection {
         return ok;
       }).toList();
       similarArtistItems.addAll(filtered.take(10));
-    } catch (_) {}
+    } catch (e, stack) {
+      DALogger.error('[GUEST RECOMMENDATIONS] Failed search for second artist $secondArtist hits', e, stack);
+    }
     if (similarArtistItems.isNotEmpty) {
       sections.add(RecommendationSection(
         title: 'Similar to $secondArtist',
@@ -672,7 +846,9 @@ class RecommendationSection {
   try {
     final recAlbums = await ref.read(personalizedAlbumsProvider.future);
     similarAlbumItems.addAll(recAlbums);
-  } catch (_) {}
+  } catch (e, stack) {
+    DALogger.error('[GUEST RECOMMENDATIONS] Failed to load personalized albums', e, stack);
+  }
   sections.add(RecommendationSection(
     title: 'Similar Albums',
     subtitle: 'Albums recommended for you',
@@ -686,7 +862,9 @@ class RecommendationSection {
     try {
       final searchRes = await sourceManager.activeAdapter.search('new release $artist');
       newReleaseItems.addAll(searchRes.albums);
-    } catch (_) {}
+    } catch (e, stack) {
+      DALogger.error('[GUEST RECOMMENDATIONS] Failed search for new releases of $artist', e, stack);
+    }
     if (newReleaseItems.isNotEmpty) {
       sections.add(RecommendationSection(
         title: 'New Releases for You',
@@ -726,7 +904,9 @@ class RecommendationSection {
       artwork: domain.Artwork(s.artworkUrl ?? ''),
       sourceId: s.source,
     )));
-  } catch (_) {}
+  } catch (e, stack) {
+    DALogger.error('[GUEST RECOMMENDATIONS] Failed to generate trending recommendations', e, stack);
+  }
 
   sections.add(RecommendationSection(
     title: 'Trending for You',
@@ -735,6 +915,132 @@ class RecommendationSection {
     items: trendingItems.isNotEmpty ? trendingItems : genericSongs,
   ));
 
+  try {
+    final jsonStr = PersonalizedSectionsCacheSerializer.serialize(sections);
+    await storage.setString('ytm_cache_personalized_sections', jsonStr);
+    DALogger.info('[GUEST RECOMMENDATIONS] Cache created successfully. Recommendation section count: ${sections.length}');
+  } catch (e, stack) {
+    DALogger.error('[GUEST RECOMMENDATIONS] Failed to save cache', e, stack);
+  }
+
   print('[HOME] State updated');
   return sections;
 });
+
+class PersonalizedSectionsCacheSerializer {
+  static String serialize(List<RecommendationSection> sections) {
+    final List<Map<String, dynamic>> sectionsList = [];
+    for (final section in sections) {
+      final List<Map<String, dynamic>> itemsList = [];
+      for (final item in section.items) {
+        if (item is domain.Song) {
+          itemsList.add({
+            '__type': 'song',
+            'id': item.id,
+            'title': item.title,
+            'artistId': item.artistId,
+            'albumId': item.albumId,
+            'durationMs': item.duration.value.inMilliseconds,
+            'thumbnailUrl': item.thumbnail.url,
+            'artworkUrl': item.artwork.url,
+            'sourceId': item.sourceId,
+          });
+        } else if (item is domain.Album) {
+          itemsList.add({
+            '__type': 'album',
+            'id': item.id,
+            'title': item.title,
+            'artistId': item.artistId,
+            'coverUrl': item.cover.url,
+            'year': item.year,
+            'trackCount': item.trackCount,
+            'durationMs': item.duration.value.inMilliseconds,
+          });
+        } else if (item is domain.Playlist) {
+          itemsList.add({
+            '__type': 'playlist',
+            'id': item.id,
+            'title': item.title,
+            'description': item.description,
+            'coverUrl': item.cover.url,
+            'owner': item.owner,
+            'songIds': item.songIds,
+            'createdAt': item.createdAt.toIso8601String(),
+            'updatedAt': item.updatedAt.toIso8601String(),
+          });
+        }
+      }
+      sectionsList.add({
+        'title': section.title,
+        'subtitle': section.subtitle,
+        'type': section.type,
+        'items': itemsList,
+      });
+    }
+    return jsonEncode(sectionsList);
+  }
+
+  static List<RecommendationSection> deserialize(String jsonStr) {
+    try {
+      final List<dynamic> sectionsList = jsonDecode(jsonStr);
+      final List<RecommendationSection> sections = [];
+      for (final secMap in sectionsList) {
+        if (secMap is Map) {
+          final String title = secMap['title'] as String? ?? 'Untitled Section';
+          final String subtitle = secMap['subtitle'] as String? ?? '';
+          final String type = secMap['type'] as String? ?? 'generic';
+          final List<dynamic> itemsList = secMap['items'] as List? ?? [];
+          final List<dynamic> items = [];
+
+          for (final itemMap in itemsList) {
+            if (itemMap is Map) {
+              final typeKey = itemMap['__type'] as String?;
+              if (typeKey == 'song') {
+                items.add(domain.Song(
+                  id: itemMap['id'] as String? ?? '',
+                  title: itemMap['title'] as String? ?? '',
+                  artistId: itemMap['artistId'] as String? ?? '',
+                  albumId: itemMap['albumId'] as String? ?? '',
+                  duration: domain.DurationValue(Duration(milliseconds: itemMap['durationMs'] as int? ?? 0)),
+                  thumbnail: domain.Artwork(itemMap['thumbnailUrl'] as String?),
+                  artwork: domain.Artwork(itemMap['artworkUrl'] as String?),
+                  sourceId: itemMap['sourceId'] as String? ?? '',
+                ));
+              } else if (typeKey == 'album') {
+                items.add(domain.Album(
+                  id: itemMap['id'] as String? ?? '',
+                  title: itemMap['title'] as String? ?? '',
+                  artistId: itemMap['artistId'] as String? ?? '',
+                  cover: domain.Artwork(itemMap['coverUrl'] as String?),
+                  year: itemMap['year'] as int? ?? 2026,
+                  trackCount: itemMap['trackCount'] as int? ?? 0,
+                  duration: domain.DurationValue(Duration(milliseconds: itemMap['durationMs'] as int? ?? 0)),
+                ));
+              } else if (typeKey == 'playlist') {
+                items.add(domain.Playlist(
+                  id: itemMap['id'] as String? ?? '',
+                  title: itemMap['title'] as String? ?? '',
+                  description: itemMap['description'] as String? ?? '',
+                  cover: domain.Artwork(itemMap['coverUrl'] as String?),
+                  owner: itemMap['owner'] as String? ?? '',
+                  songIds: List<String>.from(itemMap['songIds'] ?? []),
+                  createdAt: DateTime.tryParse(itemMap['createdAt'] as String? ?? '') ?? DateTime.now(),
+                  updatedAt: DateTime.tryParse(itemMap['updatedAt'] as String? ?? '') ?? DateTime.now(),
+                ));
+              }
+            }
+          }
+          sections.add(RecommendationSection(
+            title: title,
+            subtitle: subtitle,
+            type: type,
+            items: items,
+          ));
+        }
+      }
+      return sections;
+    } catch (_) {
+      return [];
+    }
+  }
+}

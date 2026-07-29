@@ -38,6 +38,7 @@ import '../../core/services/source_manager.dart';
 import '../../core/services/youtube_music_adapter.dart';
 import '../../core/services/stream_resolver.dart';
 import '../../core/services/local_stream_proxy.dart';
+import '../../core/services/playback_prefetch_manager.dart';
 import '../../data/datasource/data_sources.dart';
 import '../../data/datasource/remote_music_data_source_impl.dart';
 import '../../data/datasource/local_data_sources_impl.dart';
@@ -79,6 +80,13 @@ final localStreamProxyProvider = Provider<LocalStreamProxy>((ref) {
 final streamResolverProvider = Provider<StreamResolver>((ref) {
   return StreamResolver(
     ref.watch(sourceManagerProvider),
+    ref.watch(localStreamProxyProvider),
+  );
+});
+
+final playbackPrefetchManagerProvider = Provider<PlaybackPrefetchManager>((ref) {
+  return PlaybackPrefetchManager(
+    ref.watch(streamResolverProvider),
     ref.watch(localStreamProxyProvider),
   );
 });
@@ -234,7 +242,11 @@ final sourceServiceProvider = Provider<SourceService>((ref) {
 final playbackEngineProvider = Provider<PlaybackEngine>((ref) {
   final backend = MediaKitAudioBackend();
   final resolver = ref.watch(streamResolverProvider);
-  return PlaybackEngineImpl(backend, resolver);
+  final engine = PlaybackEngineImpl(backend, resolver);
+  ref.onDispose(() {
+    engine.dispose();
+  });
+  return engine;
 });
 
 final eventBusProvider = Provider<EventBus>((ref) {

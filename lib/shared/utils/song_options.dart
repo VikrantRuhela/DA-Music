@@ -12,6 +12,7 @@ import '../widgets/more_options/menu_action.dart';
 import '../widgets/more_options/more_options_menu.dart';
 import '../widgets/more_options/song_info_sheet.dart';
 import '../../core/services/playback_controller.dart';
+import '../../core/services/download_manager.dart';
 
 Rect _getWidgetBounds(BuildContext context) {
   try {
@@ -30,6 +31,8 @@ void showSongOptionsMenu(BuildContext context, WidgetRef ref, Song song, {int? q
   final isLiked = libraryManager.isSongLiked(song.id);
   final colors = context.daColors;
   final bounds = _getWidgetBounds(context);
+  final downloadManager = ref.read(downloadManagerProvider);
+  final downloadTask = downloadManager.getTask(song.id);
 
   final actions = [
     MenuAction(
@@ -80,6 +83,29 @@ void showSongOptionsMenu(BuildContext context, WidgetRef ref, Song song, {int? q
         await ref.read(playbackControllerProvider).selectSong(song);
       },
     ),
+    if (downloadTask == null ||
+        downloadTask.status == DownloadStatus.failed ||
+        downloadTask.status == DownloadStatus.cancelled)
+      MenuAction(
+        title: 'Download Song',
+        icon: Icons.download,
+        onTap: () => ref.read(downloadManagerProvider).startDownload(song),
+      )
+    else if (downloadTask.status == DownloadStatus.downloading ||
+        downloadTask.status == DownloadStatus.queued)
+      MenuAction(
+        title: 'Cancel Download (${(downloadTask.progress * 100).toStringAsFixed(0)}%)',
+        icon: Icons.downloading,
+        color: Colors.orangeAccent,
+        onTap: () => ref.read(downloadManagerProvider).cancelDownload(song.id),
+      )
+    else if (downloadTask.status == DownloadStatus.completed)
+      MenuAction(
+        title: 'Remove Download',
+        icon: Icons.delete_outline,
+        color: Colors.redAccent,
+        onTap: () => ref.read(downloadManagerProvider).removeDownload(song.id),
+      ),
     if (song.album.isNotEmpty && song.album != 'yt_album_unknown')
       MenuAction(
         title: 'Go to Album',
@@ -262,6 +288,22 @@ void showAlbumOptionsMenu(BuildContext context, WidgetRef ref, Album album) {
       },
     ),
     MenuAction(
+      title: 'Download Album',
+      icon: Icons.download,
+      onTap: () {
+        final downloadManager = ref.read(downloadManagerProvider);
+        for (final song in album.songs) {
+          downloadManager.startDownload(song);
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: colors.surfaceCard,
+            content: Text('Downloading ${album.songs.length} songs from "${album.name}"...', style: TextStyle(color: colors.textPrimary)),
+          ),
+        );
+      },
+    ),
+    MenuAction(
       title: 'Go to Artist',
       icon: Icons.person_outline,
       onTap: () => navigateToArtistByName(context, ref, album.artist),
@@ -303,13 +345,17 @@ void showPlaylistOptionsMenu(BuildContext context, WidgetRef ref, Playlist playl
       },
     ),
     MenuAction(
-      title: 'Download (Future Ready)',
+      title: 'Download Playlist',
       icon: Icons.download,
       onTap: () {
+        final downloadManager = ref.read(downloadManagerProvider);
+        for (final song in playlist.songs) {
+          downloadManager.startDownload(song);
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: colors.surfaceCard,
-            content: Text('Download features will be integrated soon.', style: TextStyle(color: colors.textPrimary)),
+            content: Text('Downloading ${playlist.songs.length} songs from "${playlist.name}"...', style: TextStyle(color: colors.textPrimary)),
           ),
         );
       },

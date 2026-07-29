@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/extensions/context_extensions.dart';
 import '../../../core/services/logger_service.dart';
@@ -13,6 +15,7 @@ import '../../../shared/providers/backend_providers.dart' hide sourceManagerProv
 import '../../../shared/widgets/da_card.dart';
 import '../../taste_engine/presentation/music_dna_page.dart';
 import '../../taste_engine/presentation/taste_settings_page.dart';
+import '../../taste_engine/presentation/providers/taste_engine_providers.dart';
 import '../../onboarding/presentation/widgets/auth_webview_page.dart';
 import '../../onboarding/presentation/widgets/cookie_login_dialog.dart';
 import 'about_page.dart';
@@ -20,6 +23,52 @@ import 'about_page.dart';
 final diagnosticLoggingProvider = StateProvider<bool>((ref) {
   return DALogger.activeLevel == LogLevel.debug;
 });
+
+final cacheLimitProvider = StateNotifierProvider<CacheLimitNotifier, String>((ref) {
+  return CacheLimitNotifier();
+});
+
+class CacheLimitNotifier extends StateNotifier<String> {
+  CacheLimitNotifier() : super('500MB') {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getString('ytm_cache_limit') ?? '500MB';
+  }
+
+  Future<void> setLimit(String limit) async {
+    state = limit;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ytm_cache_limit', limit);
+  }
+}
+
+final cacheSizeProvider = FutureProvider.autoDispose<int>((ref) async {
+  try {
+    final tempDir = await getTemporaryDirectory();
+    final cacheParent = Directory('${tempDir.path}/da_tunes_cache');
+    if (!cacheParent.existsSync()) return 0;
+
+    var totalSize = 0;
+    final files = cacheParent.listSync();
+    for (final file in files) {
+      if (file is File && (file.path.endsWith('.mp3') || file.path.endsWith('.jpg') || file.path.endsWith('.tmp'))) {
+        totalSize += file.lengthSync();
+      }
+    }
+    return totalSize;
+  } catch (_) {
+    return 0;
+  }
+});
+
+String _formatSize(int bytes) {
+  if (bytes <= 0) return '0 MB';
+  final mb = bytes / (1024 * 1024);
+  return '${mb.toStringAsFixed(1)} MB';
+}
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -153,38 +202,104 @@ class SettingsPage extends ConsumerWidget {
             ),
             const SizedBox(height: DATokens.spacingLarge),
 
-            // Section 2: Storage & Cache Management
-            _buildSectionHeader(context, 'Cache & Local Storage'),
-            DACard(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: Icon(Icons.cleaning_services_outlined, color: colors.primary),
-                    title: Text(
-                      'Clear Playback Cache',
-                      style: typography.title.copyWith(fontSize: 15.0),
-                    ),
-                    subtitle: Text(
-                      'Free up space by removing cached album art and track metadata',
-                      style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary),
-                    ),
-                    trailing: TextButton(
-                      onPressed: () {
-                        // Clear caches
-                        ref.read(sourceManagerProvider).clearCache();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Local playback metadata caches successfully cleared.'),
-                            backgroundColor: colors.primary,
-                          ),
-                        );
-                      },
-                      child: const Text('Clear'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+             // Section 2: Storage & Cache Management
+             _buildSectionHeader(context, 'Cache & Local Storage'),
+             DACard(
+               child: Column(
+                 children: [
+                   _buildDropdownTile<String>(
+                     context: context,
+                     icon: Icons.storage_outlined,
+                     title: 'Cache Size Limit',
+                     subtitle: 'Set maximum space for offline caching',
+                     value: ref.watch(cacheLimitProvider),
+                     items: const [
+                       DropdownMenuItem(value: '250MB', child: Text('250 MB')),
+                       DropdownMenuItem(value: '500MB', child: Text('500 MB')),
+                       DropdownMenuItem(value: '1GB', child: Text('1 GB')),
+                       DropdownMenuItem(value: '2GB', child: Text('2 GB')),
+                       DropdownMenuItem(value: '5GB', child: Text('5 GB')),
+                       DropdownMenuItem(value: 'Unlimited', child: Text('Unlimited')),
+                     ],
+                     onChanged: (val) {
+                       if (val != null) {
+                         ref.read(cacheLimitProvider.notifier).setLimit(val);
+                       }
+                     },
+                   ),
+                   const Divider(height: 1),
+                   Consumer(
+                     builder: (context, ref, child) {
+                       final sizeAsync = ref.watch(cacheSizeProvider);
+                       final limit = ref.watch(cacheLimitProvider);
+                       
+                       return sizeAsync.when(
+                         loading: () => const ListTile(
+                           leading: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                           title: Text('Calculating cache size...'),
+                         ),
+                         error: (_, __) => const ListTile(
+                           leading: Icon(Icons.error_outline),
+                           title: Text('Error calculating cache size'),
+                         ),
+                         data: (sizeInBytes) {
+                           final usedStr = _formatSize(sizeInBytes);
+                           final limitStr = limit == 'Unlimited' ? 'Unlimited' : limit;
+                           
+                           return ListTile(
+                             leading: Icon(Icons.info_outline, color: colors.primary),
+                             title: Text('Cache Used', style: typography.title.copyWith(fontSize: 15.0)),
+                             subtitle: Text('$usedStr / $limitStr', style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary)),
+                           );
+                         },
+                       );
+                     },
+                   ),
+                   const Divider(height: 1),
+                   ListTile(
+                     leading: Icon(Icons.cleaning_services_outlined, color: colors.primary),
+                     title: Text(
+                       'Clear Playback Cache',
+                       style: typography.title.copyWith(fontSize: 15.0),
+                     ),
+                     subtitle: Text(
+                       'Free up space by removing cached songs and artwork files',
+                       style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary),
+                     ),
+                     trailing: TextButton(
+                       onPressed: () async {
+                         ref.read(sourceManagerProvider).clearCache();
+                         try {
+                           final tempDir = await getTemporaryDirectory();
+                           final cacheParent = Directory('${tempDir.path}/da_tunes_cache');
+                           if (cacheParent.existsSync()) {
+                             final files = cacheParent.listSync();
+                             for (final file in files) {
+                               if (file is File) {
+                                 try {
+                                   file.deleteSync();
+                                 } catch (_) {}
+                               }
+                             }
+                           }
+                           ref.invalidate(cacheSizeProvider);
+                         } catch (_) {}
+
+                         if (context.mounted) {
+                           ScaffoldMessenger.of(context).showSnackBar(
+                             SnackBar(
+                               content: const Text('Playback cache files successfully cleared.'),
+                               backgroundColor: colors.primary,
+                             ),
+                           );
+                         }
+                       },
+                       child: const Text('Clear'),
+                     ),
+                   ),
+                 ],
+               ),
+             ),
             const SizedBox(height: DATokens.spacingLarge),
 
             // Section 3: General Developer Options
@@ -236,6 +351,81 @@ class SettingsPage extends ConsumerWidget {
                       );
                     },
                   ),
+                  if (ref.watch(sessionManagerProvider).isGuestMode) ...[
+                    const Divider(height: 1, color: Colors.white10),
+                    ListTile(
+                      leading: Icon(Icons.edit_outlined, color: colors.primary),
+                      title: Text('Edit Guest Username', style: typography.title.copyWith(fontSize: 15.0)),
+                      subtitle: Text('Change your custom display name', style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary)),
+                      trailing: const Icon(Icons.chevron_right, size: 20.0),
+                      onTap: () async {
+                        final currentName = ref.read(sessionManagerProvider).guestUsername ?? 'Voyager';
+                        final editController = TextEditingController(text: currentName);
+                        final newName = await showDialog<String>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: colors.surfaceCard,
+                            title: Text('Edit Username', style: typography.title.copyWith(fontSize: 18.0)),
+                            content: TextField(
+                              controller: editController,
+                              autofocus: true,
+                              maxLength: 20,
+                              decoration: InputDecoration(
+                                hintText: 'Enter new name...',
+                                border: UnderlineInputBorder(
+                                  borderSide: BorderSide(color: colors.primary),
+                                ),
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: Text('Cancel', style: TextStyle(color: colors.primary)),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, editController.text.trim()),
+                                child: Text('Save', style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (newName != null && newName.isNotEmpty) {
+                          await ref.read(sessionManagerProvider).updateGuestUsername(newName);
+                        }
+                      },
+                    ),
+                    const Divider(height: 1, color: Colors.white10),
+                    ListTile(
+                      leading: Icon(Icons.restart_alt, color: colors.primary),
+                      title: Text('Reset Guest Onboarding', style: typography.title.copyWith(fontSize: 15.0)),
+                      subtitle: Text('Re-create your guest username and music preferences profile', style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary)),
+                      trailing: const Icon(Icons.chevron_right, size: 20.0),
+                      onTap: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: colors.surfaceCard,
+                            title: Text('Reset Onboarding?', style: typography.title.copyWith(fontSize: 18.0)),
+                            content: Text('This will reset your guest username and preference profile, and redirect you to onboarding. Proceed?', style: typography.body.copyWith(fontSize: 14.0, color: colors.textSecondary)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: Text('Cancel', style: TextStyle(color: colors.primary)),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Reset', style: TextStyle(color: Colors.redAccent)),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          await ref.read(sessionManagerProvider).resetGuestOnboarding();
+                          await ref.read(tasteEngineNotifierProvider.notifier).reload();
+                        }
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),

@@ -29,6 +29,42 @@ class Artwork {
 
   Artwork(String? url) : url = _validateAndNormalize(url);
 
+  static String _getHighQualityUrl(String url) {
+    if (url.isEmpty) return url;
+
+    // Check if it is a Google User Content or ggpht URL (standard for YouTube/YouTube Music artwork)
+    if (url.contains('googleusercontent.com') || url.contains('ggpht.com')) {
+      final eqIndex = url.lastIndexOf('=');
+      if (eqIndex != -1) {
+        final baseUrl = url.substring(0, eqIndex);
+        // w600-h600 is standard high quality square resolution for YT Music album art.
+        // -l90-rj requests 90% quality JPEG compression and standard square crop.
+        return '$baseUrl=w600-h600-l90-rj';
+      } else {
+        return '$url=w600-h600-l90-rj';
+      }
+    }
+
+    // Check if it is a standard YouTube video thumbnail (uses path /vi/VIDEO_ID/)
+    if (url.contains('/vi/')) {
+      var cleanUrl = url;
+      final qIndex = url.indexOf('?');
+      if (qIndex != -1) {
+        cleanUrl = url.substring(0, qIndex);
+      }
+      // Replace low/medium quality thumbnail filenames with hqdefault.jpg
+      // Check endsWith to prevent matching "default.jpg" inside "hqdefault.jpg" or "sddefault.jpg"
+      if (cleanUrl.endsWith('/default.jpg')) {
+        cleanUrl = cleanUrl.substring(0, cleanUrl.length - '/default.jpg'.length) + '/hqdefault.jpg';
+      } else if (cleanUrl.endsWith('/mqdefault.jpg')) {
+        cleanUrl = cleanUrl.substring(0, cleanUrl.length - '/mqdefault.jpg'.length) + '/hqdefault.jpg';
+      }
+      return cleanUrl;
+    }
+
+    return url;
+  }
+
   static String _validateAndNormalize(String? rawUrl) {
     if (rawUrl == null) return defaultArtwork;
     final trimmed = rawUrl.trim();
@@ -52,7 +88,7 @@ class Artwork {
       return trimmed;
     }
     if ((scheme == 'http' || scheme == 'https') && uri.hasAuthority) {
-      return trimmed;
+      return _getHighQualityUrl(trimmed);
     }
 
     return defaultArtwork;

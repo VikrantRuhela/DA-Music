@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/extensions/context_extensions.dart';
+import '../../core/services/device_memory_manager.dart';
 import '../providers/player_providers.dart';
 import '../providers/library_providers.dart';
 
@@ -24,42 +25,35 @@ class BlurredBackground extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 1. Base dark background (prevents transparent/glitch background during image loading)
+        // 1. Base dark background
         Container(
           color: Colors.black,
         ),
-        // 2. Processed image with Gaussian Blur and reduced opacity
+        // 2. Artwork image overlay
         Opacity(
-          opacity: 0.8,
-          child: ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 45.0, sigmaY: 45.0, tileMode: TileMode.mirror),
-            child: imageUrl.startsWith('http://') || imageUrl.startsWith('https://')
-                ? Image.network(
-                    imageUrl,
-                    fit: BoxFit.cover,
-                    cacheWidth: 150,
-                    errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
-                  )
-                : (imageUrl.startsWith('assets/')
-                    ? Image.asset(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        cacheWidth: 150,
-                        errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
-                      )
-                    : Image.file(
-                        File(imageUrl),
-                        fit: BoxFit.cover,
-                        cacheWidth: 150,
-                        errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
-                      )),
-          ),
+          opacity: 0.85,
+          child: imageUrl.startsWith('http://') || imageUrl.startsWith('https://')
+              ? Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  cacheWidth: 300,
+                  errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+                )
+              : (imageUrl.startsWith('assets/')
+                  ? Image.asset(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      cacheWidth: 300,
+                      errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+                    )
+                  : Image.file(
+                      File(imageUrl),
+                      fit: BoxFit.cover,
+                      cacheWidth: 300,
+                      errorBuilder: (context, error, stackTrace) => Container(color: Colors.black),
+                    )),
         ),
-        // 3. Slight dark overlay
-        Container(
-          color: Colors.black.withValues(alpha: 0.45),
-        ),
-        // 4. Soft vignette overlay
+        // 3. Subtle dark vignette
         Container(
           decoration: BoxDecoration(
             gradient: RadialGradient(
@@ -67,7 +61,7 @@ class BlurredBackground extends StatelessWidget {
               radius: 1.4,
               colors: [
                 Colors.transparent,
-                Colors.black.withValues(alpha: 0.75),
+                Colors.black.withValues(alpha: 0.35),
               ],
               stops: const [0.35, 1.0],
             ),
@@ -89,6 +83,7 @@ class AmbientBackground extends ConsumerWidget {
     final showAlbumArt = ref.watch(showAlbumArtBackgroundProvider);
     final currentSong = ref.watch(currentSongProvider);
     final String? artworkUrl = currentSong?.artworkUrl;
+    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
 
     Widget backgroundWidget;
 

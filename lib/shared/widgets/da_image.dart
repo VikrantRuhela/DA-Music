@@ -1,9 +1,15 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../core/services/device_memory_manager.dart';
 
 /// A unified image loader widget that transparently supports both remote HTTP URLs
-/// and local absolute file paths, with built-in placeholder fallback behavior.
+/// and local absolute file paths, with built-in placeholder fallback behavior
+/// and memory-efficient bitmap downscaling for low-end (4GB RAM) devices.
 class DAImage extends StatelessWidget {
+  static String? cacheDirPath;
+  static String? documentsDirPath;
+
   final String? url;
   final double? width;
   final double? height;
@@ -32,6 +38,22 @@ class DAImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var cleanUrl = url?.trim();
+
+    if (trackId != null && trackId!.isNotEmpty) {
+      if (cacheDirPath != null) {
+        final cachedArtwork = File('$cacheDirPath/da_tunes_cache/$trackId.jpg');
+        if (cachedArtwork.existsSync()) {
+          cleanUrl = cachedArtwork.path;
+        }
+      }
+      if ((cleanUrl == null || cleanUrl.startsWith('http')) && documentsDirPath != null) {
+        final downloadedArtwork = File('$documentsDirPath/da_tunes_downloads/$trackId.jpg');
+        if (downloadedArtwork.existsSync()) {
+          cleanUrl = downloadedArtwork.path;
+        }
+      }
+    }
+
     if ((cleanUrl == null || cleanUrl.isEmpty) && isTrack) {
       cleanUrl = 'assets/images/da_placeholder.jpg';
     } else if (cleanUrl == 'assets/images/da_placeholder.jpg' && !isTrack) {
@@ -50,18 +72,16 @@ class DAImage extends StatelessWidget {
       ),
     );
 
-    if (trackId != null) print('[ARTWORK] Track ID: $trackId');
-    if (albumId != null) print('[ARTWORK] Album ID: $albumId');
-    if (artistId != null) print('[ARTWORK] Artist ID: $artistId');
-    print('[ARTWORK] Artwork URL: ${cleanUrl ?? "empty"}');
-
     if (cleanUrl == null || cleanUrl.isEmpty) {
-      print('[ARTWORK] Placeholder Used');
       return fallback;
     }
 
     final hasNetwork = cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
     final hasAsset = cleanUrl.startsWith('assets/');
+
+    final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2.0;
+    final int? targetCacheWidth = width != null ? DeviceMemoryManager.instance.getTargetCacheDimension(width, devicePixelRatio: dpr) : null;
+    final int? targetCacheHeight = height != null ? DeviceMemoryManager.instance.getTargetCacheDimension(height, devicePixelRatio: dpr) : null;
 
     if (hasAsset) {
       return Image.asset(
@@ -69,18 +89,13 @@ class DAImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        cacheWidth: targetCacheWidth,
+        cacheHeight: targetCacheHeight,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (frame != null) {
-            print('[ARTWORK] Image Loaded');
-            print('[ARTWORK] Cache Hit');
-            return child;
-          }
+          if (frame != null) return child;
           return fallback;
         },
-        errorBuilder: (ctx, err, st) {
-          print('[ARTWORK] Placeholder Used (Error loading asset)');
-          return fallback;
-        },
+        errorBuilder: (ctx, err, st) => fallback,
       );
     }
 
@@ -90,16 +105,13 @@ class DAImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
+        cacheWidth: targetCacheWidth,
+        cacheHeight: targetCacheHeight,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (frame != null) {
-            print('[ARTWORK] Image Loaded');
-            print('[ARTWORK] Cache ${wasSynchronouslyLoaded ? "Hit" : "Miss"}');
-            return child;
-          }
+          if (frame != null) return child;
           return fallback;
         },
         errorBuilder: (ctx, err, st) {
-          print('[ARTWORK] Placeholder Used (Error loading network image)');
           return errorBuilder?.call(ctx, err, st) ?? fallback;
         },
       );
@@ -107,30 +119,22 @@ class DAImage extends StatelessWidget {
       // Local image file path
       final file = File(cleanUrl);
       if (file.existsSync()) {
-        final int targetCacheWidth = (width != null) ? (width! * 2).round() : 400;
-        final int targetCacheHeight = (height != null) ? (height! * 2).round() : 400;
+        final int targetWidth = targetCacheWidth ?? DeviceMemoryManager.instance.getTargetCacheDimension(400, devicePixelRatio: dpr);
+        final int targetHeight = targetCacheHeight ?? DeviceMemoryManager.instance.getTargetCacheDimension(400, devicePixelRatio: dpr);
         return Image.file(
           file,
           width: width,
           height: height,
           fit: fit,
-          cacheWidth: targetCacheWidth,
-          cacheHeight: targetCacheHeight,
+          cacheWidth: targetWidth,
+          cacheHeight: targetHeight,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            if (frame != null) {
-              print('[ARTWORK] Image Loaded');
-              print('[ARTWORK] Cache ${wasSynchronouslyLoaded ? "Hit" : "Miss"}');
-              return child;
-            }
+            if (frame != null) return child;
             return fallback;
           },
-          errorBuilder: (ctx, err, st) {
-            print('[ARTWORK] Placeholder Used (Error loading local file)');
-            return fallback;
-          },
+          errorBuilder: (ctx, err, st) => fallback,
         );
       }
-      print('[ARTWORK] Placeholder Used (File does not exist)');
       return fallback;
     }
   }

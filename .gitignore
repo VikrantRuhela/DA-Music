@@ -36,10 +36,10 @@ migrate_working_dir/
 # Symbolication related
 app.*.symbols
 
-# Obfuscation related
-app.*.map.json
+# Local runtime database & cache
+da_tunes.sqlite
+da_tunes_cache/
+da_tunes_prefetch/
+da_tunes_downloads/
+test_proxy_playback.dart
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release

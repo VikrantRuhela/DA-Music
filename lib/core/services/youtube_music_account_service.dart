@@ -625,6 +625,14 @@ class YouTubeMusicAccountService {
 
     void findContainers(dynamic node) {
       if (node is Map) {
+        final carouselHeader = node['header']?['musicCarouselShelfBasicHeaderRenderer'];
+        if (carouselHeader is Map) {
+          final strapline = carouselHeader['strapline']?['runs']?[0]?['text'] as String?;
+          if (strapline != null && strapline.isNotEmpty && !strapline.contains('YouTube') && strapline.length < 50) {
+            _sessionManager.setAccountDetails(strapline, null);
+          }
+        }
+
         final title = node['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text'] as String? ??
                       node['header']?['musicShelfRenderer']?['title']?['runs']?[0]?['text'] as String? ??
                       node['title']?['runs']?[0]?['text'] as String? ??

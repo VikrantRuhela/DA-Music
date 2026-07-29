@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <application
         android:label="DA Tunes"
-        android:name="${applicationName}"
+        android:name=".DAApplication"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
         <activity
@@ -52,6 +52,23 @@
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
+        </receiver>
+
+        <!-- Android Home Screen Widget Provider (Single Responsive Widget) -->
+        <receiver android:name=".DAWidgetProvider"
+            android:label="DA Tunes Widget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.vikrantruhela.datunes.ACTION_PLAY_PAUSE" />
+                <action android:name="com.vikrantruhela.datunes.ACTION_NEXT" />
+                <action android:name="com.vikrantruhela.datunes.ACTION_PREVIOUS" />
+                <action android:name="com.vikrantruhela.datunes.ACTION_SHUFFLE" />
+                <action android:name="com.vikrantruhela.datunes.ACTION_REPEAT" />
+                <action android:name="com.vikrantruhela.datunes.ACTION_FAVORITE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
         </receiver>
     </application>
     <!-- Required to query activities that can process text, see:

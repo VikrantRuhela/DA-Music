@@ -173,6 +173,9 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
       );
 
       _cache[song.id] = customExtension;
+      if (_cache.length > 30) {
+        _cache.remove(_cache.keys.first);
+      }
       state = _buildThemeData(customExtension);
     } catch (e) {
       dev.log('DynamicTheme: Palette extraction failed: $e');

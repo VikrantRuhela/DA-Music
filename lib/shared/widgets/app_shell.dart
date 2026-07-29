@@ -1,10 +1,13 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/context_extensions.dart';
+import '../../core/services/device_memory_manager.dart';
 import '../../app/theme/tokens.dart';
 import '../../shared/providers/player_providers.dart';
+import '../../shared/providers/library_providers.dart';
 import '../../shared/animations/motion_system.dart';
 import 'custom_title_bar.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
@@ -23,8 +26,12 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.daColors;
-    final isImmersive = ref.watch(immersiveModeProvider);
+    final currentSong = ref.watch(currentSongProvider);
+    final isImmersive = ref.watch(immersiveModeProvider) && currentSong != null;
     final isAndroid = Theme.of(context).platform == TargetPlatform.android;
+    final showAlbumArt = ref.watch(showAlbumArtBackgroundProvider);
+    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+    debugPrint('=== APPSHELL BUILD showAlbumArt: $showAlbumArt ===');
 
     if (isAndroid) {
       SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -45,6 +52,25 @@ class AppShell extends ConsumerWidget {
 
     final duration = ref.scaledDuration(isImmersive ? DAMotion.large : const Duration(milliseconds: 380));
     final curve = ref.scaledCurve(DAMotion.fastOutSlowIn);
+
+    final containerBorderRadius = isImmersive
+        ? BorderRadius.zero
+        : (isAndroid
+            ? const BorderRadius.vertical(
+                top: Radius.circular(DATokens.radiusXXLarge),
+              )
+            : BorderRadius.circular(DATokens.radiusXXLarge));
+
+    final containerMargin = isImmersive
+        ? EdgeInsets.zero
+        : (isAndroid
+            ? const EdgeInsets.only(
+                top: DATokens.spacingSmall,
+                left: DATokens.spacingSmall,
+                right: DATokens.spacingSmall,
+                bottom: 0.0,
+              )
+            : const EdgeInsets.all(DATokens.spacingSmall));
 
     return TastePlaybackObserver(
       child: Scaffold(
@@ -67,48 +93,69 @@ class AppShell extends ConsumerWidget {
                               opacity: (isAndroid && isImmersive) ? 0.0 : 1.0,
                               duration: duration,
                               curve: curve,
-                              child: ClipRect(
-                                child: Container(
-                                  margin: isImmersive
-                                      ? EdgeInsets.zero
-                                      : (isAndroid
-                                          ? const EdgeInsets.only(
-                                              top: DATokens.spacingSmall,
-                                              left: DATokens.spacingSmall,
-                                              right: DATokens.spacingSmall,
-                                              bottom: 0.0,
-                                            )
-                                          : const EdgeInsets.all(DATokens.spacingSmall)),
-                                  decoration: BoxDecoration(
-                                    color: isImmersive ? Colors.transparent : colors.background,
-                                    borderRadius: isImmersive
-                                        ? BorderRadius.zero
-                                        : (isAndroid
-                                            ? const BorderRadius.vertical(
-                                                top: Radius.circular(DATokens.radiusXXLarge),
+                              child: Container(
+                                margin: containerMargin,
+                                child: ClipRRect(
+                                  borderRadius: containerBorderRadius,
+                                  child: Stack(
+                                    children: [
+                                      // Layer 2: Main Dark Wine Container Surface (with frosted glass blur when showAlbumArt is enabled)
+                                      Positioned.fill(
+                                        child: showAlbumArt
+                                            ? ClipRect(
+                                                child: BackdropFilter(
+                                                  filter: ImageFilter.blur(
+                                                    sigmaX: isLowRam ? 16.0 : 25.0,
+                                                    sigmaY: isLowRam ? 16.0 : 25.0,
+                                                  ),
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      color: isImmersive ? Colors.transparent : colors.background.withValues(alpha: 0.50),
+                                                      borderRadius: containerBorderRadius,
+                                                      border: Border.all(
+                                                        color: isImmersive ? Colors.transparent : colors.border.withValues(alpha: 0.4),
+                                                        width: 1.0,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
                                               )
-                                            : BorderRadius.circular(DATokens.radiusXXLarge)),
-                                    border: Border.all(
-                                      color: isImmersive ? Colors.transparent : colors.border.withValues(alpha: 0.4),
-                                      width: 1.0,
-                                    ),
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: IgnorePointer(
-                                    ignoring: isImmersive,
-                                    child: Stack(
-                                      children: [
-                                        Padding(
-                                          padding: EdgeInsets.only(bottom: isAndroid && !isImmersive ? (ref.watch(currentSongProvider) != null ? 144.0 + bottomPadding : 80.0 + bottomPadding) : 0.0),
-                                          child: child,
-                                        ),
-                                        if (!isAndroid && !showPlayerPanel && !isImmersive)
-                                          const Align(
-                                            alignment: Alignment.bottomCenter,
-                                            child: MiniPlayer(),
+                                            : Container(
+                                                decoration: BoxDecoration(
+                                                  color: isImmersive ? Colors.transparent : colors.background,
+                                                  borderRadius: containerBorderRadius,
+                                                  border: Border.all(
+                                                    color: isImmersive ? Colors.transparent : colors.border.withValues(alpha: 0.4),
+                                                    width: 1.0,
+                                                  ),
+                                                ),
+                                              ),
+                                      ),
+
+                                      // Layer 3: 100% Sharp & Unblurred Foreground Page UI
+                                      Positioned.fill(
+                                        child: IgnorePointer(
+                                          ignoring: isImmersive,
+                                          child: Stack(
+                                            children: [
+                                              Padding(
+                                                padding: EdgeInsets.only(
+                                                  bottom: isAndroid && !isImmersive
+                                                      ? (ref.watch(currentSongProvider) != null ? 144.0 + bottomPadding : 80.0 + bottomPadding)
+                                                      : 0.0,
+                                                ),
+                                                child: child,
+                                              ),
+                                              if (!isAndroid && !showPlayerPanel && !isImmersive)
+                                                const Align(
+                                                  alignment: Alignment.bottomCenter,
+                                                  child: MiniPlayer(),
+                                                ),
+                                            ],
                                           ),
-                                      ],
-                                    ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),

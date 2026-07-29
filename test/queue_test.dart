@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:da_tunes/core/services/playback_controller.dart';
 import 'package:da_tunes/core/services/impl/playback_engine_impl.dart';
 import 'package:da_tunes/core/services/platform_audio_backend.dart';
@@ -107,6 +108,16 @@ class MockStreamResolver extends StreamResolver {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  
+  setUpAll(() {
+    const channel = MethodChannel('plugins.flutter.io/path_provider');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (methodCall) async {
+      return '.';
+    });
+  });
+
   group('Queue Engine Unit Tests', () {
     late PlaybackController controller;
     late PlaybackEngineImpl engine;
@@ -122,7 +133,7 @@ void main() {
       backend = MockPlatformAudioBackend();
       engine = PlaybackEngineImpl(backend, MockStreamResolver());
       controller = PlaybackController(engine);
-      await controller.setQueue(songList, startIndex: 0, autoPlay: true);
+      await controller.setQueue(songList, startIndex: 0, autoPlay: true, queueMode: QueueMode.playlist);
     });
 
     test('Initial queue state is set correctly', () {
@@ -175,6 +186,14 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 100));
       expect(controller.currentIndex, 1);
       expect(controller.currentSong?.id, '2');
+    });
+
+    test('skipToQueueIndex jumps to correct track without modifying queue size', () async {
+      final initialLength = controller.currentQueue.length;
+      await controller.skipToQueueIndex(2);
+      expect(controller.currentIndex, 2);
+      expect(controller.currentSong?.id, '3');
+      expect(controller.currentQueue.length, initialLength);
     });
   });
 }
