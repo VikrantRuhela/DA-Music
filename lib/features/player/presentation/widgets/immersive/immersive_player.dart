@@ -329,23 +329,19 @@ class _WindowsImmersivePlayerState extends ConsumerState<_WindowsImmersivePlayer
                               height: 320.0,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(16.0),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.4),
+                                    blurRadius: 24.0,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(16.0),
-                                child: ShaderMask(
-                                  shaderCallback: (rect) {
-                                    return const RadialGradient(
-                                      center: Alignment.topLeft,
-                                      radius: 1.3,
-                                      colors: [Colors.white, Colors.transparent],
-                                      stops: [0.35, 1.0],
-                                    ).createShader(rect);
-                                  },
-                                  blendMode: BlendMode.dstIn,
-                                  child: DAImage(
-                                    url: artworkUrl,
-                                    fit: BoxFit.cover,
-                                  ),
+                                child: DAImage(
+                                  url: artworkUrl,
+                                  fit: BoxFit.cover,
                                 ),
                               ),
                             ),
@@ -1548,9 +1544,34 @@ class _ImmersiveStylePlayerState extends ConsumerState<_ImmersiveStylePlayer> wi
                               context.push('/lyrics');
                             },
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.dark_mode_outlined, color: Colors.white60, size: 24.0),
-                            onPressed: () => showSleepTimerDialog(context, ref),
+                          Builder(
+                            builder: (context) {
+                              final timerState = ref.watch(sleepTimerNotifierProvider);
+                              return AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                child: timerState.isActive
+                                    ? GestureDetector(
+                                        key: const ValueKey('active_timer_1'),
+                                        onTap: () => showSleepTimerDialog(context, ref),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white24,
+                                            borderRadius: BorderRadius.circular(12.0),
+                                          ),
+                                          child: Text(
+                                            timerState.formattedRemaining,
+                                            style: const TextStyle(color: Colors.white, fontSize: 12.0, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      )
+                                    : IconButton(
+                                        key: const ValueKey('inactive_timer_1'),
+                                        icon: const Icon(Icons.dark_mode_outlined, color: Colors.white60, size: 24.0),
+                                        onPressed: () => showSleepTimerDialog(context, ref),
+                                      ),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -1717,11 +1738,20 @@ class _MinimalStylePlayerState extends ConsumerState<_MinimalStylePlayer> {
           child: Column(
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
                     icon: Icon(Icons.keyboard_arrow_down, color: colors.textPrimary, size: 28.0),
                     onPressed: () => ref.read(immersiveModeProvider.notifier).state = false,
+                  ),
+                  Builder(
+                    builder: (btnContext) => IconButton(
+                      icon: Icon(Icons.more_vert, color: colors.textPrimary, size: 24.0),
+                      tooltip: 'More options',
+                      onPressed: currentSong != null
+                          ? () => showSongOptionsMenu(btnContext, ref, currentSong)
+                          : null,
+                    ),
                   ),
                 ],
               ),
@@ -1828,6 +1858,57 @@ class _MinimalStylePlayerState extends ConsumerState<_MinimalStylePlayer> {
                 ],
               ),
               const Spacer(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.queue_music, color: colors.textSecondary, size: 24.0),
+                    tooltip: 'Queue',
+                    onPressed: () {
+                      ref.read(immersiveModeProvider.notifier).state = false;
+                      context.push('/queue');
+                    },
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.chat_bubble_outline, color: colors.textSecondary, size: 24.0),
+                    tooltip: 'Lyrics',
+                    onPressed: () {
+                      ref.read(immersiveModeProvider.notifier).state = false;
+                      context.push('/lyrics');
+                    },
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final timerState = ref.watch(sleepTimerNotifierProvider);
+                      return AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: timerState.isActive
+                            ? GestureDetector(
+                                key: const ValueKey('active_timer_2'),
+                                onTap: () => showSleepTimerDialog(context, ref),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0),
+                                  decoration: BoxDecoration(
+                                    color: colors.surfaceCard,
+                                    borderRadius: BorderRadius.circular(12.0),
+                                  ),
+                                  child: Text(
+                                    timerState.formattedRemaining,
+                                    style: TextStyle(color: colors.textPrimary, fontSize: 12.0, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              )
+                            : IconButton(
+                                key: const ValueKey('inactive_timer_2'),
+                                icon: Icon(Icons.dark_mode_outlined, color: colors.textSecondary, size: 24.0),
+                                tooltip: 'Sleep timer',
+                                onPressed: () => showSleepTimerDialog(context, ref),
+                              ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ],
           ),
         ),

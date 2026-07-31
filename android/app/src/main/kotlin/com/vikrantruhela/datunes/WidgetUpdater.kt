@@ -222,8 +222,7 @@ object WidgetUpdater {
 
     private fun processBlurredBackground(raw: Bitmap): Bitmap? {
         val blurred = blur(raw, 8)
-        val darkened = darkenBitmap(blurred, 0.50f)
-        return getRoundedCornerBitmap(darkened, 36)
+        return darkenBitmap(blurred, 0.50f)
     }
 
     private fun renderWidgets(
@@ -342,7 +341,7 @@ object WidgetUpdater {
         cachedArtwork?.let {
             views.setImageViewBitmap(R.id.widget_artwork, it)
         } ?: run {
-            views.setImageViewResource(R.id.widget_artwork, R.drawable.ic_notification)
+            views.setImageViewResource(R.id.widget_artwork, R.drawable.da_placeholder)
         }
 
         cachedBlurredBackground?.let {
@@ -382,6 +381,21 @@ object WidgetUpdater {
             views.setProgressBar(R.id.widget_progress, 10000, 0, false)
         }
 
+        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("open_player", isPlaying)
+        }
+        val openAppFlags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        val openAppPendingIntent = android.app.PendingIntent.getActivity(context, 100, openAppIntent, openAppFlags)
+
+        views.setOnClickPendingIntent(android.R.id.background, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_background_image, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_artwork, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.txt_title, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.txt_artist, openAppPendingIntent)
+
         views.setOnClickPendingIntent(R.id.btn_previous, getPendingIntent(context, DAWidgetProvider.ACTION_PREVIOUS))
         views.setOnClickPendingIntent(R.id.btn_play_pause, getPendingIntent(context, DAWidgetProvider.ACTION_PLAY_PAUSE))
         views.setOnClickPendingIntent(R.id.btn_next, getPendingIntent(context, DAWidgetProvider.ACTION_NEXT))
@@ -390,7 +404,7 @@ object WidgetUpdater {
         cachedArtwork?.let {
             views.setImageViewBitmap(R.id.widget_artwork, it)
         } ?: run {
-            views.setImageViewResource(R.id.widget_artwork, R.drawable.ic_notification)
+            views.setImageViewResource(R.id.widget_artwork, R.drawable.da_placeholder)
         }
 
         cachedBlurredBackground?.let {

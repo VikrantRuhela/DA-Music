@@ -19,6 +19,7 @@ import '../../domain/entities/home_feed.dart';
 import '../../domain/entities/audio_stream.dart';
 import '../../domain/entities/value_objects.dart';
 import 'logger_service.dart';
+import 'music_content_classifier.dart';
 
 /// Concrete YouTube Music source adapter mapping remote API details to pure Domain entities.
 class YouTubeMusicAdapter implements MusicSourceAdapter {
@@ -112,52 +113,148 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   Future<SearchResult> search(String query) async {
     _checkInitialized();
     DALogger.info('YouTubeMusicAdapter: Searching for "$query"');
-    DALogger.info('[GUEST RECOMMENDATIONS] Recommendation API request: search for "$query"');
 
     try {
-      final results = await _ytClient.search.searchContent(query).timeout(const Duration(seconds: 10));
-
       final songs = <Song>[];
       final albums = <Album>[];
       final artists = <Artist>[];
       final playlists = <Playlist>[];
 
-      for (final result in results) {
-        if (result is yt.SearchVideo) {
-          final cached = _songCache[result.id.value];
-          if (cached != null) {
-            songs.add(cached);
-            continue;
+      try {
+        final client = HttpClient();
+        const apiKey = 'AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30';
+        final url = Uri.parse('https://music.youtube.com/youtubei/v1/search?key=$apiKey');
+
+        final request = await client.postUrl(url);
+        request.headers.set('Content-Type', 'application/json');
+        request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        final gl = await _getGuestRegionCode();
+        final payload = {
+          'query': query,
+          'context': {
+            'client': {
+              'clientName': 'WEB_REMIX',
+              'clientVersion': '1.20260304.03.00',
+              'hl': 'en',
+              'gl': gl,
+            }
+          },
+          'params': 'EgWKAQIIAWoKEAkQChAFEAMQBA%3D%3D'
+        };
+
+        request.write(jsonEncode(payload));
+        final response = await request.close();
+        final body = await response.transform(utf8.decoder).join();
+        client.close();
+
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> data = jsonDecode(body);
+          final contents = data['contents']?['tabbedSearchResultsRenderer']?['tabs']?[0]?['tabRenderer']?['content']?['sectionListRenderer']?['contents'];
+          if (contents != null) {
+            for (final section in contents) {
+              final items = section['musicShelfRenderer']?['contents'];
+              if (items != null) {
+                for (final item in items) {
+                  final renderer = item['musicResponsiveListItemRenderer'];
+                  if (renderer != null) {
+                    final videoId = renderer['playlistItemData']?['videoId'] ??
+                        renderer['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId'] ??
+                        '';
+
+                    if (videoId.isEmpty) continue;
+
+                    final flexColumns = renderer['flexColumns'] as List?;
+                    String title = '';
+                    String artistName = '';
+
+                    if (flexColumns != null && flexColumns.isNotEmpty) {
+                      final titleRuns = flexColumns[0]['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
+                      if (titleRuns != null && titleRuns.isNotEmpty) {
+                        title = titleRuns[0]['text'] ?? '';
+                      }
+                      if (flexColumns.length > 1) {
+                        final artistRuns = flexColumns[1]['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
+                        if (artistRuns != null && artistRuns.isNotEmpty) {
+                          artistName = artistRuns.map((r) => r['text']).join('');
+                        }
+                      }
+                    }
+
+                    String durationStr = '';
+                    final fixedColumns = renderer['fixedColumns'] as List?;
+                    if (fixedColumns != null && fixedColumns.isNotEmpty) {
+                      final durRuns = fixedColumns[0]['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
+                      if (durRuns != null && durRuns.isNotEmpty) {
+                        durationStr = durRuns[0]['text'] ?? '';
+                      }
+                    }
+
+                    final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+                    String artworkUrl = 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
+                    if (thumbnails != null && thumbnails.isNotEmpty) {
+                      artworkUrl = thumbnails.last['url'] ?? artworkUrl;
+                    }
+
+                    final duration = _parseDurationString(durationStr);
+
+                    if (title.isNotEmpty) {
+                      final song = _mapToSong(
+                        id: videoId,
+                        rawTitle: title,
+                        rawArtist: artistName,
+                        duration: duration,
+                      );
+
+                      if (MusicContentClassifier.isMusicSong(song)) {
+                        _songCache[song.id] = song;
+                        songs.add(song);
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
-          final song = _mapToSong(
-            id: result.id.value,
-            rawTitle: result.title,
-            rawArtist: result.author,
-            duration: _parseDuration(result.duration),
-            channelId: result.channelId,
-          );
-          _songCache[song.id] = song;
-          songs.add(song);
-        } else if (result is yt.SearchPlaylist) {
-          playlists.add(Playlist(
-            id: result.id.value,
-            title: result.title,
-            description: 'YouTube Playlist',
-            cover: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
-            owner: 'YouTube',
-            songIds: const [],
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ));
-        } else if (result is yt.SearchChannel) {
-          artists.add(Artist(
-            id: result.id.value,
-            name: result.name,
-            image: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
-            subscriberCount: 0,
-            description: result.description,
-            genres: const [],
-          ));
+        }
+      } catch (_) {}
+
+      if (songs.isEmpty) {
+        final results = await _ytClient.search.searchContent(query).timeout(const Duration(seconds: 10));
+        for (final result in results) {
+          if (result is yt.SearchVideo) {
+            final song = _mapToSong(
+              id: result.id.value,
+              rawTitle: result.title,
+              rawArtist: result.author,
+              duration: _parseDuration(result.duration),
+              channelId: result.channelId,
+            );
+            if (MusicContentClassifier.isMusicSong(song)) {
+              _songCache[song.id] = song;
+              songs.add(song);
+            }
+          } else if (result is yt.SearchPlaylist) {
+            playlists.add(Playlist(
+              id: result.id.value,
+              title: result.title,
+              description: 'YouTube Playlist',
+              cover: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
+              owner: 'YouTube',
+              songIds: const [],
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ));
+          } else if (result is yt.SearchChannel) {
+            artists.add(Artist(
+              id: result.id.value,
+              name: result.name,
+              image: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
+              subscriberCount: 0,
+              description: result.description,
+              genres: const [],
+            ));
+          }
         }
       }
 
@@ -169,12 +266,9 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         topResult: songs.isNotEmpty ? songs.first : null,
       );
 
-      final totalItems = songs.length + albums.length + playlists.length;
-      DALogger.info('[GUEST RECOMMENDATIONS] API response count: $totalItems items (songs: ${songs.length}, playlists: ${playlists.length})');
       return res;
     } catch (e, stack) {
       DALogger.error('YouTubeMusicAdapter: Search failed for "$query"', e, stack);
-      DALogger.error('[GUEST RECOMMENDATIONS] API request failed for query "$query"', e, stack);
       throw SourceException('Search request failed: $e', e.toString());
     }
   }

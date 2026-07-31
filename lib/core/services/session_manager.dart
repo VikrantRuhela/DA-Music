@@ -9,6 +9,8 @@ import 'secure_credential_store.dart';
 import 'youtube_music_account_service.dart';
 import 'logger_service.dart';
 
+enum SessionVerificationResult { valid, unauthenticated, networkError }
+
 class SessionManager extends ChangeNotifier {
   final SecureCredentialStore _secureStore;
   
@@ -49,15 +51,18 @@ class SessionManager extends ChangeNotifier {
 
       final savedCookies = await _secureStore.readCookies();
       if (savedCookies != null && savedCookies.isNotEmpty) {
-        final isValid = await _verifySession(savedCookies);
-        if (isValid) {
-          _cookies = savedCookies;
-          _isLoggedIn = true;
-          _isGuestMode = false;
-          _client = AuthenticatedClient(savedCookies);
+        _cookies = savedCookies;
+        _isLoggedIn = true;
+        _isGuestMode = false;
+        _client = AuthenticatedClient(savedCookies);
+
+        final result = await _verifySession(savedCookies);
+        if (result == SessionVerificationResult.valid) {
           DALogger.info('SessionManager: Encrypted session successfully restored and validated.');
-        } else {
-          DALogger.warning('SessionManager: Saved session is expired or invalid. Clearing credentials.');
+        } else if (result == SessionVerificationResult.networkError) {
+          DALogger.warning('SessionManager: Verification hit network error/offline. Preserving saved session in resilient mode.');
+        } else if (result == SessionVerificationResult.unauthenticated) {
+          DALogger.warning('SessionManager: Saved session is explicitly unauthenticated or expired. Clearing credentials.');
           await clearSession(notifyExpired: true);
         }
       } else {
@@ -74,8 +79,8 @@ class SessionManager extends ChangeNotifier {
     final cleanCookies = cookieHeader.trim();
     if (cleanCookies.isEmpty) return false;
 
-    final isValid = await _verifySession(cleanCookies);
-    if (isValid) {
+    final result = await _verifySession(cleanCookies);
+    if (result == SessionVerificationResult.valid || result == SessionVerificationResult.networkError) {
       await _secureStore.saveCookies(cleanCookies);
       _cookies = cleanCookies;
       _isLoggedIn = true;
@@ -201,7 +206,7 @@ class SessionManager extends ChangeNotifier {
     DALogger.info('SessionManager: User logged out successfully.');
   }
 
-  Future<bool> _verifySession(String cookies) async {
+  Future<SessionVerificationResult> _verifySession(String cookies) async {
     final testClient = AuthenticatedClient(cookies);
     try {
       final response = await testClient.post(
@@ -264,15 +269,20 @@ class SessionManager extends ChangeNotifier {
             }
 
             testClient.close();
-            return true;
+            return SessionVerificationResult.valid;
+          } else {
+            testClient.close();
+            return SessionVerificationResult.unauthenticated;
           }
         }
       }
     } catch (e) {
-      DALogger.error('SessionManager: Session verification failed due to network error', e);
+      DALogger.error('SessionManager: Session verification hit network error/timeout (offline or network switch)', e);
+      testClient.close();
+      return SessionVerificationResult.networkError;
     }
     testClient.close();
-    return false;
+    return SessionVerificationResult.networkError;
   }
 
   /// Deep-search the entire InnerTube response for musicAccountMenuRenderer

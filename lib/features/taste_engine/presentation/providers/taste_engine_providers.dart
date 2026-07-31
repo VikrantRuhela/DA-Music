@@ -16,7 +16,9 @@ import '../../../../domain/entities/song.dart' as domain;
 import '../../../../domain/entities/value_objects.dart' as domain;
 import '../../../../domain/entities/home_feed.dart' as domain;
 import '../../../../core/services/logger_service.dart';
+import '../../../../core/services/storage_service.dart';
 import '../../../../shared/utils/home_feed_cache_serializer.dart';
+import '../../../../core/services/music_content_classifier.dart';
 
 class TasteEngineState {
   final MusicDNA dna;
@@ -106,10 +108,11 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
   }
 
   Future<void> _init() async {
-    DALogger.info('TasteEngineNotifier: Initializing taste engine state...');
-    state = state.copyWith(isLoading: true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
+    await Future.microtask(() async {
+      DALogger.info('TasteEngineNotifier: Initializing taste engine state...');
+      state = state.copyWith(isLoading: true);
+      try {
+        final prefs = await SharedPreferences.getInstance();
       final isLearningPaused = prefs.getBool('taste_learning_paused') ?? false;
       final isPersonalizationEnabled = prefs.getBool('taste_personalization_enabled') ?? true;
       final excludeDownloads = prefs.getBool('taste_exclude_downloads') ?? false;
@@ -202,7 +205,8 @@ class TasteEngineNotifier extends StateNotifier<TasteEngineState> {
       DALogger.error('TasteEngineNotifier: Initialization failed', e, stack);
       state = state.copyWith(isLoading: false, isInitialized: true);
     }
-  }
+  });
+}
 
   Future<void> recordPlaybackSession({
     required String songId,
@@ -570,7 +574,34 @@ class RecommendationSection {
     required this.type,
     required this.items,
   });
-}final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
+}
+
+String _cleanDeduplicationTitle(String title) {
+  var t = title.toLowerCase().trim();
+  t = t.replaceAll(RegExp(r'\s*\(official\s*(music\s*)?video\)', caseSensitive: false), '');
+  t = t.replaceAll(RegExp(r'\s*\[official\s*(music\s*)?video\]', caseSensitive: false), '');
+  t = t.replaceAll(RegExp(r'\s*\(official\s*audio\)', caseSensitive: false), '');
+  t = t.replaceAll(RegExp(r'\s*\[official\s*audio\]', caseSensitive: false), '');
+  t = t.replaceAll(RegExp(r'\s*\(lyric\s*video\)', caseSensitive: false), '');
+  t = t.replaceAll(RegExp(r'\s*\[lyric\s*video\]', caseSensitive: false), '');
+  t = t.replaceAll(RegExp(r'\s*\(lyrics\)', caseSensitive: false), '');
+  t = t.replaceAll(RegExp(r'\s*\[lyrics\]', caseSensitive: false), '');
+  return t.trim();
+}
+
+String getSongDeduplicationKey(String id, String title, String artist, [String? album]) {
+  final cleanId = id.trim();
+  final normTitle = _cleanDeduplicationTitle(title);
+  final normArtist = artist.trim().toLowerCase();
+
+  // If a valid unique ID exists, couple it with title/artist for maximum precision
+  if (cleanId.isNotEmpty && cleanId != 'none' && cleanId != 'search_query' && cleanId != 'unknown') {
+    return 'id:$cleanId|$normTitle|$normArtist';
+  }
+  return 'meta:$normTitle|$normArtist';
+}
+
+final personalizedSectionsProvider = FutureProvider<List<RecommendationSection>>((ref) async {
   DALogger.info('[GUEST RECOMMENDATIONS] Initialization started.');
   final isPersonalizationEnabled = ref.watch(tasteEngineNotifierProvider.select((s) => s.isPersonalizationEnabled));
   final isInitialized = ref.watch(tasteEngineNotifierProvider.select((s) => s.isInitialized));
@@ -583,15 +614,55 @@ class RecommendationSection {
     if (cached != null && cached.isNotEmpty) {
       final List<RecommendationSection> cachedSections = PersonalizedSectionsCacheSerializer.deserialize(cached);
       if (cachedSections.isNotEmpty) {
-        DALogger.info('[GUEST RECOMMENDATIONS] Loaded personalized recommendations from cache. Section count: ${cachedSections.length}');
-        return cachedSections;
+        final sanitizedCached = cachedSections.map((section) {
+          final filteredItems = section.items.where((item) {
+            if (item is domain.Song) {
+              return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.artistId);
+            } else if (item is domain.Album) {
+              return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.artistId);
+            } else if (item is domain.Playlist) {
+              return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.owner);
+            }
+            return true;
+          }).toList();
+          return RecommendationSection(
+            title: section.title,
+            subtitle: section.subtitle,
+            type: section.type,
+            items: filteredItems,
+          );
+        }).where((s) => s.items.isNotEmpty).toList();
+
+        if (sanitizedCached.isNotEmpty) {
+          DALogger.info('[GUEST RECOMMENDATIONS] Loaded personalized recommendations from cache (0ms instant render). Section count: ${sanitizedCached.length}');
+          unawaited(_revalidatePersonalizedSectionsInBackground(ref, storage));
+          return sanitizedCached;
+        }
       }
     }
   } catch (e, stack) {
     DALogger.error('[GUEST RECOMMENDATIONS] Cache lookup failed', e, stack);
   }
 
-  DALogger.info('[GUEST RECOMMENDATIONS] Cache miss. Generating fresh recommendations...');
+  return await _buildFreshPersonalizedSections(ref, storage, isPersonalizationEnabled);
+});
+
+Future<void> _revalidatePersonalizedSectionsInBackground(Ref ref, StorageService storage) async {
+  try {
+    final isPersonalizationEnabled = ref.read(tasteEngineNotifierProvider).isPersonalizationEnabled;
+    final freshSections = await _buildFreshPersonalizedSections(ref, storage, isPersonalizationEnabled);
+    if (freshSections.isNotEmpty) {
+      final jsonStr = PersonalizedSectionsCacheSerializer.serialize(freshSections);
+      await storage.setString('ytm_cache_personalized_sections', jsonStr);
+      DALogger.info('[GUEST RECOMMENDATIONS] Silent background revalidation complete. Fresh sections cached.');
+    }
+  } catch (e) {
+    DALogger.warning('[GUEST RECOMMENDATIONS] Silent background revalidation skipped: $e');
+  }
+}
+
+Future<List<RecommendationSection>> _buildFreshPersonalizedSections(Ref ref, StorageService storage, bool isPersonalizationEnabled) async {
+  DALogger.info('[GUEST RECOMMENDATIONS] Generating fresh recommendations...');
   final sourceManager = ref.watch(sourceManagerProvider);
   
   DALogger.info('personalizedSectionsProvider: Fetching home feed genericFeed via genericHomeFeedProvider...');
@@ -615,14 +686,25 @@ class RecommendationSection {
   final genericAlbums = genericFeed?.sections.firstWhere((s) => s.type == 'albums', orElse: () => domain.HomeFeedSection(title: '', type: 'albums', items: const [])).items.cast<domain.Album>().toList() ?? const <domain.Album>[];
   final genericPlaylists = genericFeed?.sections.firstWhere((s) => s.type == 'playlists', orElse: () => domain.HomeFeedSection(title: '', type: 'playlists', items: const [])).items.cast<domain.Playlist>().toList() ?? const <domain.Playlist>[];
 
+  final Set<String> globalSeenSongKeys = {};
+
   if (!isPersonalizationEnabled) {
     print('[HOME] State updated');
+    final uniqueGenericSongs = <domain.Song>[];
+    for (final s in genericSongs) {
+      final key = getSongDeduplicationKey(s.id, s.title, s.artistId, s.albumId);
+      if (!globalSeenSongKeys.contains(key)) {
+        globalSeenSongKeys.add(key);
+        uniqueGenericSongs.add(s);
+      }
+    }
+
     return [
       RecommendationSection(
         title: 'Trending For You',
         subtitle: 'Popular tracks picked for you',
         type: 'trending',
-        items: genericSongs,
+        items: uniqueGenericSongs,
       ),
       RecommendationSection(
         title: 'Recommended Albums',
@@ -646,19 +728,23 @@ class RecommendationSection {
   final List<RecommendationSection> sections = [];
 
   final continueItems = <domain.Song>[];
-  final seenIds = <String>{};
   for (final log in logs.reversed) {
     final id = log['songId'] as String? ?? '';
     if (id.isEmpty || id == 'search_query') continue;
     final double comp = (log['completionPercentage'] ?? 0.0).toDouble();
     if (comp >= 10.0 && comp < 85.0) {
-      if (!seenIds.contains(id)) {
-        seenIds.add(id);
+      final title = log['songTitle'] ?? 'Unknown Track';
+      final artist = log['artistId'] ?? log['artist'] ?? 'Unknown Artist';
+      if (MusicContentClassifier.isBlacklistedTitleOrChannel(title, artist)) continue;
+      final album = log['albumId'] ?? log['album'] ?? 'Unknown Album';
+      final key = getSongDeduplicationKey(id, title, artist, album);
+      if (!globalSeenSongKeys.contains(key)) {
+        globalSeenSongKeys.add(key);
         continueItems.add(domain.Song(
           id: id,
-          title: log['songTitle'] ?? 'Unknown Track',
-          artistId: log['artistId'] ?? log['artist'] ?? 'Unknown Artist',
-          albumId: log['albumId'] ?? log['album'] ?? 'Unknown Album',
+          title: title,
+          artistId: artist,
+          albumId: album,
           duration: domain.DurationValue(Duration(milliseconds: log['durationMs'] ?? 0)),
           thumbnail: domain.Artwork(log['artworkUrl'] ?? ''),
           artwork: domain.Artwork(log['artworkUrl'] ?? ''),
@@ -678,17 +764,21 @@ class RecommendationSection {
   }
 
   final recentItems = <domain.Song>[];
-  final seenRecent = <String>{};
   for (final log in logs.reversed) {
     final id = log['songId'] as String? ?? '';
     if (id.isEmpty || id == 'search_query') continue;
-    if (!seenRecent.contains(id)) {
-      seenRecent.add(id);
+    final title = log['songTitle'] ?? 'Unknown Track';
+    final artist = log['artistId'] ?? log['artist'] ?? 'Unknown Artist';
+    if (MusicContentClassifier.isBlacklistedTitleOrChannel(title, artist)) continue;
+    final album = log['albumId'] ?? log['album'] ?? 'Unknown Album';
+    final key = getSongDeduplicationKey(id, title, artist, album);
+    if (!globalSeenSongKeys.contains(key)) {
+      globalSeenSongKeys.add(key);
       recentItems.add(domain.Song(
         id: id,
-        title: log['songTitle'] ?? 'Unknown Track',
-        artistId: log['artistId'] ?? log['artist'] ?? 'Unknown Artist',
-        albumId: log['albumId'] ?? log['album'] ?? 'Unknown Album',
+        title: title,
+        artistId: artist,
+        albumId: album,
         duration: domain.DurationValue(Duration(milliseconds: log['durationMs'] ?? 0)),
         thumbnail: domain.Artwork(log['artworkUrl'] ?? ''),
         artwork: domain.Artwork(log['artworkUrl'] ?? ''),
@@ -709,25 +799,42 @@ class RecommendationSection {
   final madeForYouItems = <domain.Song>[];
   try {
     final recSongs = await ref.watch(personalizedRecommendationsProvider.future);
-    madeForYouItems.addAll(recSongs.map((s) => domain.Song(
-      id: s.id,
-      title: s.title,
-      artistId: s.artist,
-      albumId: s.album,
-      duration: domain.DurationValue(s.duration),
-      thumbnail: domain.Artwork(s.artworkUrl ?? ''),
-      artwork: domain.Artwork(s.artworkUrl ?? ''),
-      sourceId: s.source,
-    )));
+    for (final s in recSongs) {
+      final key = getSongDeduplicationKey(s.id, s.title, s.artist, s.album);
+      if (!globalSeenSongKeys.contains(key)) {
+        globalSeenSongKeys.add(key);
+        madeForYouItems.add(domain.Song(
+          id: s.id,
+          title: s.title,
+          artistId: s.artist,
+          albumId: s.album,
+          duration: domain.DurationValue(s.duration),
+          thumbnail: domain.Artwork(s.artworkUrl ?? ''),
+          artwork: domain.Artwork(s.artworkUrl ?? ''),
+          sourceId: s.source,
+        ));
+      }
+    }
   } catch (e, stack) {
     DALogger.error('[GUEST RECOMMENDATIONS] Failed to load personalized recommendations', e, stack);
+  }
+
+  if (madeForYouItems.isEmpty) {
+    for (final s in genericSongs) {
+      final key = getSongDeduplicationKey(s.id, s.title, s.artistId, s.albumId);
+      if (!globalSeenSongKeys.contains(key)) {
+        globalSeenSongKeys.add(key);
+        madeForYouItems.add(s);
+      }
+      if (madeForYouItems.length >= 10) break;
+    }
   }
 
   sections.add(RecommendationSection(
     title: 'Made For You',
     subtitle: 'A custom mix generated from your taste profile',
     type: 'made_for_you',
-    items: madeForYouItems.isNotEmpty ? madeForYouItems : genericSongs,
+    items: madeForYouItems,
   ));
 
   if (dna.topArtists.isNotEmpty) {
@@ -735,28 +842,26 @@ class RecommendationSection {
     final becauseItems = <domain.Song>[];
     try {
       final searchRes = await sourceManager.activeAdapter.search('$targetArtist hits');
-      final filtered = searchRes.songs.where((song) {
+      for (final song in searchRes.songs) {
         final targetArtistLower = targetArtist.toLowerCase().trim();
         final songArtistLower = song.artistId.toLowerCase().trim();
         
         // Ensure the track is actually by or features the target artist
         if (!songArtistLower.contains(targetArtistLower) && !targetArtistLower.contains(songArtistLower)) {
-          return false;
+          continue;
         }
 
-        String? reason;
-        final ok = RecommendationEngine.isValidMusicCandidate(
-          song.title,
-          song.artistId,
-          song.duration.value,
-          onReject: (r) => reason = r,
-        );
-        if (!ok) {
-          print(' [Home Provider] REJECTED "Because You Listened" Candidate "${song.title}": $reason');
+        if (!RecommendationEngine.isValidMusicCandidate(song.title, song.artistId, song.duration.value)) {
+          continue;
         }
-        return ok;
-      }).toList();
-      becauseItems.addAll(filtered.take(10));
+
+        final key = getSongDeduplicationKey(song.id, song.title, song.artistId, song.albumId);
+        if (!globalSeenSongKeys.contains(key)) {
+          globalSeenSongKeys.add(key);
+          becauseItems.add(song);
+        }
+        if (becauseItems.length >= 10) break;
+      }
     } catch (e, stack) {
       DALogger.error('[GUEST RECOMMENDATIONS] Failed search for target artist $targetArtist hits', e, stack);
     }
@@ -780,16 +885,24 @@ class RecommendationSection {
       orElse: () => <String, dynamic>{},
     );
     if (matchingLog.isNotEmpty) {
-      rediscoverItems.add(domain.Song(
-        id: matchingLog['songId'] ?? '',
-        title: matchingLog['songTitle'] ?? '',
-        artistId: matchingLog['artistId'] ?? matchingLog['artist'] ?? '',
-        albumId: matchingLog['albumId'] ?? matchingLog['album'] ?? '',
-        duration: domain.DurationValue(Duration(milliseconds: matchingLog['durationMs'] ?? 0)),
-        thumbnail: domain.Artwork(matchingLog['artworkUrl'] ?? ''),
-        artwork: domain.Artwork(matchingLog['artworkUrl'] ?? ''),
-        sourceId: matchingLog['source'] == 'youtube' ? 'youtube_music' : (matchingLog['source'] ?? 'youtube_music'),
-      ));
+      final id = matchingLog['songId'] ?? '';
+      final title = matchingLog['songTitle'] ?? '';
+      final artist = matchingLog['artistId'] ?? matchingLog['artist'] ?? '';
+      final album = matchingLog['albumId'] ?? matchingLog['album'] ?? '';
+      final key = getSongDeduplicationKey(id, title, artist, album);
+      if (!globalSeenSongKeys.contains(key)) {
+        globalSeenSongKeys.add(key);
+        rediscoverItems.add(domain.Song(
+          id: id,
+          title: title,
+          artistId: artist,
+          albumId: album,
+          duration: domain.DurationValue(Duration(milliseconds: matchingLog['durationMs'] ?? 0)),
+          thumbnail: domain.Artwork(matchingLog['artworkUrl'] ?? ''),
+          artwork: domain.Artwork(matchingLog['artworkUrl'] ?? ''),
+          sourceId: matchingLog['source'] == 'youtube' ? 'youtube_music' : (matchingLog['source'] ?? 'youtube_music'),
+        ));
+      }
     }
     if (rediscoverItems.length >= 8) break;
   }
@@ -807,28 +920,26 @@ class RecommendationSection {
     final similarArtistItems = <domain.Song>[];
     try {
       final searchRes = await sourceManager.activeAdapter.search('$secondArtist hits');
-      final filtered = searchRes.songs.where((song) {
+      for (final song in searchRes.songs) {
         final targetArtistLower = secondArtist.toLowerCase().trim();
         final songArtistLower = song.artistId.toLowerCase().trim();
         
         // Ensure the track is actually by or features the second artist
         if (!songArtistLower.contains(targetArtistLower) && !targetArtistLower.contains(songArtistLower)) {
-          return false;
+          continue;
         }
 
-        String? reason;
-        final ok = RecommendationEngine.isValidMusicCandidate(
-          song.title,
-          song.artistId,
-          song.duration.value,
-          onReject: (r) => reason = r,
-        );
-        if (!ok) {
-          print(' [Home Provider] REJECTED "Similar Artist" Candidate "${song.title}": $reason');
+        if (!RecommendationEngine.isValidMusicCandidate(song.title, song.artistId, song.duration.value)) {
+          continue;
         }
-        return ok;
-      }).toList();
-      similarArtistItems.addAll(filtered.take(10));
+
+        final key = getSongDeduplicationKey(song.id, song.title, song.artistId, song.albumId);
+        if (!globalSeenSongKeys.contains(key)) {
+          globalSeenSongKeys.add(key);
+          similarArtistItems.add(song);
+        }
+        if (similarArtistItems.length >= 10) break;
+      }
     } catch (e, stack) {
       DALogger.error('[GUEST RECOMMENDATIONS] Failed search for second artist $secondArtist hits', e, stack);
     }
@@ -894,25 +1005,42 @@ class RecommendationSection {
       genericSongs: ytmGenericSongs,
     );
 
-    trendingItems.addAll(recTrending.map((s) => domain.Song(
-      id: s.id,
-      title: s.title,
-      artistId: s.artist,
-      albumId: s.album,
-      duration: domain.DurationValue(s.duration),
-      thumbnail: domain.Artwork(s.artworkUrl ?? ''),
-      artwork: domain.Artwork(s.artworkUrl ?? ''),
-      sourceId: s.source,
-    )));
+    for (final s in recTrending) {
+      final key = getSongDeduplicationKey(s.id, s.title, s.artist, s.album);
+      if (!globalSeenSongKeys.contains(key)) {
+        globalSeenSongKeys.add(key);
+        trendingItems.add(domain.Song(
+          id: s.id,
+          title: s.title,
+          artistId: s.artist,
+          albumId: s.album,
+          duration: domain.DurationValue(s.duration),
+          thumbnail: domain.Artwork(s.artworkUrl ?? ''),
+          artwork: domain.Artwork(s.artworkUrl ?? ''),
+          sourceId: s.source,
+        ));
+      }
+    }
   } catch (e, stack) {
     DALogger.error('[GUEST RECOMMENDATIONS] Failed to generate trending recommendations', e, stack);
+  }
+
+  if (trendingItems.isEmpty) {
+    for (final s in genericSongs) {
+      final key = getSongDeduplicationKey(s.id, s.title, s.artistId, s.albumId);
+      if (!globalSeenSongKeys.contains(key)) {
+        globalSeenSongKeys.add(key);
+        trendingItems.add(s);
+      }
+      if (trendingItems.length >= 10) break;
+    }
   }
 
   sections.add(RecommendationSection(
     title: 'Trending for You',
     subtitle: 'Popular hits trending now',
     type: 'trending',
-    items: trendingItems.isNotEmpty ? trendingItems : genericSongs,
+    items: trendingItems,
   ));
 
   try {
@@ -925,7 +1053,7 @@ class RecommendationSection {
 
   print('[HOME] State updated');
   return sections;
-});
+}
 
 class PersonalizedSectionsCacheSerializer {
   static String serialize(List<RecommendationSection> sections) {

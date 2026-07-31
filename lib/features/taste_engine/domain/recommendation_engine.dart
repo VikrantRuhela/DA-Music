@@ -39,7 +39,8 @@ class RecommendationEngine {
       'relaxing sounds', 'rain sounds', 'white noise', 'study beats compilation',
       '10 hours', '1 hour', 'loop', 'extended version', 'slowed + reverb compilation',
       'mashup', 'mixtape', 'jukebox', 'nonstop', 'audio jukebox', 'album zip',
-      'full audio', 'songs collection', 'all songs', 'greatest hits', 'full album', 'best of'
+      'full audio', 'songs collection', 'all songs', 'greatest hits', 'full album', 'best of',
+      'spotify hits', 'top spotify', 'spotify', 'trending hits', 'pop hits'
     ];
 
     for (final kw in negativeKeywords) {

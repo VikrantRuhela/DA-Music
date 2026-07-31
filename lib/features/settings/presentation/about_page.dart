@@ -149,30 +149,7 @@ class AboutPage extends ConsumerWidget {
 
             // 3. Key Features
             _buildSectionHeader(context, 'Key Features'),
-            DACard(
-              child: Padding(
-                padding: const EdgeInsets.all(DATokens.spacingMedium),
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 3,
-                  mainAxisSpacing: DATokens.spacingMedium,
-                  crossAxisSpacing: DATokens.spacingMedium,
-                  childAspectRatio: 1.0,
-                  children: [
-                    _buildFeatureItem(context, Icons.color_lens_outlined, 'Material You'),
-                    _buildFeatureItem(context, Icons.palette_outlined, 'Dynamic Colors'),
-                    _buildFeatureItem(context, Icons.lyrics_outlined, 'Lyrics'),
-                    _buildFeatureItem(context, Icons.bubble_chart_outlined, 'Insights'),
-                    _buildFeatureItem(context, Icons.play_circle_outline, 'Player Styles'),
-                    _buildFeatureItem(context, Icons.tune_outlined, 'Audio Controls'),
-                    _buildFeatureItem(context, Icons.sd_card_outlined, 'Offline Cache'),
-                    _buildFeatureItem(context, Icons.devices_outlined, 'Cross Platform'),
-                    _buildFeatureItem(context, Icons.code_outlined, 'Open Source'),
-                  ],
-                ),
-              ),
-            ),
+            const SeamlessFeatureTickerWidget(),
             const SizedBox(height: DATokens.spacingLarge),
 
             // 4. Version & System Layout Card
@@ -229,9 +206,19 @@ class AboutPage extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Vikrant Ruhela',
-                            style: typography.title.copyWith(fontSize: 16.0, fontWeight: FontWeight.bold),
+                          GestureDetector(
+                            onTap: () async {
+                              final uri = Uri.parse('https://github.com/VikrantRuhela');
+                              try {
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                }
+                              } catch (_) {}
+                            },
+                            child: Text(
+                              'Vikrant Ruhela',
+                              style: typography.title.copyWith(fontSize: 16.0, fontWeight: FontWeight.bold),
+                            ),
                           ),
                           const SizedBox(height: 2.0),
                           Text(
@@ -247,31 +234,7 @@ class AboutPage extends ConsumerWidget {
             ),
             const SizedBox(height: DATokens.spacingLarge),
 
-            // 6. Open Source GitHub Card
-            _buildSectionHeader(context, 'Open Source'),
-            DACard(
-              child: ListTile(
-                leading: Icon(Icons.code, color: colors.primary),
-                title: Text(
-                  'Repository',
-                  style: typography.title.copyWith(fontSize: 15.0),
-                ),
-                subtitle: Text(
-                  'https://github.com/VikrantRuhela/DA-Tunes',
-                  style: typography.body.copyWith(fontSize: 12.0, color: colors.textSecondary),
-                ),
-                trailing: const Icon(Icons.open_in_new, size: 18.0),
-                onTap: () async {
-                  final uri = Uri.parse('https://github.com/VikrantRuhela/DA-Tunes');
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-              ),
-            ),
-            const SizedBox(height: DATokens.spacingLarge),
-
-            // 7. Libraries & Credits Expandable Section
+            // 6. Libraries & Credits Expandable Section
             _buildSectionHeader(context, 'Libraries & Credits'),
             DACard(
               child: Theme(
@@ -303,7 +266,7 @@ class AboutPage extends ConsumerWidget {
             ),
             const SizedBox(height: DATokens.spacingLarge),
 
-            // 8. Support Development Star Card
+            // 7. Support Development Star Card
             _buildSectionHeader(context, 'Support Development'),
             DACard(
               child: Padding(
@@ -322,8 +285,19 @@ class AboutPage extends ConsumerWidget {
                       child: ElevatedButton.icon(
                         onPressed: () async {
                           final uri = Uri.parse('https://github.com/VikrantRuhela/DA-Tunes');
-                          if (await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          try {
+                            if (await canLaunchUrl(uri)) {
+                              final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              if (!launched && context.mounted) {
+                                _showLaunchError(context);
+                              }
+                            } else if (context.mounted) {
+                              _showLaunchError(context);
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              _showLaunchError(context);
+                            }
                           }
                         },
                         icon: const Icon(Icons.star, color: Colors.amber),
@@ -343,58 +317,8 @@ class AboutPage extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: DATokens.spacingLarge),
 
-            // 9. Legal & Notices Card
-            _buildSectionHeader(context, 'Legal & Notices'),
-            DACard(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: Icon(Icons.privacy_tip_outlined, color: colors.primary),
-                    title: Text('Privacy Policy', style: typography.title.copyWith(fontSize: 15.0)),
-                    trailing: const Icon(Icons.chevron_right, size: 20.0),
-                    onTap: () async {
-                      final uri = Uri.parse('https://github.com/VikrantRuhela/DA-Tunes/blob/main/PRIVACY_POLICY.md');
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
-                    },
-                  ),
-                  const Divider(height: 1, color: Colors.white10),
-                  ListTile(
-                    leading: Icon(Icons.description_outlined, color: colors.primary),
-                    title: Text('Licenses', style: typography.title.copyWith(fontSize: 15.0)),
-                    trailing: const Icon(Icons.chevron_right, size: 20.0),
-                    onTap: () {
-                      showLicensePage(
-                        context: context,
-                        applicationName: 'DA Tunes',
-                        applicationVersion: '1.0.0',
-                        applicationIcon: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Image.asset('assets/images/da_logo.png', width: 80, height: 80),
-                        ),
-                      );
-                    },
-                  ),
-                  const Divider(height: 1, color: Colors.white10),
-                  ListTile(
-                    leading: Icon(Icons.info_outline, color: colors.primary),
-                    title: Text('Open Source Notices', style: typography.title.copyWith(fontSize: 15.0)),
-                    trailing: const Icon(Icons.chevron_right, size: 20.0),
-                    onTap: () async {
-                      final uri = Uri.parse('https://github.com/VikrantRuhela/DA-Tunes/blob/main/LICENSE');
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            // 10. Footer Section
+            // 8. Footer Section
             const SizedBox(height: DATokens.spacingXLarge),
             Center(
               child: Column(
@@ -525,6 +449,161 @@ class AboutPage extends ConsumerWidget {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
       },
+    );
+  }
+  void _showLaunchError(BuildContext context) {
+    final colors = context.daColors;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Could not open repository link. Please check your web browser.'),
+        backgroundColor: colors.primary,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+}
+
+class SeamlessFeatureTickerWidget extends StatefulWidget {
+  const SeamlessFeatureTickerWidget({super.key});
+
+  @override
+  State<SeamlessFeatureTickerWidget> createState() => _SeamlessFeatureTickerWidgetState();
+}
+
+class _SeamlessFeatureTickerWidgetState extends State<SeamlessFeatureTickerWidget> with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  final GlobalKey _singleSetKey = GlobalKey();
+  double _singleSetWidth = 0.0;
+
+  static const List<String> _features = [
+    'Dynamic Colors',
+    'Lyrics',
+    'Insights',
+    'Player Styles',
+    'Audio Controls',
+    'Offline Cache',
+    'Open Source',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 22),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final renderBox = _singleSetKey.currentContext?.findRenderObject() as RenderBox?;
+      if (renderBox != null && renderBox.hasSize && mounted) {
+        setState(() {
+          _singleSetWidth = renderBox.size.width;
+        });
+        _animController.repeat();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.daColors;
+    final typography = context.daTypography;
+
+    Widget buildFeatureChips({Key? key}) {
+      return Row(
+        key: key,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final feature in _features) ...[
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 10.0),
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+              decoration: BoxDecoration(
+                color: colors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12.0),
+                border: Border.all(
+                  color: colors.primary.withValues(alpha: 0.25),
+                  width: 1.0,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: colors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8.0),
+                  Text(
+                    feature,
+                    style: typography.body.copyWith(
+                      fontSize: 12.0,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      height: 52,
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(16.0),
+        border: Border.all(
+          color: colors.primary.withValues(alpha: 0.2),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colors.primary.withValues(alpha: 0.05),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: IgnorePointer(
+        child: AnimatedBuilder(
+          animation: _animController,
+          builder: (context, child) {
+            final shift = _singleSetWidth > 0 ? _animController.value * _singleSetWidth : 0.0;
+            return OverflowBox(
+              minWidth: 0,
+              maxWidth: double.infinity,
+              alignment: Alignment.centerLeft,
+              child: Transform.translate(
+                offset: Offset(-shift, 0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    buildFeatureChips(key: _singleSetKey),
+                    buildFeatureChips(),
+                    buildFeatureChips(),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

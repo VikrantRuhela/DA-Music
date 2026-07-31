@@ -103,5 +103,28 @@ void main() {
       expect(cachedFile.existsSync(), isTrue);
       expect(fakeProxy.manageCacheSizeCalled, isTrue);
     });
+
+    test('Progressive Queue Prefetch: prefetch window moves dynamically with currently playing song index', () async {
+      final queue = [
+        const Song(id: 's1', title: 'Song 1', artist: 'Artist 1', album: 'Album 1', duration: Duration(minutes: 3), artworkUrl: null, source: 'youtube', lyrics: null),
+        const Song(id: 's2', title: 'Song 2', artist: 'Artist 2', album: 'Album 2', duration: Duration(minutes: 3), artworkUrl: null, source: 'youtube', lyrics: null),
+        const Song(id: 's3', title: 'Song 3', artist: 'Artist 3', album: 'Album 3', duration: Duration(minutes: 3), artworkUrl: null, source: 'youtube', lyrics: null),
+        const Song(id: 's4', title: 'Song 4', artist: 'Artist 4', album: 'Album 4', duration: Duration(minutes: 3), artworkUrl: null, source: 'youtube', lyrics: null),
+        const Song(id: 's5', title: 'Song 5', artist: 'Artist 5', album: 'Album 5', duration: Duration(minutes: 3), artworkUrl: null, source: 'youtube', lyrics: null),
+        const Song(id: 's6', title: 'Song 6', artist: 'Artist 6', album: 'Album 6', duration: Duration(minutes: 3), artworkUrl: null, source: 'youtube', lyrics: null),
+      ];
+
+      // At Song 1 (index 0): window is s2, s3, s4
+      await prefetchManager.updateQueue(queue, 0);
+      expect(prefetchManager.currentIndex, equals(0));
+
+      // Advance to Song 2 (index 1): window moves to s3, s4, s5
+      await prefetchManager.updateQueue(queue, 1);
+      expect(prefetchManager.currentIndex, equals(1));
+
+      // Direct jump to Song 4 (index 3): window moves to s5, s6
+      await prefetchManager.updateQueue(queue, 3);
+      expect(prefetchManager.currentIndex, equals(3));
+    });
   });
 }

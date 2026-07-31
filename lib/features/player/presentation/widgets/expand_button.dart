@@ -39,6 +39,7 @@ class _ExpandButtonState extends State<ExpandButton> {
         _isPressed = false;
       }),
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _isPressed = true),
         onTapUp: (_) => setState(() => _isPressed = false),
         onTapCancel: () => setState(() => _isPressed = false),

@@ -71,24 +71,14 @@ class _VinylWidgetState extends ConsumerState<VinylWidget> with SingleTickerProv
     final glowShadow = _isHovered
         ? [
             BoxShadow(
-              color: colors.primary.withValues(alpha: 0.35),
-              blurRadius: 48.0,
-              spreadRadius: 8.0,
-            ),
-            BoxShadow(
               color: Colors.black.withValues(alpha: 0.6),
-              blurRadius: 30.0,
+              blurRadius: 36.0,
               offset: const Offset(0, 15),
             )
           ]
         : [
             BoxShadow(
-              color: colors.primary.withValues(alpha: 0.12),
-              blurRadius: 32.0,
-              spreadRadius: 2.0,
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
+              color: Colors.black.withValues(alpha: 0.45),
               blurRadius: 24.0,
               offset: const Offset(0, 12),
             )

@@ -4,6 +4,7 @@ import '../../core/services/secure_credential_store.dart';
 import '../../core/services/session_manager.dart';
 import '../../core/services/ytm_sync_manager.dart';
 import '../../core/config/app_config.dart';
+import '../../features/settings/presentation/settings_page.dart';
 import 'library_providers.dart';
 import '../../domain/repositories/song_repository.dart';
 import '../../domain/repositories/album_repository.dart';
@@ -85,10 +86,12 @@ final streamResolverProvider = Provider<StreamResolver>((ref) {
 });
 
 final playbackPrefetchManagerProvider = Provider<PlaybackPrefetchManager>((ref) {
-  return PlaybackPrefetchManager(
+  final manager = PlaybackPrefetchManager(
     ref.watch(streamResolverProvider),
     ref.watch(localStreamProxyProvider),
   );
+  manager.isPermanentCacheEnabled = ref.watch(enablePermanentCacheProvider);
+  return manager;
 });
 
 final localMusicDataSourceProvider = Provider<LocalMusicDataSource>((ref) {

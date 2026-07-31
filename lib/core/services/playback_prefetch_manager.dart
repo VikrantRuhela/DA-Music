@@ -24,6 +24,7 @@ class PlaybackPrefetchManager {
   int _currentIndex = -1;
   Song? _currentlyPlayingSong;
   bool _hasPromotedCurrentSong = false;
+  bool isPermanentCacheEnabled = true;
   
   static const int prefetchWindowCount = 3;
   static const double promotionThreshold = 0.85;
@@ -62,6 +63,7 @@ class PlaybackPrefetchManager {
 
   /// Monitor playback position for Intelligent Cache Promotion (85% threshold).
   Future<void> onPositionUpdate(Song? currentSong, Duration position) async {
+    if (!isPermanentCacheEnabled) return;
     if (currentSong == null || currentSong.duration.inMilliseconds <= 0) return;
     if (_hasPromotedCurrentSong) return;
 
@@ -74,6 +76,10 @@ class PlaybackPrefetchManager {
 
   /// Promote a song from temporary prefetch buffer to permanent cache (da_tunes_cache).
   Future<void> promoteToCache(String songId) async {
+    if (!isPermanentCacheEnabled) {
+      DALogger.info('PlaybackPrefetchManager: Permanent cache is disabled. Skipping promotion for "$songId".');
+      return;
+    }
     if (_promotedTrackIds.contains(songId)) return;
     try {
       final tempDir = await getTemporaryDirectory();
@@ -122,21 +128,22 @@ class PlaybackPrefetchManager {
     try {
       final tempDir = await getTemporaryDirectory();
       final prefetchDir = Directory(p.join(tempDir.path, 'da_tunes_prefetch'));
-      if (!prefetchDir.existsSync()) return;
+      if (!await prefetchDir.exists()) return;
 
       final neededSet = neededIds.toSet();
       if (_currentlyPlayingSong != null) {
         neededSet.add(_currentlyPlayingSong!.id);
       }
 
-      final files = prefetchDir.listSync().whereType<File>();
-      for (final file in files) {
-        final baseName = p.basenameWithoutExtension(file.path);
-        if (!neededSet.contains(baseName)) {
-          try {
-            file.deleteSync();
-            DALogger.info('PlaybackPrefetchManager: Purged obsolete prefetch file "${file.path}".');
-          } catch (_) {}
+      await for (final entity in prefetchDir.list()) {
+        if (entity is File) {
+          final baseName = p.basenameWithoutExtension(entity.path);
+          if (!neededSet.contains(baseName)) {
+            try {
+              await entity.delete();
+              DALogger.info('PlaybackPrefetchManager: Purged obsolete prefetch file "${entity.path}".');
+            } catch (_) {}
+          }
         }
       }
     } catch (e) {
@@ -147,8 +154,8 @@ class PlaybackPrefetchManager {
   Future<void> _startPrefetchForSongs(List<Song> queue, int currentIndex, List<String> upcomingIds) async {
     final tempDir = await getTemporaryDirectory();
     final prefetchDir = Directory(p.join(tempDir.path, 'da_tunes_prefetch'));
-    if (!prefetchDir.existsSync()) {
-      prefetchDir.createSync(recursive: true);
+    if (!await prefetchDir.exists()) {
+      await prefetchDir.create(recursive: true);
     }
     final cacheDir = Directory(p.join(tempDir.path, 'da_tunes_cache'));
 
@@ -156,10 +163,10 @@ class PlaybackPrefetchManager {
       if (_activeDownloads.containsKey(songId)) continue;
 
       final cachedFile = File(p.join(cacheDir.path, '$songId.mp3'));
-      if (cachedFile.existsSync()) continue; // Already in permanent cache
+      if (await cachedFile.exists()) continue;
 
       final prefetchedFile = File(p.join(prefetchDir.path, '$songId.prefetch'));
-      if (prefetchedFile.existsSync()) continue; // Already prefetched
+      if (await prefetchedFile.exists()) continue;
 
       final song = queue.firstWhere((s) => s.id == songId, orElse: () => queue[0]);
       _downloadPrefetchTask(song, prefetchDir);

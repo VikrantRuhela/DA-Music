@@ -138,16 +138,16 @@ class LocalStreamProxy {
         if (fileToServe != null) {
           DALogger.info('LocalStreamProxy: Serving from ${fileToServe == cachedFile ? "permanent cache" : "prefetch buffer"}: ${fileToServe.path}');
           try {
-            fileToServe.setLastAccessedSync(DateTime.now());
+            fileToServe.setLastAccessed(DateTime.now()).catchError((_) {});
             final artworkFolder = fileToServe == cachedFile ? 'da_tunes_cache' : 'da_tunes_prefetch';
             final cachedArtwork = File(p.join(tempDir.path, artworkFolder, '$trackId.jpg'));
             if (cachedArtwork.existsSync()) {
-              cachedArtwork.setLastAccessedSync(DateTime.now());
+              cachedArtwork.setLastAccessed(DateTime.now()).catchError((_) {});
             }
           } catch (_) {}
           request.response.headers.contentType = ContentType('audio', 'mpeg');
           
-          final fileLength = fileToServe.lengthSync();
+          final fileLength = await fileToServe.length();
           final rangeHeader = request.headers.value('range');
           if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
             final parts = rangeHeader.substring(6).split('-');

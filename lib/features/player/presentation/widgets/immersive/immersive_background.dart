@@ -12,12 +12,17 @@ class ImmersiveBackground extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isMobile = Theme.of(context).platform == TargetPlatform.android ||
+                     Theme.of(context).platform == TargetPlatform.iOS;
+
     return GestureDetector(
-      onVerticalDragEnd: (details) {
-        if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
-          ref.read(immersiveModeProvider.notifier).state = false;
-        }
-      },
+      onVerticalDragEnd: isMobile
+          ? (details) {
+              if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
+                ref.read(immersiveModeProvider.notifier).state = false;
+              }
+            }
+          : null,
       child: Container(
         width: double.infinity,
         height: double.infinity,

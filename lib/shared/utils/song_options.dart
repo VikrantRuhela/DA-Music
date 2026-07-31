@@ -339,8 +339,7 @@ void showPlaylistOptionsMenu(BuildContext context, WidgetRef ref, Playlist playl
       icon: Icons.shuffle,
       onTap: () {
         if (playlist.songs.isNotEmpty) {
-          final shuffled = List<Song>.from(playlist.songs)..shuffle();
-          ref.read(playbackControllerProvider).setQueue(shuffled, startIndex: 0, queueMode: QueueMode.playlist);
+          ref.read(playbackControllerProvider).shufflePlaylist(playlist.songs);
         }
       },
     ),
@@ -433,6 +432,7 @@ void showArtistOptionsMenu(BuildContext context, WidgetRef ref, Artist artist) {
 
 void showSleepTimerDialog(BuildContext context, WidgetRef ref) {
   final colors = context.daColors;
+  final timerState = ref.read(sleepTimerNotifierProvider);
 
   showDialog(
     context: context,
@@ -442,29 +442,42 @@ void showSleepTimerDialog(BuildContext context, WidgetRef ref) {
         title: Text('Sleep Timer', style: TextStyle(color: colors.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [5, 15, 30, 45, 60].map((mins) {
-            return ListTile(
-              title: Text('$mins minutes', style: TextStyle(color: colors.textPrimary)),
-              onTap: () {
-                final duration = Duration(minutes: mins);
-                ref.read(sleepTimerDurationProvider.notifier).state = duration;
-                ref.read(sleepTimerProvider)?.cancel();
-                final timer = Timer(duration, () {
-                  ref.read(playbackControllerProvider).pause();
+          children: [
+            if (timerState.isActive)
+              ListTile(
+                leading: const Icon(Icons.timer_off_outlined, color: Colors.redAccent),
+                title: Text('Cancel Sleep Timer (${timerState.formattedRemaining})', style: const TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  ref.read(sleepTimerNotifierProvider.notifier).cancelTimer();
                   ref.read(sleepTimerProvider.notifier).state = null;
                   ref.read(sleepTimerDurationProvider.notifier).state = null;
-                });
-                ref.read(sleepTimerProvider.notifier).state = timer;
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: colors.surfaceCard,
-                    content: Text('Playback will pause in $mins minutes.', style: TextStyle(color: colors.textPrimary)),
-                  ),
-                );
-              },
-            );
-          }).toList(),
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: colors.surfaceCard,
+                      content: Text('Sleep timer cancelled.', style: TextStyle(color: colors.textPrimary)),
+                    ),
+                  );
+                },
+              ),
+            ...[5, 15, 30, 45, 60].map((mins) {
+              return ListTile(
+                title: Text('$mins minutes', style: TextStyle(color: colors.textPrimary)),
+                onTap: () {
+                  final duration = Duration(minutes: mins);
+                  ref.read(sleepTimerDurationProvider.notifier).state = duration;
+                  ref.read(sleepTimerNotifierProvider.notifier).setTimer(duration);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: colors.surfaceCard,
+                      content: Text('Playback will pause in $mins minutes.', style: TextStyle(color: colors.textPrimary)),
+                    ),
+                  );
+                },
+              );
+            }),
+          ],
         ),
       );
     },

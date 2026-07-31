@@ -309,6 +309,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           style: typography.title.copyWith(fontSize: 20.0, fontWeight: FontWeight.bold),
         ),
         actions: [
+          if (songs.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.shuffle),
+              tooltip: 'Shuffle Playlist',
+              onPressed: () {
+                ref.read(playbackControllerProvider).shufflePlaylist(songs);
+              },
+            ),
           if (!isRemote)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
@@ -350,15 +358,66 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 description: 'Add songs to this playlist using song overflow menus.',
               ),
             )
-          : ListView.builder(
-              cacheExtent: 800.0,
-              addRepaintBoundaries: true,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(
-                horizontal: DATokens.spacingMedium,
-                vertical: DATokens.spacingSmall,
-              ),
-              itemCount: songs.length,
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: DATokens.spacingMedium,
+                    vertical: DATokens.spacingSmall,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            ref.read(playbackControllerProvider).setQueue(
+                              songs,
+                              startIndex: 0,
+                              autoPlay: true,
+                              queueMode: QueueMode.playlist,
+                            );
+                          },
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Play'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colors.textPrimary,
+                            side: BorderSide(color: colors.border),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: DATokens.spacingSmall),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            ref.read(playbackControllerProvider).shufflePlaylist(songs);
+                          },
+                          icon: const Icon(Icons.shuffle),
+                          label: const Text('Shuffle'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colors.textPrimary,
+                            side: BorderSide(color: colors.border),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    cacheExtent: 800.0,
+                    addRepaintBoundaries: true,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: DATokens.spacingMedium,
+                      vertical: DATokens.spacingSmall,
+                    ),
+                    itemCount: songs.length,
               itemBuilder: (context, index) {
                 final song = songs[index];
 
@@ -422,6 +481,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 );
               },
             ),
+          ),
+        ],
+      ),
     );
   }
 

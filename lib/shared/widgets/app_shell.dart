@@ -16,22 +16,51 @@ import '../../features/home/presentation/widgets/navigation_rail.dart';
 import '../../features/player/presentation/widgets/immersive/android_sliding_player.dart';
 import 'ambient_background.dart';
 import '../../features/taste_engine/presentation/taste_playback_observer.dart';
+import '../../app/router/router.dart';
 import 'navigation_pill/navigation_pill.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   final Widget child;
 
   const AppShell({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  static const MethodChannel _appLaunchChannel = MethodChannel('com.vikrantruhela.datunes/app_launch');
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLaunchIntent();
+  }
+
+  void _checkLaunchIntent() async {
+    try {
+      final action = await _appLaunchChannel.invokeMethod<String>('getInitialAction');
+      if (action == 'open_player') {
+        ref.read(immersiveModeProvider.notifier).state = true;
+      }
+    } catch (_) {}
+
+    _appLaunchChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onLaunchIntent' && call.arguments == 'open_player') {
+        ref.read(immersiveModeProvider.notifier).state = true;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = context.daColors;
     final currentSong = ref.watch(currentSongProvider);
-    final isImmersive = ref.watch(immersiveModeProvider) && currentSong != null;
+    final isImmersive = ref.watch(immersiveModeProvider);
     final isAndroid = Theme.of(context).platform == TargetPlatform.android;
     final showAlbumArt = ref.watch(showAlbumArtBackgroundProvider);
     final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
-    debugPrint('=== APPSHELL BUILD showAlbumArt: $showAlbumArt ===');
+    debugPrint(' [AppShell] build - isImmersive: $isImmersive, currentSong: ${currentSong?.title}, showAlbumArt: $showAlbumArt');
 
     if (isAndroid) {
       SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -72,8 +101,37 @@ class AppShell extends ConsumerWidget {
               )
             : const EdgeInsets.all(DATokens.spacingSmall));
 
-    return TastePlaybackObserver(
-      child: Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        // 1. If full-screen immersive player is open, close immersive mode first
+        if (ref.read(immersiveModeProvider)) {
+          ref.read(immersiveModeProvider.notifier).state = false;
+          return;
+        }
+
+        // 2. Check if shellNavigatorKey can pop nested screens (e.g. /album/:id -> /library)
+        if (shellNavigatorKey.currentState != null && shellNavigatorKey.currentState!.canPop()) {
+          shellNavigatorKey.currentState!.pop();
+          return;
+        }
+
+        // 3. Check current location
+        final location = GoRouterState.of(context).matchedLocation;
+
+        // 4. If on any tab/page other than Home ('/'), navigate back to Home
+        if (location != '/') {
+          context.go('/');
+          return;
+        }
+
+        // 5. If already on Home ('/'), exit app naturally
+        SystemNavigator.pop();
+      },
+      child: TastePlaybackObserver(
+        child: Scaffold(
         backgroundColor: Colors.transparent,
         body: AmbientBackground(
           child: Stack(
@@ -90,7 +148,7 @@ class AppShell extends ConsumerWidget {
                             const _DesktopNavRail(),
                           Expanded(
                             child: AnimatedOpacity(
-                              opacity: (isAndroid && isImmersive) ? 0.0 : 1.0,
+                              opacity: isImmersive ? 0.0 : 1.0,
                               duration: duration,
                               curve: curve,
                               child: Container(
@@ -144,7 +202,7 @@ class AppShell extends ConsumerWidget {
                                                       ? (ref.watch(currentSongProvider) != null ? 144.0 + bottomPadding : 80.0 + bottomPadding)
                                                       : 0.0,
                                                 ),
-                                                child: child,
+                                                child: widget.child,
                                               ),
                                               if (!isAndroid && !showPlayerPanel && !isImmersive)
                                                 const Align(
@@ -188,6 +246,7 @@ class AppShell extends ConsumerWidget {
             ? const _MobileBottomNavBar()
             : null,
       ),
+    ),
     );
   }
 }

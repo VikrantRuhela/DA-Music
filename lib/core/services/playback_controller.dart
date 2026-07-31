@@ -21,6 +21,7 @@ import '../../features/taste_engine/presentation/providers/taste_engine_provider
 import '../../features/taste_engine/domain/recommendation_engine.dart';
 import '../../data/repositories/download_repository.dart';
 import '../../shared/providers/library_providers.dart';
+import 'music_content_classifier.dart';
 import '../../shared/providers/player_providers.dart';
 
 enum QueueMode { smart, playlist, album }
@@ -82,7 +83,8 @@ class PlaybackController extends ChangeNotifier {
     _playbackEngine.initialize();
     _playbackEngine.onQueueChanged.listen((queue) {
       _queueSongs.clear();
-      _queueSongs.addAll(queue.songs.map((s) => _mapFromDomain(s)));
+      final mapped = queue.songs.map((s) => _mapFromDomain(s));
+      _queueSongs.addAll(mapped.where((s) => !MusicContentClassifier.isBlacklistedTitleOrChannel(s.title, s.artist)));
       _currentIndex = queue.currentIndex;
       _prefetchManager?.updateQueue(_queueSongs, _currentIndex);
 
@@ -558,6 +560,24 @@ class PlaybackController extends ChangeNotifier {
     await _runAction('setShuffle', () => _playbackEngine.setShuffle(shuffleState));
     _eventController.add(clean.ShuffleChanged(shuffleState));
     notifyListeners();
+  }
+
+  Future<void> shufflePlaylist(List<Song> songs) async {
+    if (songs.isEmpty) return;
+    final Set<String> seenIds = {};
+    final List<Song> uniqueSongs = [];
+    for (final song in songs) {
+      if (!seenIds.contains(song.id) && !MusicContentClassifier.isBlacklistedTitleOrChannel(song.title, song.artist)) {
+        seenIds.add(song.id);
+        uniqueSongs.add(song);
+      }
+    }
+    if (uniqueSongs.isEmpty) return;
+    uniqueSongs.shuffle();
+    _settings = _settings.copyWith(isShuffle: true);
+    await setQueue(uniqueSongs, startIndex: 0, autoPlay: true, queueMode: QueueMode.playlist);
+    await _runAction('setShuffle', () => _playbackEngine.setShuffle(true));
+    _eventController.add(const clean.ShuffleChanged(true));
   }
 
   Future<void> setRepeatMode(RepeatMode mode) async {

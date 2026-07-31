@@ -27,6 +27,7 @@ import '../../../shared/utils/home_feed_cache_serializer.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/services/logger_service.dart';
 import '../../../core/extensions/context_extensions.dart';
+import '../../../core/services/music_content_classifier.dart';
 
 final homeFeedProvider = FutureProvider<HomeFeed>((ref) async {
   final storage = ref.watch(storageServiceProvider);
@@ -108,16 +109,54 @@ final homeFeedProvider = FutureProvider<HomeFeed>((ref) async {
       } catch (_) {}
     }
 
-    // Save final feed to offline cache
+    final filteredSections = finalFeed.sections.map((section) {
+      final filteredItems = section.items.where((item) {
+        if (item is Song) {
+          return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.artistId);
+        } else if (item is Album) {
+          return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.artistId);
+        } else if (item is Playlist) {
+          return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.owner);
+        }
+        return true;
+      }).toList();
+
+      return HomeFeedSection(
+        title: section.title,
+        type: section.type,
+        items: filteredItems,
+      );
+    }).toList();
+
+    finalFeed = HomeFeed(sections: filteredSections);
+
     final jsonStr = HomeFeedCacheSerializer.serialize(finalFeed);
     await storage.setString('ytm_cache_home_feed', jsonStr);
 
     return finalFeed;
   } catch (e) {
-    // Retrieve from offline cache on error/offline
     final cached = await storage.getString('ytm_cache_home_feed');
     if (cached != null && cached.isNotEmpty) {
-      return HomeFeedCacheSerializer.deserialize(cached);
+      final feed = HomeFeedCacheSerializer.deserialize(cached);
+      final filteredSections = feed.sections.map((section) {
+        final filteredItems = section.items.where((item) {
+          if (item is Song) {
+            return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.artistId);
+          } else if (item is Album) {
+            return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.artistId);
+          } else if (item is Playlist) {
+            return !MusicContentClassifier.isBlacklistedTitleOrChannel(item.title, item.owner);
+          }
+          return true;
+        }).toList();
+
+        return HomeFeedSection(
+          title: section.title,
+          type: section.type,
+          items: filteredItems,
+        );
+      }).toList();
+      return HomeFeed(sections: filteredSections);
     }
     // Return empty fallback feed
     return HomeFeed(sections: [
@@ -142,6 +181,8 @@ class HorizontalCarouselSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+
     final colors = context.daColors;
     final typography = context.daTypography;
 
@@ -339,13 +380,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               children.add(
                 Padding(
                   padding: const EdgeInsets.only(bottom: DATokens.spacingLarge),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SectionHeader(title: 'Your Favorite Artists'),
-                      FavoriteArtistsSection(artists: topArtists),
-                    ],
-                  ),
+                  child: FavoriteArtistsSection(artists: topArtists),
                 ),
               );
             }

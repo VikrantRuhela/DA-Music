@@ -149,7 +149,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     ));
   }
 
-  void updateMetadata(Song song, Duration duration) {
+  Future<void> updateMetadata(Song song, Duration duration) async {
     Uri? resolvedArtUri;
 
     if (song.artworkUrl != null && song.artworkUrl!.isNotEmpty) {
@@ -157,7 +157,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         resolvedArtUri = Uri.tryParse(song.artworkUrl!);
       } else {
         final file = File(song.artworkUrl!);
-        if (file.existsSync()) {
+        if (await file.exists()) {
           resolvedArtUri = Uri.file(song.artworkUrl!);
         }
       }
@@ -166,9 +166,9 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (resolvedArtUri == null && song.source == 'local') {
       try {
         final audioFile = File(song.id);
-        if (audioFile.existsSync()) {
+        if (await audioFile.exists()) {
           final parentDir = audioFile.parent;
-          if (parentDir.existsSync()) {
+          if (await parentDir.exists()) {
             final commonNames = [
               'cover.jpg', 'cover.png', 'cover.jpeg',
               'folder.jpg', 'folder.png', 'folder.jpeg',
@@ -180,15 +180,14 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
             File? foundFile;
             for (final name in commonNames) {
               final f = File('${parentDir.path}/$name');
-              if (f.existsSync()) {
+              if (await f.exists()) {
                 foundFile = f;
                 break;
               }
             }
 
             if (foundFile == null) {
-              final list = parentDir.listSync();
-              for (final entity in list) {
+              await for (final entity in parentDir.list()) {
                 if (entity is File) {
                   final filename = entity.path.split('/').last.split('\\').last.toLowerCase();
                   final ext = filename.split('.').last;

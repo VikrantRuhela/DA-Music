@@ -68,6 +68,87 @@ final queueProvider = Provider<List<QueueItem>>((ref) {
 final sleepTimerProvider = StateProvider<Timer?>((ref) => null);
 final sleepTimerDurationProvider = StateProvider<Duration?>((ref) => null);
 
+class SleepTimerState {
+  final bool isActive;
+  final int remainingSeconds;
+  final Duration? initialDuration;
+
+  const SleepTimerState({
+    this.isActive = false,
+    this.remainingSeconds = 0,
+    this.initialDuration,
+  });
+
+  String get formattedRemaining {
+    if (!isActive || remainingSeconds <= 0) return '';
+    if (remainingSeconds >= 3600) {
+      final hours = (remainingSeconds / 3600).ceil();
+      return '${hours}h';
+    }
+    if (remainingSeconds >= 60) {
+      final minutes = (remainingSeconds / 60).ceil();
+      return '${minutes}m';
+    }
+    return '${remainingSeconds}s';
+  }
+
+  SleepTimerState copyWith({
+    bool? isActive,
+    int? remainingSeconds,
+    Duration? initialDuration,
+  }) {
+    return SleepTimerState(
+      isActive: isActive ?? this.isActive,
+      remainingSeconds: remainingSeconds ?? this.remainingSeconds,
+      initialDuration: initialDuration ?? this.initialDuration,
+    );
+  }
+}
+
+class SleepTimerNotifier extends StateNotifier<SleepTimerState> {
+  final Ref _ref;
+  Timer? _timer;
+
+  SleepTimerNotifier(this._ref) : super(const SleepTimerState());
+
+  void setTimer(Duration duration) {
+    cancelTimer();
+    final totalSeconds = duration.inSeconds;
+    state = SleepTimerState(
+      isActive: true,
+      remainingSeconds: totalSeconds,
+      initialDuration: duration,
+    );
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (state.remainingSeconds <= 1) {
+        cancelTimer();
+        _ref.read(playbackControllerProvider).pause();
+      } else {
+        state = state.copyWith(
+          remainingSeconds: state.remainingSeconds - 1,
+        );
+      }
+    });
+  }
+
+  void cancelTimer() {
+    _timer?.cancel();
+    _timer = null;
+    state = const SleepTimerState();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+}
+
+final sleepTimerNotifierProvider = StateNotifierProvider<SleepTimerNotifier, SleepTimerState>((ref) {
+  return SleepTimerNotifier(ref);
+});
+
 enum PlayerStyle { immersive, vinyl, minimal }
 
 final playerStyleProvider = StateNotifierProvider<PlayerStyleNotifier, PlayerStyle>((ref) {

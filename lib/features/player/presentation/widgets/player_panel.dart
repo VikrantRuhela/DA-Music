@@ -103,28 +103,17 @@ class PersistentPlayerPanel extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(16.0),
                 boxShadow: [
                   BoxShadow(
-                    color: colors.primary.withOpacity(0.35),
-                    blurRadius: 25.0,
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 24.0,
                     offset: const Offset(0, 8),
                   ),
                 ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16.0),
-                child: ShaderMask(
-                  shaderCallback: (rect) {
-                    return const RadialGradient(
-                      center: Alignment.topLeft,
-                      radius: 1.3,
-                      colors: [Colors.white, Colors.transparent],
-                      stops: [0.35, 1.0],
-                    ).createShader(rect);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: DAImage(
-                    url: currentSong?.artworkUrl,
-                    fit: BoxFit.cover,
-                  ),
+                child: DAImage(
+                  url: currentSong?.artworkUrl,
+                  fit: BoxFit.cover,
                 ),
               ),
             ),

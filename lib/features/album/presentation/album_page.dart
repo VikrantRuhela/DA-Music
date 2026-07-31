@@ -133,30 +133,61 @@ class AlbumPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: DATokens.spacingLarge),
                       if (songs.isNotEmpty)
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            final modelSongs = songs.map((s) => shared.Song(
-                              id: s.id,
-                              title: s.title,
-                              artist: s.artistId == 'Unknown Artist' ? album.artistId : s.artistId,
-                              album: album.title,
-                              duration: s.duration.value,
-                              artworkUrl: s.artwork.url,
-                              source: s.sourceId,
-                              lyrics: null,
-                            )).toList();
-                            ref.read(playbackControllerProvider).setQueue(modelSongs, autoPlay: true, queueMode: QueueMode.album);
-                          },
-                          icon: const Icon(Icons.play_arrow),
-                          label: const Text('Play Album'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colors.primary,
-                            foregroundColor: colors.textPrimary,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: DATokens.spacingLarge,
-                              vertical: DATokens.spacingMedium,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                final modelSongs = songs.map((s) => shared.Song(
+                                  id: s.id,
+                                  title: s.title,
+                                  artist: s.artistId == 'Unknown Artist' ? album.artistId : s.artistId,
+                                  album: album.title,
+                                  duration: s.duration.value,
+                                  artworkUrl: s.artwork.url,
+                                  source: s.sourceId,
+                                  lyrics: null,
+                                )).toList();
+                                ref.read(playbackControllerProvider).setQueue(modelSongs, autoPlay: true, queueMode: QueueMode.album);
+                              },
+                              icon: const Icon(Icons.play_arrow),
+                              label: const Text('Play Album'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colors.primary,
+                                foregroundColor: colors.textPrimary,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: DATokens.spacingLarge,
+                                  vertical: DATokens.spacingMedium,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: DATokens.spacingSmall),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                final modelSongs = songs.map((s) => shared.Song(
+                                  id: s.id,
+                                  title: s.title,
+                                  artist: s.artistId == 'Unknown Artist' ? album.artistId : s.artistId,
+                                  album: album.title,
+                                  duration: s.duration.value,
+                                  artworkUrl: s.artwork.url,
+                                  source: s.sourceId,
+                                  lyrics: null,
+                                )).toList();
+                                ref.read(playbackControllerProvider).shufflePlaylist(modelSongs);
+                              },
+                              icon: const Icon(Icons.shuffle),
+                              label: const Text('Shuffle'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: colors.textPrimary,
+                                side: BorderSide(color: colors.border),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: DATokens.spacingLarge,
+                                  vertical: DATokens.spacingMedium,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                     ],
                   ),

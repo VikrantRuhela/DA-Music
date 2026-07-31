@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
@@ -6,40 +7,55 @@ import '../../../../core/services/logger_service.dart';
 
 class ListeningHistoryRepository {
   File? _cacheFile;
+  List<Map<String, dynamic>>? _inMemoryLogs;
 
   Future<File> _getCacheFile() async {
     if (_cacheFile != null) return _cacheFile!;
     final docDir = await getApplicationDocumentsDirectory();
     final dir = Directory(p.join(docDir.path, 'da_tunes_taste'));
-    if (!dir.existsSync()) {
-      dir.createSync(recursive: true);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
     }
     _cacheFile = File(p.join(dir.path, 'history_logs.json'));
     return _cacheFile!;
   }
 
   Future<List<Map<String, dynamic>>> loadLogs() async {
+    if (_inMemoryLogs != null) {
+      return List<Map<String, dynamic>>.from(_inMemoryLogs!);
+    }
     try {
       final file = await _getCacheFile();
-      if (!file.existsSync()) return [];
+      if (!await file.exists()) {
+        _inMemoryLogs = [];
+        return [];
+      }
       final content = await file.readAsString();
-      if (content.trim().isEmpty) return [];
+      if (content.trim().isEmpty) {
+        _inMemoryLogs = [];
+        return [];
+      }
       final list = jsonDecode(content);
       if (list is List) {
-        return list.map((item) => Map<String, dynamic>.from(item)).toList();
+        _inMemoryLogs = list.map((item) => Map<String, dynamic>.from(item)).toList();
+        return List<Map<String, dynamic>>.from(_inMemoryLogs!);
       }
     } catch (e) {
       DALogger.error('ListeningHistoryRepository: Failed to load logs', e);
     }
+    _inMemoryLogs = [];
     return [];
   }
 
   Future<void> appendLog(Map<String, dynamic> log) async {
     try {
-      final file = await _getCacheFile();
       final logs = await loadLogs();
       logs.add(log);
-      await file.writeAsString(jsonEncode(logs));
+      _inMemoryLogs = logs;
+      
+      final file = await _getCacheFile();
+      final jsonStr = jsonEncode(logs);
+      unawaited(file.writeAsString(jsonStr));
     } catch (e) {
       DALogger.error('ListeningHistoryRepository: Failed to append log', e);
     }
@@ -47,8 +63,9 @@ class ListeningHistoryRepository {
 
   Future<void> clearHistory() async {
     try {
+      _inMemoryLogs = [];
       final file = await _getCacheFile();
-      if (file.existsSync()) {
+      if (await file.exists()) {
         await file.writeAsString(jsonEncode([]));
       }
     } catch (e) {

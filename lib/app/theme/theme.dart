@@ -18,28 +18,33 @@ class DATypography {
 
   static const DATypography dark = DATypography(
     display: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 32.0,
       fontWeight: FontWeight.bold,
       color: DATokens.darkTextPrimary,
       letterSpacing: -0.5,
     ),
     headline: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 22.0,
       fontWeight: FontWeight.bold,
       color: DATokens.darkTextPrimary,
       letterSpacing: -0.2,
     ),
     title: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 16.0,
       fontWeight: FontWeight.w600,
       color: DATokens.darkTextPrimary,
     ),
     body: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 14.0,
       fontWeight: FontWeight.normal,
       color: DATokens.darkTextSecondary,
     ),
     caption: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 12.0,
       fontWeight: FontWeight.normal,
       color: DATokens.darkTextSecondary,
@@ -48,28 +53,33 @@ class DATypography {
 
   static const DATypography light = DATypography(
     display: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 32.0,
       fontWeight: FontWeight.bold,
       color: DATokens.lightTextPrimary,
       letterSpacing: -0.5,
     ),
     headline: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 22.0,
       fontWeight: FontWeight.bold,
       color: DATokens.lightTextPrimary,
       letterSpacing: -0.2,
     ),
     title: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 16.0,
       fontWeight: FontWeight.w600,
       color: DATokens.lightTextPrimary,
     ),
     body: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 14.0,
       fontWeight: FontWeight.normal,
       color: DATokens.lightTextSecondary,
     ),
     caption: TextStyle(
+      fontFamily: 'Funnel Display',
       fontSize: 12.0,
       fontWeight: FontWeight.normal,
       color: DATokens.lightTextSecondary,
@@ -119,9 +129,9 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     textSecondary: DATokens.darkTextSecondary,
     border: DATokens.darkBorder,
     typography: DATypography.dark,
-    gradientStart: Color(0xFF160E0F),
-    gradientMiddle: Color(0xFF0F0B0C),
-    gradientEnd: Color(0xFF070505),
+    gradientStart: Color(0xFF000000),
+    gradientMiddle: Color(0xFF000000),
+    gradientEnd: Color(0xFF000000),
   );
 
   static const DAThemeExtension light = DAThemeExtension(
@@ -135,9 +145,9 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     textSecondary: DATokens.lightTextSecondary,
     border: DATokens.lightBorder,
     typography: DATypography.light,
-    gradientStart: Color(0xFFF9F6F6),
-    gradientMiddle: Color(0xFFECE6E6),
-    gradientEnd: Color(0xFFDFD4D4),
+    gradientStart: Color(0xFFFFFFFF),
+    gradientMiddle: Color(0xFFFFFFFF),
+    gradientEnd: Color(0xFFFFFFFF),
   );
 
   @override
@@ -200,6 +210,7 @@ class DATheme {
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Funnel Display',
       brightness: Brightness.dark,
       scaffoldBackgroundColor: DATokens.darkBackground,
       colorScheme: const ColorScheme.dark(
@@ -216,6 +227,7 @@ class DATheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Funnel Display',
       brightness: Brightness.light,
       scaffoldBackgroundColor: DATokens.lightBackground,
       colorScheme: const ColorScheme.light(

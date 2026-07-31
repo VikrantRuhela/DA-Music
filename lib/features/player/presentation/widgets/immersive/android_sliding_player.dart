@@ -820,9 +820,34 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                   context.push('/lyrics');
                 },
               ),
-              IconButton(
-                icon: const Icon(Icons.dark_mode_outlined, color: Colors.white60, size: 24.0),
-                onPressed: () => showSleepTimerDialog(context, ref),
+              Builder(
+                builder: (context) {
+                  final timerState = ref.watch(sleepTimerNotifierProvider);
+                  return AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: timerState.isActive
+                        ? GestureDetector(
+                            key: const ValueKey('active_timer'),
+                            onTap: () => showSleepTimerDialog(context, ref),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0),
+                              decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(12.0),
+                              ),
+                              child: Text(
+                                timerState.formattedRemaining,
+                                style: const TextStyle(color: Colors.white, fontSize: 12.0, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          )
+                        : IconButton(
+                            key: const ValueKey('inactive_timer'),
+                            icon: const Icon(Icons.dark_mode_outlined, color: Colors.white60, size: 24.0),
+                            onPressed: () => showSleepTimerDialog(context, ref),
+                          ),
+                  );
+                },
               ),
             ],
           ),

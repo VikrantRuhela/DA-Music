@@ -20,6 +20,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:desktop_webview_window/desktop_webview_window.dart';
 
 import 'core/services/device_memory_manager.dart';
+import 'core/services/startup_tracker.dart';
 
 class DnsCacheEntry {
   final List<InternetAddress> ipv6;
@@ -34,6 +35,11 @@ class DnsCacheEntry {
 final Map<String, DnsCacheEntry> _dnsCache = {};
 
 Future<Socket> connectDualStack(String host, int port) async {
+  // Fast path for loopback & local addresses - bypass DNS lookup completely
+  if (host == 'localhost' || host == '127.0.0.1' || host == '::1' || host == '0.0.0.0') {
+    return await Socket.connect(host, port).timeout(const Duration(seconds: 3));
+  }
+
   try {
     List<InternetAddress> ipv6Addresses = [];
     List<InternetAddress> ipv4Addresses = [];
@@ -64,24 +70,24 @@ Future<Socket> connectDualStack(String host, int port) async {
     }
     
     if (ipv6Addresses.isEmpty && ipv4Addresses.isEmpty) {
-      return await Socket.connect(host, port);
+      return await Socket.connect(host, port).timeout(const Duration(seconds: 3));
     }
     
     if (ipv6Addresses.isEmpty) {
-      return await Socket.connect(ipv4Addresses.first, port).timeout(const Duration(seconds: 4));
+      return await Socket.connect(ipv4Addresses.first, port).timeout(const Duration(seconds: 3));
     }
     
     if (ipv4Addresses.isEmpty) {
-      return await Socket.connect(ipv6Addresses.first, port).timeout(const Duration(seconds: 4));
+      return await Socket.connect(ipv6Addresses.first, port).timeout(const Duration(seconds: 3));
     }
     
     final completer = Completer<Socket>();
-    final totalAttempts = 2; // Race first IPv6 and first IPv4 addresses
+    const totalAttempts = 2;
     int failures = 0;
     
     void tryConnect(InternetAddress addr) async {
       try {
-        final socket = await Socket.connect(addr, port).timeout(const Duration(seconds: 4));
+        final socket = await Socket.connect(addr, port).timeout(const Duration(seconds: 3));
         if (!completer.isCompleted) {
           completer.complete(socket);
         } else {
@@ -97,14 +103,22 @@ Future<Socket> connectDualStack(String host, int port) async {
 
     tryConnect(ipv6Addresses.first);
     
-    await Future.delayed(const Duration(milliseconds: 200));
+    await Future.delayed(const Duration(milliseconds: 150));
     if (!completer.isCompleted) {
       tryConnect(ipv4Addresses.first);
     }
     
-    return await completer.future;
+    return await completer.future.timeout(
+      const Duration(seconds: 3),
+      onTimeout: () {
+        if (!completer.isCompleted) {
+          completer.completeError(TimeoutException('Dual stack connection timeout for $host'));
+        }
+        return Socket.connect(host, port).timeout(const Duration(seconds: 3));
+      },
+    );
   } catch (_) {
-    return await Socket.connect(host, port);
+    return await Socket.connect(host, port).timeout(const Duration(seconds: 3));
   }
 }
 
@@ -116,6 +130,16 @@ class FallbackHttpOverrides extends HttpOverrides {
       final host = proxyHost ?? url.host;
       final port = proxyPort ?? (url.port != 0 ? url.port : (url.scheme == 'https' ? 443 : 80));
       
+      // Fast path loopback bypass for local stream proxy & local image cache requests
+      if (host == 'localhost' || host == '127.0.0.1' || host == '::1' || host == '0.0.0.0') {
+        final socket = await Socket.connect(host, port).timeout(const Duration(seconds: 3));
+        if (url.scheme.toLowerCase() == 'https') {
+          final secureSocket = await SecureSocket.secure(socket, host: host);
+          return ConnectionTask.fromSocket(Future.value(secureSocket), () {});
+        }
+        return ConnectionTask.fromSocket(Future.value(socket), () {});
+      }
+
       final socket = await connectDualStack(host, port);
 
       if (url.scheme.toLowerCase() == 'https') {
@@ -129,17 +153,23 @@ class FallbackHttpOverrides extends HttpOverrides {
 }
 
 void main([List<String> args = const []]) async {
-  HttpOverrides.global = FallbackHttpOverrides();
-  WidgetsFlutterBinding.ensureInitialized();
-  DeviceMemoryManager.instance.initialize();
+  final mainStep = StartupTracker.startStep('Total Application Launch');
 
-  try {
-    final tempDir = await getTemporaryDirectory();
-    DAImage.cacheDirPath = tempDir.path;
-    final docDir = await getApplicationDocumentsDirectory();
-    DAImage.documentsDirPath = docDir.path;
-  } catch (_) {}
-  
+  await StartupTracker.runStep('HTTP Overrides & Flutter Binding', () async {
+    HttpOverrides.global = FallbackHttpOverrides();
+    WidgetsFlutterBinding.ensureInitialized();
+    DeviceMemoryManager.instance.initialize();
+  });
+
+  await StartupTracker.runStep('Cache & Documents Paths', () async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      DAImage.cacheDirPath = tempDir.path;
+      final docDir = await getApplicationDocumentsDirectory();
+      DAImage.documentsDirPath = docDir.path;
+    } catch (_) {}
+  });
+
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     if (runWebViewTitleBarWidget(args)) {
       return;
@@ -150,10 +180,14 @@ void main([List<String> args = const []]) async {
       ? WindowsPlatformService()
       : DefaultPlatformService();
 
-  await platformService.initializeWindow();
+  await StartupTracker.runStep('Platform Window Initialization', () async {
+    await platformService.initializeWindow();
+  });
 
   final storageService = JsonStorageService();
-  await storageService.init();
+  await StartupTracker.runStep('Local JsonStorage Initialization', () async {
+    await storageService.init();
+  });
 
   final container = ProviderContainer(
     overrides: [
@@ -205,22 +239,16 @@ void main([List<String> args = const []]) async {
     };
   }
 
-  final controller = container.read(playbackControllerProvider);
-  await SystemMediaSessionManager.initialize(controller);
-
-  final accountService = container.read(ytAccountServiceProvider);
-  await accountService.initialize();
-
-  // If already logged in on startup, trigger background synchronization
-  if (accountService.isLoggedIn) {
-    container.read(ytmSyncManagerProvider.notifier).startSync();
-  }
-
   final goRouter = container.read(goRouterProvider);
-  // Handle session expiry by routing back to the welcome/login page
   container.read(sessionManagerProvider).onSessionExpired = () {
     goRouter.go('/welcome');
   };
+
+  // Trigger non-blocking background initialization of MediaSession, Account Service, and Sync
+  unawaited(_performPostAppLaunchInitialization(container));
+
+  StartupTracker.endStep(mainStep, success: true);
+  StartupTracker.printSummary();
 
   runApp(
     UncontrolledProviderScope(
@@ -228,6 +256,30 @@ void main([List<String> args = const []]) async {
       child: const DAMusicApp(),
     ),
   );
+}
+
+Future<void> _performPostAppLaunchInitialization(ProviderContainer container) async {
+  await StartupTracker.runStep('MediaSession & AudioService Binding', () async {
+    try {
+      final controller = container.read(playbackControllerProvider);
+      await SystemMediaSessionManager.initialize(controller);
+    } catch (e) {
+      debugPrint(' [Startup] MediaSession initialization warning: $e');
+    }
+  });
+
+  await StartupTracker.runStep('YouTube Music Account Session Restore', () async {
+    try {
+      final accountService = container.read(ytAccountServiceProvider);
+      await accountService.initialize();
+
+      if (accountService.isLoggedIn) {
+        container.read(ytmSyncManagerProvider.notifier).startSync();
+      }
+    } catch (e) {
+      debugPrint(' [Startup] Account service initialization warning: $e');
+    }
+  });
 }
 
 class DAMusicApp extends ConsumerWidget {

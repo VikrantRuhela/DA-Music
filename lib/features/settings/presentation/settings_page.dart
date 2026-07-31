@@ -24,6 +24,27 @@ final diagnosticLoggingProvider = StateProvider<bool>((ref) {
   return DALogger.activeLevel == LogLevel.debug;
 });
 
+final enablePermanentCacheProvider = StateNotifierProvider<EnablePermanentCacheNotifier, bool>((ref) {
+  return EnablePermanentCacheNotifier();
+});
+
+class EnablePermanentCacheNotifier extends StateNotifier<bool> {
+  EnablePermanentCacheNotifier() : super(true) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool('ytm_enable_permanent_cache') ?? true;
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    state = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('ytm_enable_permanent_cache', enabled);
+  }
+}
+
 final cacheLimitProvider = StateNotifierProvider<CacheLimitNotifier, String>((ref) {
   return CacheLimitNotifier();
 });
@@ -207,6 +228,65 @@ class SettingsPage extends ConsumerWidget {
              DACard(
                child: Column(
                  children: [
+                   _buildSwitchTile(
+                     context: context,
+                     icon: Icons.save_outlined,
+                     title: 'Cache songs for offline playback',
+                     subtitle: 'Cache songs for offline playback in the background (uses internal storage).',
+                     value: ref.watch(enablePermanentCacheProvider),
+                     onChanged: (val) async {
+                       if (!val) {
+                         final sizeAsync = ref.read(cacheSizeProvider);
+                         final sizeInBytes = sizeAsync.valueOrNull ?? 0;
+                         final usedStr = _formatSize(sizeInBytes);
+                         final shouldClear = await showDialog<bool>(
+                           context: context,
+                           builder: (ctx) => AlertDialog(
+                             backgroundColor: colors.surface,
+                             title: Text('Disable Permanent Cache?', style: typography.title.copyWith(fontSize: 18.0)),
+                             content: Text(
+                               'Songs will no longer be saved to permanent storage after playback. Would you also like to clear existing cached songs ($usedStr) to free up space?',
+                               style: typography.body.copyWith(fontSize: 14.0, color: colors.textSecondary),
+                             ),
+                             actions: [
+                               TextButton(
+                                 onPressed: () => Navigator.of(ctx).pop(false),
+                                 child: Text('Keep Files', style: TextStyle(color: colors.textSecondary)),
+                               ),
+                               TextButton(
+                                 onPressed: () => Navigator.of(ctx).pop(true),
+                                 child: Text('Clear & Disable', style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold)),
+                               ),
+                             ],
+                           ),
+                         );
+
+                         if (shouldClear == true) {
+                           ref.read(sourceManagerProvider).clearCache();
+                           try {
+                             final tempDir = await getTemporaryDirectory();
+                             final cacheParent = Directory('${tempDir.path}/da_tunes_cache');
+                             if (cacheParent.existsSync()) {
+                               final files = cacheParent.listSync();
+                               for (final file in files) {
+                                 if (file is File) {
+                                   try {
+                                     file.deleteSync();
+                                   } catch (_) {}
+                                 }
+                               }
+                             }
+                             ref.invalidate(cacheSizeProvider);
+                           } catch (_) {}
+                         }
+
+                         await ref.read(enablePermanentCacheProvider.notifier).setEnabled(false);
+                       } else {
+                         await ref.read(enablePermanentCacheProvider.notifier).setEnabled(true);
+                       }
+                     },
+                   ),
+                   const Divider(height: 1),
                    _buildDropdownTile<String>(
                      context: context,
                      icon: Icons.storage_outlined,
@@ -555,8 +635,9 @@ class SettingsPage extends ConsumerWidget {
                   icon: const Icon(Icons.login),
                   label: const Text('Sign in to YouTube Music'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: colors.primary,
-                    foregroundColor: colors.textPrimary,
+                    backgroundColor: Colors.black,
+                    disabledBackgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(DATokens.radiusMedium),
                     ),
@@ -622,71 +703,97 @@ class SettingsPage extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: syncManager.status == YtmSyncStatus.syncing
-                        ? null
-                        : () => ref.read(ytmSyncManagerProvider.notifier).startSync(force: true),
-                    icon: const Icon(Icons.sync),
-                    label: Text(syncManager.status == YtmSyncStatus.syncing ? 'Syncing...' : 'Sync Now'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colors.primary,
-                      foregroundColor: colors.textPrimary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: DATokens.spacingSmall),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('YouTube Music Profile'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Name: $displayName', style: typography.title.copyWith(fontSize: 14.0)),
-                              const SizedBox(height: 4.0),
-                              Text('Email: ${session.accountEmail ?? "Unknown"}', style: typography.title.copyWith(fontSize: 14.0)),
-                              const SizedBox(height: 4.0),
-                              Text('Authorized Client: Active', style: typography.caption.copyWith(color: colors.textSecondary)),
-                            ],
+                  child: Tooltip(
+                    message: syncManager.status == YtmSyncStatus.syncing ? 'Syncing...' : 'Sync Now',
+                    child: SizedBox(
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: syncManager.status == YtmSyncStatus.syncing
+                            ? null
+                            : () => ref.read(ytmSyncManagerProvider.notifier).startSync(force: true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          disabledBackgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(DATokens.radiusSmall),
                           ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
-                            ),
-                          ],
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.account_circle_outlined),
-                    label: const Text('Manage'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: colors.textPrimary,
-                      side: BorderSide(color: colors.border),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                        child: syncManager.status == YtmSyncStatus.syncing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.sync, size: 20, color: Colors.white),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: DATokens.spacingSmall),
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => ref.read(sessionManagerProvider.notifier).logout(),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign Out'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent.withValues(alpha: 0.8),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                  child: Tooltip(
+                    message: 'Manage Account Profile',
+                    child: SizedBox(
+                      height: 44,
+                      child: OutlinedButton(
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('YouTube Music Profile'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Name: $displayName', style: typography.title.copyWith(fontSize: 14.0)),
+                                  const SizedBox(height: 4.0),
+                                  Text('Email: ${session.accountEmail ?? "Unknown"}', style: typography.title.copyWith(fontSize: 14.0)),
+                                  const SizedBox(height: 4.0),
+                                  Text('Authorized Client: Active', style: typography.caption.copyWith(color: colors.textSecondary)),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Close'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          side: BorderSide(color: colors.border),
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                          ),
+                        ),
+                        child: const Icon(Icons.account_circle_outlined, size: 20, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: DATokens.spacingSmall),
+                Expanded(
+                  child: Tooltip(
+                    message: 'Sign Out',
+                    child: SizedBox(
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () => ref.read(sessionManagerProvider.notifier).logout(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent.withValues(alpha: 0.8),
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                          ),
+                        ),
+                        child: const Icon(Icons.logout, size: 20),
                       ),
                     ),
                   ),

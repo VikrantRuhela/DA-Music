@@ -29,14 +29,17 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
     return hsl.saturation < 0.16 || hsl.lightness < 0.18 || maxDiff < 32;
   }
 
+  String? _activeProcessingSongId;
+
   Future<void> updatePalette(Song? song) async {
     if (song == null) {
       state = DATheme.darkTheme;
       return;
     }
 
-    if (_cache.containsKey(song.id)) {
-      state = _buildThemeData(_cache[song.id]!);
+    final songId = song.id;
+    if (songId != null && _cache.containsKey(songId)) {
+      state = _buildThemeData(_cache[songId]!);
       return;
     }
 
@@ -45,6 +48,8 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
       state = DATheme.darkTheme;
       return;
     }
+
+    _activeProcessingSongId = songId;
 
     try {
       final ImageProvider imageProvider =
@@ -55,10 +60,12 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
                   : FileImage(File(artworkUrl))) as ImageProvider;
 
       final paletteGenerator = await PaletteGenerator.fromImageProvider(
-        ResizeImage(imageProvider, width: 80, height: 80),
-        maximumColorCount: 16,
-        timeout: const Duration(seconds: 4),
-      );
+        ResizeImage(imageProvider, width: 60, height: 60),
+        maximumColorCount: 12,
+        timeout: const Duration(milliseconds: 1500),
+      ).timeout(const Duration(milliseconds: 1500));
+
+      if (_activeProcessingSongId != songId) return;
 
       final Color dominant = paletteGenerator.dominantColor?.color ?? const Color(0xFF1E1E1E);
       final Color vibrant = paletteGenerator.vibrantColor?.color ?? dominant;
@@ -196,6 +203,7 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
   ThemeData _buildThemeData(DAThemeExtension extension) {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Funnel Display',
       brightness: Brightness.dark,
       scaffoldBackgroundColor: extension.background,
       colorScheme: ColorScheme.dark(
