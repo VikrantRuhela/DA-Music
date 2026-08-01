@@ -292,15 +292,31 @@ object WidgetUpdater {
         }
     }
 
+    private fun getOpenAppPendingIntent(context: Context, isPlaying: Boolean): android.app.PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("open_player", isPlaying)
+        }
+        val flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        return android.app.PendingIntent.getActivity(context, 100, intent, flags)
+    }
+
     private fun setupSmallWidget(context: Context, views: RemoteViews, title: String, artist: String, isPlaying: Boolean) {
         views.setTextViewText(R.id.txt_title, title)
         views.setTextViewText(R.id.txt_artist, artist)
 
-        // Dynamic resource bindings to bypass launcher layout/drawable caching
+        val playPauseRes = if (isPlaying) R.drawable.audio_service_pause else R.drawable.audio_service_play
         views.setImageViewResource(R.id.btn_previous, R.drawable.audio_service_skip_previous)
         views.setImageViewResource(R.id.btn_next, R.drawable.audio_service_skip_next)
-        val playPauseRes = if (isPlaying) R.drawable.audio_service_pause else R.drawable.audio_service_play
         views.setImageViewResource(R.id.btn_play_pause, playPauseRes)
+
+        val openAppPendingIntent = getOpenAppPendingIntent(context, isPlaying)
+        views.setOnClickPendingIntent(android.R.id.background, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_background_image, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.txt_title, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.txt_artist, openAppPendingIntent)
 
         views.setOnClickPendingIntent(R.id.btn_previous, getPendingIntent(context, DAWidgetProvider.ACTION_PREVIOUS))
         views.setOnClickPendingIntent(R.id.btn_play_pause, getPendingIntent(context, DAWidgetProvider.ACTION_PLAY_PAUSE))
@@ -325,10 +341,9 @@ object WidgetUpdater {
         views.setTextViewText(R.id.txt_title, title)
         views.setTextViewText(R.id.txt_artist, artist)
 
-        // Dynamic resource bindings to bypass launcher layout/drawable caching
+        val playPauseRes = if (isPlaying) R.drawable.audio_service_pause else R.drawable.audio_service_play
         views.setImageViewResource(R.id.btn_previous, R.drawable.audio_service_skip_previous)
         views.setImageViewResource(R.id.btn_next, R.drawable.audio_service_skip_next)
-        val playPauseRes = if (isPlaying) R.drawable.audio_service_pause else R.drawable.audio_service_play
         views.setImageViewResource(R.id.btn_play_pause, playPauseRes)
 
         if (duration > 0) {
@@ -337,6 +352,13 @@ object WidgetUpdater {
         } else {
             views.setProgressBar(R.id.widget_progress, 10000, 0, false)
         }
+
+        val openAppPendingIntent = getOpenAppPendingIntent(context, isPlaying)
+        views.setOnClickPendingIntent(android.R.id.background, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_background_image, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_artwork, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.txt_title, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.txt_artist, openAppPendingIntent)
 
         views.setOnClickPendingIntent(R.id.btn_previous, getPendingIntent(context, DAWidgetProvider.ACTION_PREVIOUS))
         views.setOnClickPendingIntent(R.id.btn_play_pause, getPendingIntent(context, DAWidgetProvider.ACTION_PLAY_PAUSE))
@@ -372,10 +394,9 @@ object WidgetUpdater {
         views.setTextViewText(R.id.txt_artist, artist)
         views.setTextViewText(R.id.txt_album, album)
 
-        // Dynamic resource bindings to bypass launcher layout/drawable caching
+        val playPauseRes = if (isPlaying) R.drawable.audio_service_pause else R.drawable.audio_service_play
         views.setImageViewResource(R.id.btn_previous, R.drawable.audio_service_skip_previous)
         views.setImageViewResource(R.id.btn_next, R.drawable.audio_service_skip_next)
-        val playPauseRes = if (isPlaying) R.drawable.audio_service_pause else R.drawable.audio_service_play
         views.setImageViewResource(R.id.btn_play_pause, playPauseRes)
 
         if (duration > 0) {
@@ -385,31 +406,17 @@ object WidgetUpdater {
             views.setProgressBar(R.id.widget_progress, 10000, 0, false)
         }
 
-        val openAppIntent = Intent(context, MainActivity::class.java).apply {
-            action = Intent.ACTION_MAIN
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("open_player", isPlaying)
-        }
-        val openAppFlags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-        val openAppPendingIntent = android.app.PendingIntent.getActivity(context, 100, openAppIntent, openAppFlags)
-
+        val openAppPendingIntent = getOpenAppPendingIntent(context, isPlaying)
         views.setOnClickPendingIntent(android.R.id.background, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.widget_background_image, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.widget_artwork, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.txt_title, openAppPendingIntent)
         views.setOnClickPendingIntent(R.id.txt_artist, openAppPendingIntent)
+        views.setOnClickPendingIntent(R.id.txt_album, openAppPendingIntent)
 
         views.setOnClickPendingIntent(R.id.btn_previous, getPendingIntent(context, DAWidgetProvider.ACTION_PREVIOUS))
         views.setOnClickPendingIntent(R.id.btn_play_pause, getPendingIntent(context, DAWidgetProvider.ACTION_PLAY_PAUSE))
         views.setOnClickPendingIntent(R.id.btn_next, getPendingIntent(context, DAWidgetProvider.ACTION_NEXT))
-
-        // Bind cached bitmaps
-        cachedArtwork?.let {
-            views.setImageViewBitmap(R.id.widget_artwork, it)
-        } ?: run {
-            views.setImageViewResource(R.id.widget_artwork, R.drawable.da_placeholder)
-        }
 
         cachedBlurredBackground?.let {
             views.setImageViewBitmap(R.id.widget_background_image, it)

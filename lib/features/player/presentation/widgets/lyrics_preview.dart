@@ -25,12 +25,13 @@ class _LyricsPreviewState extends ConsumerState<LyricsPreview> {
     super.dispose();
   }
 
-  void _scrollToActiveLine(int index) {
+  void _scrollToActiveLine(int index, double itemExtent) {
     if (!_scrollController.hasClients) return;
+    final targetOffset = (index * itemExtent).clamp(0.0, _scrollController.position.maxScrollExtent);
     _scrollController.animateTo(
-      (index * 26.0).clamp(0.0, _scrollController.position.maxScrollExtent),
+      targetOffset,
       duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -78,12 +79,7 @@ class _LyricsPreviewState extends ConsumerState<LyricsPreview> {
       lines = [lyricsState.error ?? 'Lyrics unavailable.'];
     }
 
-    if (activeIndex != _lastActiveIndex && activeIndex != -1) {
-      _lastActiveIndex = activeIndex;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToActiveLine(activeIndex);
-      });
-    }
+    const double lineItemExtent = 28.0;
 
     return Expanded(
       child: GestureDetector(
@@ -114,39 +110,52 @@ class _LyricsPreviewState extends ConsumerState<LyricsPreview> {
               ),
               const SizedBox(height: DATokens.spacingSmall),
               Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: EdgeInsets.zero,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: lines.length,
-                  itemBuilder: (context, index) {
-                    final isActive = activeIndex != -1 && index == activeIndex;
-                    final color = isActive
-                        ? colors.primary
-                        : colors.textSecondary.withValues(alpha: 0.6);
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final viewportHeight = constraints.maxHeight;
+                    final verticalPadding = (viewportHeight - lineItemExtent) / 2;
+                    final safePadding = verticalPadding > 0 ? verticalPadding : 0.0;
 
-                    final style = isActive
-                        ? typography.body.copyWith(
-                            color: color,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.0,
-                          )
-                        : typography.body.copyWith(
-                            color: color,
-                            fontSize: 13.0,
-                          );
+                    if (activeIndex != _lastActiveIndex && activeIndex != -1) {
+                      _lastActiveIndex = activeIndex;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _scrollToActiveLine(activeIndex, lineItemExtent);
+                      });
+                    }
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 3.0,
-                      ),
-                      child: AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 200),
-                        style: style,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        child: Text(lines[index]),
-                      ),
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: EdgeInsets.symmetric(vertical: safePadding),
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: lines.length,
+                      itemExtent: lineItemExtent,
+                      itemBuilder: (context, index) {
+                        final isActive = activeIndex != -1 && index == activeIndex;
+                        final color = isActive
+                            ? colors.primary
+                            : colors.textSecondary.withValues(alpha: 0.6);
+
+                        final style = isActive
+                            ? typography.body.copyWith(
+                                color: color,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14.0,
+                              )
+                            : typography.body.copyWith(
+                                color: color,
+                                fontSize: 13.0,
+                              );
+
+                        return Center(
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 200),
+                            style: style,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            child: Text(lines[index]),
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
