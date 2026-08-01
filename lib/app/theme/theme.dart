@@ -93,6 +93,7 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
   final Color surfaceCard;
   final Color surfaceHover;
   final Color primary;
+  final Color primaryButton;
   final Color accent;
   final Color textPrimary;
   final Color textSecondary;
@@ -108,6 +109,7 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     required this.surfaceCard,
     required this.surfaceHover,
     required this.primary,
+    required this.primaryButton,
     required this.accent,
     required this.textPrimary,
     required this.textSecondary,
@@ -124,6 +126,7 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     surfaceCard: DATokens.darkSurfaceCard,
     surfaceHover: DATokens.darkSurfaceHover,
     primary: DATokens.darkPrimary,
+    primaryButton: DATokens.darkPrimaryButton,
     accent: DATokens.darkAccent,
     textPrimary: DATokens.darkTextPrimary,
     textSecondary: DATokens.darkTextSecondary,
@@ -140,6 +143,7 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     surfaceCard: DATokens.lightSurfaceCard,
     surfaceHover: DATokens.lightSurfaceHover,
     primary: DATokens.lightPrimary,
+    primaryButton: DATokens.lightPrimaryButton,
     accent: DATokens.lightAccent,
     textPrimary: DATokens.lightTextPrimary,
     textSecondary: DATokens.lightTextSecondary,
@@ -157,6 +161,7 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
     Color? surfaceCard,
     Color? surfaceHover,
     Color? primary,
+    Color? primaryButton,
     Color? accent,
     Color? textPrimary,
     Color? textSecondary,
@@ -172,6 +177,7 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
       surfaceCard: surfaceCard ?? this.surfaceCard,
       surfaceHover: surfaceHover ?? this.surfaceHover,
       primary: primary ?? this.primary,
+      primaryButton: primaryButton ?? this.primaryButton,
       accent: accent ?? this.accent,
       textPrimary: textPrimary ?? this.textPrimary,
       textSecondary: textSecondary ?? this.textSecondary,
@@ -192,6 +198,7 @@ class DAThemeExtension extends ThemeExtension<DAThemeExtension> {
       surfaceCard: Color.lerp(surfaceCard, other.surfaceCard, t)!,
       surfaceHover: Color.lerp(surfaceHover, other.surfaceHover, t)!,
       primary: Color.lerp(primary, other.primary, t)!,
+      primaryButton: Color.lerp(primaryButton, other.primaryButton, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
@@ -222,18 +229,18 @@ class DATheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: DATokens.darkPrimary,
+          backgroundColor: DATokens.darkPrimaryButton,
           foregroundColor: Colors.white,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: DATokens.darkPrimary,
+          backgroundColor: DATokens.darkPrimaryButton,
           foregroundColor: Colors.white,
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: DATokens.darkPrimary,
+        backgroundColor: DATokens.darkPrimaryButton,
         foregroundColor: Colors.white,
       ),
       extensions: const [DAThemeExtension.dark],
@@ -255,18 +262,18 @@ class DATheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: DATokens.lightPrimary,
+          backgroundColor: DATokens.lightPrimaryButton,
           foregroundColor: Colors.white,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: DATokens.lightPrimary,
+          backgroundColor: DATokens.lightPrimaryButton,
           foregroundColor: Colors.white,
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: DATokens.lightPrimary,
+        backgroundColor: DATokens.lightPrimaryButton,
         foregroundColor: Colors.white,
       ),
       extensions: const [DAThemeExtension.light],

@@ -7,7 +7,8 @@ class DATokens {
   static const Color darkSurface = Color(0xFF121212);
   static const Color darkSurfaceCard = Color(0xFF181818);
   static const Color darkSurfaceHover = Color(0xFF242424);
-  static const Color darkPrimary = Color(0xFF1E1E22);
+  static const Color darkPrimary = Color(0xFFFFFFFF);
+  static const Color darkPrimaryButton = Color(0xFF1E1E22);
   static const Color darkAccent = Color(0xFFCCCCCC);
   static const Color darkTextPrimary = Color(0xFFFFFFFF);
   static const Color darkTextSecondary = Color(0xFFAAAAAA);
@@ -17,7 +18,8 @@ class DATokens {
   static const Color lightSurface = Color(0xFFF5F5F5);
   static const Color lightSurfaceCard = Color(0xFFEBEBEB);
   static const Color lightSurfaceHover = Color(0xFFE0E0E0);
-  static const Color lightPrimary = Color(0xFF1E1E22);
+  static const Color lightPrimary = Color(0xFF000000);
+  static const Color lightPrimaryButton = Color(0xFF1E1E22);
   static const Color lightAccent = Color(0xFF333333);
   static const Color lightTextPrimary = Color(0xFF000000);
   static const Color lightTextSecondary = Color(0xFF666666);

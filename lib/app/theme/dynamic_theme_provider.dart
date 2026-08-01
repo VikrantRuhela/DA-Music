@@ -169,6 +169,7 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
         surfaceCard: surfaceCardColor,
         surfaceHover: surfaceHoverColor,
         primary: primaryColor,
+        primaryButton: primaryColor,
         accent: accentColor,
         textPrimary: Colors.white,
         textSecondary: Colors.white70,

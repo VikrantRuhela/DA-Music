@@ -219,8 +219,8 @@ class ArtistPage extends ConsumerWidget {
                               icon: const Icon(Icons.play_arrow),
                               label: const Text('Play Top Songs'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: colors.primary,
-                                foregroundColor: colors.textPrimary,
+                                backgroundColor: colors.primaryButton,
+                                foregroundColor: Colors.white,
                               ),
                             ),
                         ],
