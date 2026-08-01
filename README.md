@@ -1,48 +1,37 @@
-# DA Tunes 🎵
+# DA Tunes
 
-A premium,  audio player application built with Flutter and Riverpod. Featuring beautiful design elements (vibrant fluid dark theme colors, seamless layouts) and a fully pluggable, decoupled music source and playback architecture.
+DA Tunes is a thoughtfully crafted cross-platform music player built with Flutter, designed to deliver a fast, elegant, and uninterrupted listening experience on Android and Windows.
 
-# THIS IS NOT A FINAL VERSION OF DA Tunes I'LL DRAFT A RELEASE WHEN THE PROJECT GETS COMPLETED
+By combining a refined interface with a modern playback engine, DA Tunes focuses on smooth performance, intelligent music discovery, and an experience that feels polished from the first launch.
+
+## Highlights
+
+- YouTube Music integration
+- Native support for Android and Windows
+- Multiple player styles
+- Smart recommendations
+- Lyrics support
+- Offline downloads
+- Home screen widgets
+- Dynamic artwork-based theming
+- Sleep timer
+- Crossfade playback
+- Queue management
+
+## Built With
+
+- Flutter
+- Dart
 
 ## Getting Started
 
-### Prerequisites
-
-- Flutter SDK `^3.12.0`
-- Dart SDK `^3.12.2`
-
-### Installation & Run
-
-1. Clone or copy this directory structure.
-2. Initialize packages:
-   ```bash
-   flutter pub get
-   ```
-3. Run code generation:
-   ```bash
-   dart run build_runner build --delete-conflicting-outputs
-   ```
-4. Launch the application:
-   ```bash
-   flutter run
-   ```
-
-## Testing
-
-Run the test suite:
 ```bash
-flutter test
+git clone https://github.com/VikrantRuhela/DA-Tunes.git
+cd DA-Tunes
+flutter pub get
+flutter run
 ```
 
-## License 📄
+## License
 
-DA Tunes is open-source software licensed under the **GNU General Public License v3.0 (GPL-3.0)**. 
-
-### Key Terms:
-- **Open Source**: DA Tunes is licensed under GPL-3.0. You are free to copy, modify, and distribute the software.
-- **Copyleft**: Any modified versions or derivative works distributed to the public must also be licensed under the same GPL-3.0 license terms, with their complete source code made publicly available.
-- **Contributions**: By contributing to this repository, you agree to release your contributions under the GPL-3.0 license.
-- **No Proprietary Forks**: The GPL-3.0 license guarantees that DA Tunes and all future improvements remain open and free forever.
-
-See the [LICENSE](file:///C:/Users/vikrantrajput/.gemini/antigravity/scratch/da_music/LICENSE) file for the full license text.
-
+Licensed under the GNU General Public License v3.0 (GPL-3.0). See the `LICENSE` file for more information.
