@@ -220,6 +220,22 @@ class DATheme {
         onSurface: DATokens.darkTextPrimary,
         error: Colors.redAccent,
       ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: DATokens.darkPrimary,
+          foregroundColor: Colors.white,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: DATokens.darkPrimary,
+          foregroundColor: Colors.white,
+        ),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: DATokens.darkPrimary,
+        foregroundColor: Colors.white,
+      ),
       extensions: const [DAThemeExtension.dark],
     );
   }
@@ -236,6 +252,22 @@ class DATheme {
         onPrimary: Colors.white,
         onSurface: DATokens.lightTextPrimary,
         error: Colors.redAccent,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: DATokens.lightPrimary,
+          foregroundColor: Colors.white,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: DATokens.lightPrimary,
+          foregroundColor: Colors.white,
+        ),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: DATokens.lightPrimary,
+        foregroundColor: Colors.white,
       ),
       extensions: const [DAThemeExtension.light],
     );

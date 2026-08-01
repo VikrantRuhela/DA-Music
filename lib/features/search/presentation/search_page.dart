@@ -20,6 +20,7 @@ import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/widgets/da_image.dart';
 import '../../../shared/utils/artist_navigation.dart';
 import '../../../shared/utils/song_options.dart';
+import '../../../shared/utils/metadata_formatter.dart';
 import '../../taste_engine/presentation/providers/taste_engine_providers.dart';
 import '../../local_library/data/local_library_repository.dart';
 
@@ -344,82 +345,119 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       );
     }
 
+    final cleanQuery = state.query.trim().toLowerCase();
+    final isArtistMatch = result.topResult is Artist ||
+        (result.artists.isNotEmpty &&
+            result.artists.any((a) =>
+                a.name.trim().toLowerCase() == cleanQuery ||
+                a.name.trim().toLowerCase().contains(cleanQuery) ||
+                cleanQuery.contains(a.name.trim().toLowerCase())));
+
+    final List<Widget> sections = [];
+
+    if (result.topResult != null) {
+      sections.add(_buildTopResultSection(result.topResult, theme));
+      sections.add(const SizedBox(height: DATokens.spacingLarge));
+    }
+
+    final Widget songsWidget = result.songs.isNotEmpty
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader('Songs', theme),
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: result.songs.length,
+                itemBuilder: (context, idx) {
+                  return _buildSongItem(result.songs, idx, theme);
+                },
+              ),
+              const SizedBox(height: DATokens.spacingLarge),
+            ],
+          )
+        : const SizedBox.shrink();
+
+    final Widget artistsWidget = result.artists.isNotEmpty
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader('Artists', theme),
+              SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: result.artists.length,
+                  itemBuilder: (context, idx) {
+                    final artist = result.artists[idx];
+                    return _buildArtistItem(artist, theme);
+                  },
+                ),
+              ),
+              const SizedBox(height: DATokens.spacingLarge),
+            ],
+          )
+        : const SizedBox.shrink();
+
+    final Widget albumsWidget = result.albums.isNotEmpty
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader('Albums', theme),
+              SizedBox(
+                height: 180,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: result.albums.length,
+                  itemBuilder: (context, idx) {
+                    final album = result.albums[idx];
+                    return _buildAlbumItem(album, theme);
+                  },
+                ),
+              ),
+              const SizedBox(height: DATokens.spacingLarge),
+            ],
+          )
+        : const SizedBox.shrink();
+
+    final Widget playlistsWidget = result.playlists.isNotEmpty
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader('Playlists', theme),
+              SizedBox(
+                height: 180,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: result.playlists.length,
+                  itemBuilder: (context, idx) {
+                    final playlist = result.playlists[idx];
+                    return _buildPlaylistItem(playlist, theme);
+                  },
+                ),
+              ),
+            ],
+          )
+        : const SizedBox.shrink();
+
+    if (isArtistMatch) {
+      sections.add(artistsWidget);
+      sections.add(songsWidget);
+      sections.add(albumsWidget);
+      sections.add(playlistsWidget);
+    } else {
+      sections.add(songsWidget);
+      sections.add(albumsWidget);
+      sections.add(artistsWidget);
+      sections.add(playlistsWidget);
+    }
+
     return ListView(
       physics: const BouncingScrollPhysics(),
-      children: [
-        // Top Result Section
-        if (result.topResult != null) ...[
-          _buildTopResultSection(result.topResult, theme),
-          const SizedBox(height: DATokens.spacingLarge),
-        ],
-
-        // Songs Section
-        if (result.songs.isNotEmpty) ...[
-          _buildSectionHeader('Songs', theme),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: result.songs.length,
-            itemBuilder: (context, idx) {
-              return _buildSongItem(result.songs, idx, theme);
-            },
-          ),
-          const SizedBox(height: DATokens.spacingLarge),
-        ],
-
-        // Artists Section
-        if (result.artists.isNotEmpty) ...[
-          _buildSectionHeader('Artists', theme),
-          SizedBox(
-            height: 120,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: result.artists.length,
-              itemBuilder: (context, idx) {
-                final artist = result.artists[idx];
-                return _buildArtistItem(artist, theme);
-              },
-            ),
-          ),
-          const SizedBox(height: DATokens.spacingLarge),
-        ],
-
-        // Albums Section
-        if (result.albums.isNotEmpty) ...[
-          _buildSectionHeader('Albums', theme),
-          SizedBox(
-            height: 180,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: result.albums.length,
-              itemBuilder: (context, idx) {
-                final album = result.albums[idx];
-                return _buildAlbumItem(album, theme);
-              },
-            ),
-          ),
-          const SizedBox(height: DATokens.spacingLarge),
-        ],
-
-        // Playlists Section
-        if (result.playlists.isNotEmpty) ...[
-          _buildSectionHeader('Playlists', theme),
-          SizedBox(
-            height: 180,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: result.playlists.length,
-              itemBuilder: (context, idx) {
-                final playlist = result.playlists[idx];
-                return _buildPlaylistItem(playlist, theme);
-              },
-            ),
-          ),
-        ],
-      ],
+      children: sections,
     );
   }
 
@@ -437,6 +475,73 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   Widget _buildTopResultSection(dynamic top, DAThemeExtension theme) {
+    if (top is Artist) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Top Result', theme),
+          InkWell(
+            onTap: () {
+              if (top.id.isNotEmpty) {
+                context.push('/artist/${top.id}');
+              } else {
+                navigateToArtistByName(context, ref, top.name);
+              }
+            },
+            borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+            child: Container(
+              padding: const EdgeInsets.all(DATokens.spacingMedium),
+              decoration: BoxDecoration(
+                color: theme.surfaceCard,
+                borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+                border: Border.all(color: theme.border, width: 1.0),
+              ),
+              child: Row(
+                children: [
+                  ClipOval(
+                    child: DAImage(
+                      url: top.image.url,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      placeholder: Container(
+                        width: 80,
+                        height: 80,
+                        color: theme.surfaceHover,
+                        child: Icon(Icons.person_outlined, color: theme.textSecondary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: DATokens.spacingMedium),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          top.name,
+                          style: theme.typography.title.copyWith(fontSize: 18.0),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: DATokens.spacingTiny),
+                        Text(
+                          'Artist • Tap to view profile',
+                          style: theme.typography.body.copyWith(
+                            color: theme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: theme.textSecondary),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     if (top is Song) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -504,7 +609,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         GestureDetector(
                           onTap: () => navigateToArtistByName(context, ref, top.artistId),
                           child: Text(
-                            'Song • ${top.artistId}',
+                            'Song • ${MetadataFormatter.formatArtist(top.artistId)}',
                             style: theme.typography.body.copyWith(
                               color: theme.textSecondary,
                               decoration: TextDecoration.underline,
@@ -585,7 +690,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           GestureDetector(
             onTap: () => navigateToArtistByName(context, ref, song.artistId),
             child: Text(
-              song.artistId,
+              MetadataFormatter.formatArtist(song.artistId),
               style: theme.typography.body.copyWith(
                 color: theme.textSecondary,
                 decoration: TextDecoration.underline,

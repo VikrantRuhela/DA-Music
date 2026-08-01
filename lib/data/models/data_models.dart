@@ -261,12 +261,26 @@ class SearchResultModel {
   });
 
   SearchResult toEntity() {
+    dynamic topEntity;
+    if (topResult != null) {
+      if (topResult is SongModel) {
+        topEntity = (topResult as SongModel).toEntity();
+      } else if (topResult is ArtistModel) {
+        topEntity = (topResult as ArtistModel).toEntity();
+      } else if (topResult is AlbumModel) {
+        topEntity = (topResult as AlbumModel).toEntity();
+      } else if (topResult is PlaylistModel) {
+        topEntity = (topResult as PlaylistModel).toEntity();
+      } else {
+        topEntity = topResult;
+      }
+    }
     return SearchResult(
       songs: songs.map((s) => s.toEntity()).toList(),
       albums: albums.map((a) => a.toEntity()).toList(),
       artists: artists.map((a) => a.toEntity()).toList(),
       playlists: playlists.map((p) => p.toEntity()).toList(),
-      topResult: topResult,
+      topResult: topEntity,
     );
   }
 }

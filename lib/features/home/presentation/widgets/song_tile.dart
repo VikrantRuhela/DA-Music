@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../app/theme/tokens.dart';
 import '../../../../shared/widgets/da_image.dart';
+import '../../../../shared/utils/metadata_formatter.dart';
 
 class SongTile extends StatefulWidget {
   final String title;
@@ -96,7 +97,7 @@ class _SongTileState extends State<SongTile> {
                           ),
                           const SizedBox(height: 2.0),
                           Text(
-                            widget.artist,
+                            MetadataFormatter.formatArtist(widget.artist),
                             style: typography.body.copyWith(
                               fontSize: 12.0,
                               color: colors.textSecondary,

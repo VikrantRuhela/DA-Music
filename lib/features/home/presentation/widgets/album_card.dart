@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../shared/widgets/da_card.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../app/theme/tokens.dart';
+import '../../../../shared/utils/metadata_formatter.dart';
 
 class AlbumCard extends StatelessWidget {
   final String title;
@@ -66,7 +67,7 @@ class AlbumCard extends StatelessWidget {
           const SizedBox(height: 2.0),
           // Subtitle
           Text(
-            subtitle,
+            MetadataFormatter.formatArtist(subtitle),
             style: typography.body.copyWith(
               fontSize: 12.0,
               color: colors.textSecondary,

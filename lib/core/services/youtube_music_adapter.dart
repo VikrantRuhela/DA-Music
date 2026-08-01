@@ -153,16 +153,44 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
           final contents = data['contents']?['tabbedSearchResultsRenderer']?['tabs']?[0]?['tabRenderer']?['content']?['sectionListRenderer']?['contents'];
           if (contents != null) {
             for (final section in contents) {
+              if (section.containsKey('musicCardShelfRenderer')) {
+                final card = section['musicCardShelfRenderer'];
+                final titleRuns = card['title']?['runs'] as List?;
+                String cardTitle = '';
+                if (titleRuns != null && titleRuns.isNotEmpty) {
+                  cardTitle = titleRuns[0]['text'] ?? '';
+                }
+                final nav = card['title']?['runs']?[0]?['navigationEndpoint'] ?? card['navigationEndpoint'];
+                final browseId = nav?['browseEndpoint']?['browseId'] as String? ?? '';
+                final videoId = nav?['watchEndpoint']?['videoId'] as String? ?? '';
+                final thumbs = card['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
+                String cardImg = '';
+                if (thumbs != null && thumbs.isNotEmpty) {
+                  cardImg = thumbs.last['url'] ?? '';
+                }
+
+                if ((browseId.startsWith('UC') || browseId.startsWith('FE') || videoId.isEmpty) && cardTitle.isNotEmpty && browseId.isNotEmpty) {
+                  artists.add(Artist(
+                    id: browseId,
+                    name: cardTitle,
+                    image: Artwork(cardImg),
+                    subscriberCount: 0,
+                    description: '',
+                    genres: const [],
+                  ));
+                }
+              }
+
               final items = section['musicShelfRenderer']?['contents'];
               if (items != null) {
                 for (final item in items) {
                   final renderer = item['musicResponsiveListItemRenderer'];
                   if (renderer != null) {
+                    final navEndpoint = renderer['navigationEndpoint'];
                     final videoId = renderer['playlistItemData']?['videoId'] ??
                         renderer['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId'] ??
+                        navEndpoint?['watchEndpoint']?['videoId'] ??
                         '';
-
-                    if (videoId.isEmpty) continue;
 
                     final flexColumns = renderer['flexColumns'] as List?;
                     String title = '';
@@ -176,39 +204,83 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
                       if (flexColumns.length > 1) {
                         final artistRuns = flexColumns[1]['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
                         if (artistRuns != null && artistRuns.isNotEmpty) {
-                          artistName = artistRuns.map((r) => r['text']).join('');
+                          final fullText = artistRuns.map((r) => r['text'] ?? '').join('');
+                          final parts = fullText.split(' • ');
+                          artistName = parts.first.trim();
                         }
                       }
                     }
 
-                    String durationStr = '';
-                    final fixedColumns = renderer['fixedColumns'] as List?;
-                    if (fixedColumns != null && fixedColumns.isNotEmpty) {
-                      final durRuns = fixedColumns[0]['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
-                      if (durRuns != null && durRuns.isNotEmpty) {
-                        durationStr = durRuns[0]['text'] ?? '';
-                      }
-                    }
-
                     final thumbnails = renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List?;
-                    String artworkUrl = 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
+                    String artworkUrl = videoId.isNotEmpty ? 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg' : '';
                     if (thumbnails != null && thumbnails.isNotEmpty) {
                       artworkUrl = thumbnails.last['url'] ?? artworkUrl;
                     }
 
-                    final duration = _parseDurationString(durationStr);
+                    final browseId = navEndpoint?['browseEndpoint']?['browseId'] as String? ?? '';
+                    final pageType = navEndpoint?['browseEndpoint']?['browseEndpointContextSupportedConfigs']?['browseEndpointContextData']?['pageType'] as String? ?? '';
 
-                    if (title.isNotEmpty) {
-                      final song = _mapToSong(
-                        id: videoId,
-                        rawTitle: title,
-                        rawArtist: artistName,
-                        duration: duration,
-                      );
+                    if (videoId.isNotEmpty) {
+                      String durationStr = '';
+                      final fixedColumns = renderer['fixedColumns'] as List?;
+                      if (fixedColumns != null && fixedColumns.isNotEmpty) {
+                        final durRuns = fixedColumns[0]['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
+                        if (durRuns != null && durRuns.isNotEmpty) {
+                          durationStr = durRuns[0]['text'] ?? '';
+                        }
+                      }
+                      final duration = _parseDurationString(durationStr);
 
-                      if (MusicContentClassifier.isMusicSong(song)) {
-                        _songCache[song.id] = song;
-                        songs.add(song);
+                      if (title.isNotEmpty) {
+                        final song = _mapToSong(
+                          id: videoId,
+                          rawTitle: title,
+                          rawArtist: artistName,
+                          duration: duration,
+                        );
+
+                        if (MusicContentClassifier.isMusicSong(song)) {
+                          _songCache[song.id] = song;
+                          songs.add(song);
+                        }
+                      }
+                    } else if (browseId.isNotEmpty || pageType.isNotEmpty) {
+                      if (pageType == 'MUSIC_PAGE_TYPE_ARTIST' || browseId.startsWith('UC')) {
+                        if (title.isNotEmpty) {
+                          artists.add(Artist(
+                            id: browseId,
+                            name: title,
+                            image: Artwork(artworkUrl),
+                            subscriberCount: 0,
+                            description: '',
+                            genres: const [],
+                          ));
+                        }
+                      } else if (pageType == 'MUSIC_PAGE_TYPE_ALBUM' || browseId.startsWith('MPRE')) {
+                        if (title.isNotEmpty) {
+                          albums.add(Album(
+                            id: browseId,
+                            title: title,
+                            artistId: artistName,
+                            cover: Artwork(artworkUrl),
+                            year: 2026,
+                            trackCount: 1,
+                            duration: DurationValue(const Duration(minutes: 30)),
+                          ));
+                        }
+                      } else if (pageType == 'MUSIC_PAGE_TYPE_PLAYLIST' || browseId.startsWith('VL') || browseId.startsWith('PL')) {
+                        if (title.isNotEmpty) {
+                          playlists.add(Playlist(
+                            id: browseId,
+                            title: title,
+                            description: 'YouTube Playlist',
+                            cover: Artwork(artworkUrl),
+                            owner: artistName.isNotEmpty ? artistName : 'YouTube',
+                            songIds: const [],
+                            createdAt: DateTime.now(),
+                            updatedAt: DateTime.now(),
+                          ));
+                        }
                       }
                     }
                   }
@@ -219,43 +291,76 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         }
       } catch (_) {}
 
-      if (songs.isEmpty) {
-        final results = await _ytClient.search.searchContent(query).timeout(const Duration(seconds: 10));
-        for (final result in results) {
-          if (result is yt.SearchVideo) {
-            final song = _mapToSong(
-              id: result.id.value,
-              rawTitle: result.title,
-              rawArtist: result.author,
-              duration: _parseDuration(result.duration),
-              channelId: result.channelId,
-            );
-            if (MusicContentClassifier.isMusicSong(song)) {
-              _songCache[song.id] = song;
-              songs.add(song);
+      if (songs.isEmpty && artists.isEmpty && albums.isEmpty && playlists.isEmpty) {
+        try {
+          final results = await _ytClient.search.searchContent(query).timeout(const Duration(seconds: 8));
+          for (final result in results) {
+            if (result is yt.SearchVideo) {
+              final song = _mapToSong(
+                id: result.id.value,
+                rawTitle: result.title,
+                rawArtist: result.author,
+                duration: _parseDuration(result.duration),
+                channelId: result.channelId,
+              );
+              if (MusicContentClassifier.isMusicSong(song)) {
+                _songCache[song.id] = song;
+                songs.add(song);
+              }
+            } else if (result is yt.SearchPlaylist) {
+              playlists.add(Playlist(
+                id: result.id.value,
+                title: result.title,
+                description: 'YouTube Playlist',
+                cover: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
+                owner: 'YouTube',
+                songIds: const [],
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+              ));
+            } else if (result is yt.SearchChannel) {
+              artists.add(Artist(
+                id: result.id.value,
+                name: result.name,
+                image: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
+                subscriberCount: 0,
+                description: result.description,
+                genres: const [],
+              ));
             }
-          } else if (result is yt.SearchPlaylist) {
-            playlists.add(Playlist(
-              id: result.id.value,
-              title: result.title,
-              description: 'YouTube Playlist',
-              cover: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
-              owner: 'YouTube',
-              songIds: const [],
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            ));
-          } else if (result is yt.SearchChannel) {
-            artists.add(Artist(
-              id: result.id.value,
-              name: result.name,
-              image: Artwork(result.thumbnails.isNotEmpty ? result.thumbnails.first.url.toString() : ''),
-              subscriberCount: 0,
-              description: result.description,
-              genres: const [],
-            ));
           }
+        } catch (_) {}
+      }
+
+      if (artists.isEmpty) {
+        try {
+          final foundArtists = await searchArtists(query).timeout(const Duration(seconds: 3));
+          for (final fa in foundArtists) {
+            if (!artists.any((a) => a.id == fa.id)) {
+              artists.add(fa);
+            }
+          }
+        } catch (_) {}
+      }
+
+      dynamic topResult;
+      final cleanQuery = query.trim().toLowerCase();
+
+      Artist? matchedArtist;
+      for (final a in artists) {
+        final cleanName = a.name.trim().toLowerCase();
+        if (cleanName == cleanQuery || cleanName.contains(cleanQuery) || cleanQuery.contains(cleanName)) {
+          matchedArtist = a;
+          break;
         }
+      }
+
+      if (matchedArtist != null) {
+        topResult = matchedArtist;
+      } else if (songs.isNotEmpty) {
+        topResult = songs.first;
+      } else if (artists.isNotEmpty) {
+        topResult = artists.first;
       }
 
       final res = SearchResult(
@@ -263,13 +368,19 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
         albums: albums,
         artists: artists,
         playlists: playlists,
-        topResult: songs.isNotEmpty ? songs.first : null,
+        topResult: topResult,
       );
 
       return res;
     } catch (e, stack) {
       DALogger.error('YouTubeMusicAdapter: Search failed for "$query"', e, stack);
-      throw SourceException('Search request failed: $e', e.toString());
+      return SearchResult(
+        songs: const [],
+        albums: const [],
+        artists: const [],
+        playlists: const [],
+        topResult: null,
+      );
     }
   }
 
@@ -277,14 +388,9 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
   Future<List<Artist>> searchArtists(String query) async {
     _checkInitialized();
     try {
-      final client = HttpClient();
+      final headers = await _getHomeHeaders();
       const apiKey = 'AIzaSyAOghZGza2MQSZkY_zfZ370N-PUdXEo8AI';
       final url = Uri.parse('https://music.youtube.com/youtubei/v1/search?key=$apiKey');
-
-      final request = await client.postUrl(url);
-      request.headers.set('Content-Type', 'application/json');
-      request.headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
       final gl = await _getGuestRegionCode();
       final payload = {
         'query': query,
@@ -296,17 +402,18 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
             'gl': gl,
           }
         },
-        'params': 'EgWKAQIgAWoKEAkQChAFEAMQBA%3D%3D' // Restrict search results to Artists
+        'params': 'EgWKAQIgAWoKEAkQChAFEAMQBA%3D%3D'
       };
 
-      request.write(jsonEncode(payload));
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      client.close();
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 4));
 
       final artists = <Artist>[];
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(body);
+        final Map<String, dynamic> data = jsonDecode(response.body);
         final contents = data['contents']?['tabbedSearchResultsRenderer']?['tabs']?[0]?['tabRenderer']?['content']?['sectionListRenderer']?['contents'];
         if (contents != null) {
           for (final section in contents) {
@@ -349,7 +456,7 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       return artists;
     } catch (e, stack) {
       DALogger.error('YouTubeMusicAdapter: searchArtists failed for "$query"', e, stack);
-      rethrow;
+      return [];
     }
   }
 
@@ -2167,7 +2274,11 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
     String title = rawTitle;
     String artist = rawArtist;
 
-    // Remove common video suffixes
+    if (artist.contains(' • ')) {
+      final parts = artist.split(' • ');
+      artist = parts.first.trim();
+    }
+
     title = title.replaceAll(RegExp(r'\s*\(?\s*Official\s*(?:Music\s*)?Video\s*\)?', caseSensitive: false), '');
     title = title.replaceAll(RegExp(r'\s*\[?\s*Official\s*(?:Music\s*)?Video\s*\]?', caseSensitive: false), '');
     title = title.replaceAll(RegExp(r'\s*\(?\s*Lyrics?\s*(?:Video)?\s*\)?', caseSensitive: false), '');
@@ -2182,23 +2293,26 @@ class YouTubeMusicAdapter implements MusicSourceAdapter {
       final part1 = match.group(1)!.trim();
       final part2 = match.group(2)!.trim();
       
-      final artistLower = rawArtist.toLowerCase().trim();
-      // If the second part contains the rawArtist, then Part 1 is the title and Part 2 is the artist!
+      final artistLower = artist.toLowerCase().trim();
       if (part2.toLowerCase().contains(artistLower) || 
           artistLower.contains(part2.toLowerCase()) ||
           artistLower.replaceAll(RegExp(r'\s+'), '').contains(part2.toLowerCase().replaceAll(RegExp(r'\s+'), ''))) {
         title = part1;
         artist = part2;
-      } else {
+      } else if (part1.toLowerCase().contains(artistLower) ||
+                 artistLower.contains(part1.toLowerCase())) {
         artist = part1;
         title = part2;
       }
     }
 
-    // Clean artist if it contains VEVO or Topic suffixes
     artist = artist.replaceAll(RegExp(r'VEVO$', caseSensitive: false), '');
     artist = artist.replaceAll(RegExp(r'\s*-\s*Topic$', caseSensitive: false), '');
     artist = artist.trim();
+
+    if (artist.isEmpty) {
+      artist = 'Unknown Artist';
+    }
 
     return (title: title, artist: artist);
   }

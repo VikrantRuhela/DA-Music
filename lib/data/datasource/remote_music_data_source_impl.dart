@@ -2,6 +2,10 @@ import '../models/data_models.dart';
 import 'data_sources.dart';
 import '../../core/services/source_manager.dart';
 import '../../core/services/youtube_music_adapter.dart';
+import '../../domain/entities/song.dart';
+import '../../domain/entities/album.dart';
+import '../../domain/entities/artist.dart';
+import '../../domain/entities/playlist.dart';
 
 /// Concrete Remote Music Data Source wrapping the Source Manager adapter routing system.
 class RemoteMusicDataSourceImpl implements RemoteMusicDataSource {
@@ -16,12 +20,26 @@ class RemoteMusicDataSourceImpl implements RemoteMusicDataSource {
   @override
   Future<SearchResultModel> search(String query) async {
     final domainResult = await _sourceManager.search(query);
+    dynamic topModel;
+    if (domainResult.topResult != null) {
+      if (domainResult.topResult is Song) {
+        topModel = SongModel.fromEntity(domainResult.topResult as Song);
+      } else if (domainResult.topResult is Artist) {
+        topModel = ArtistModel.fromEntity(domainResult.topResult as Artist);
+      } else if (domainResult.topResult is Album) {
+        topModel = AlbumModel.fromEntity(domainResult.topResult as Album);
+      } else if (domainResult.topResult is Playlist) {
+        topModel = PlaylistModel.fromEntity(domainResult.topResult as Playlist);
+      } else {
+        topModel = domainResult.topResult;
+      }
+    }
     return SearchResultModel(
       songs: domainResult.songs.map((s) => SongModel.fromEntity(s)).toList(),
       albums: domainResult.albums.map((a) => AlbumModel.fromEntity(a)).toList(),
       artists: domainResult.artists.map((a) => ArtistModel.fromEntity(a)).toList(),
       playlists: domainResult.playlists.map((p) => PlaylistModel.fromEntity(p)).toList(),
-      topResult: domainResult.topResult != null ? SongModel.fromEntity(domainResult.topResult!) : null,
+      topResult: topModel,
     );
   }
 
