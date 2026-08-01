@@ -50,6 +50,8 @@ class PlaybackController extends ChangeNotifier {
 
   final List<Song> _queueSongs = [];
   int _currentIndex = -1;
+  int _lastSongIndex = -1;
+  bool _hasFadedOutCurrentTrack = false;
   final Ref? _ref;
   Ref? get ref => _ref;
   bool _isGeneratingSmartQueue = false;
@@ -92,7 +94,11 @@ class PlaybackController extends ChangeNotifier {
         _status = PlaybackStatus.playing;
         _startPositionTimer();
 
-        // Check if we need to append autoplay recommendations!
+        if (_currentIndex != _lastSongIndex) {
+          _lastSongIndex = _currentIndex;
+          _hasFadedOutCurrentTrack = false;
+        }
+
         if ((_queueSongs.length - 1 - _currentIndex) <= 5) {
           _appendSmartAutoplayRecommendations();
         }
@@ -478,6 +484,22 @@ class PlaybackController extends ChangeNotifier {
           _currentPosition = _playbackEngine.currentPosition;
           _prefetchManager?.onPositionUpdate(currentSong, _currentPosition);
           notifyListeners();
+
+          if (_currentPosition < const Duration(seconds: 1)) {
+            if (_hasFadedOutCurrentTrack) {
+              _hasFadedOutCurrentTrack = false;
+            }
+          } else if (_ref != null && currentSong != null && currentSong!.duration > Duration.zero) {
+            final isCrossfadeEnabled = _ref!.read(crossfadeEnabledProvider);
+            final crossfadeSecs = _ref!.read(crossfadeDurationProvider);
+            if (isCrossfadeEnabled && crossfadeSecs > 0 && !_hasFadedOutCurrentTrack) {
+              final remaining = currentSong!.duration - _currentPosition;
+              if (remaining <= Duration(seconds: crossfadeSecs) && remaining > Duration.zero) {
+                _hasFadedOutCurrentTrack = true;
+                _playbackEngine.next();
+              }
+            }
+          }
         }
       } else {
         _positionTimer?.cancel();
@@ -505,6 +527,8 @@ class PlaybackController extends ChangeNotifier {
   Future<void> pause() async {
     if (_validateTransition(PlaybackStatus.paused)) {
       _status = PlaybackStatus.paused;
+      final targetVol = _settings.isMuted ? 0.0 : (_settings.volume / 100.0);
+      _playbackEngine.setVolume(targetVol);
       notifyListeners();
       _stopPositionTimer();
 
@@ -521,6 +545,8 @@ class PlaybackController extends ChangeNotifier {
   Future<void> stop() async {
     if (_validateTransition(PlaybackStatus.idle)) {
       _status = PlaybackStatus.idle;
+      final targetVol = _settings.isMuted ? 0.0 : (_settings.volume / 100.0);
+      _playbackEngine.setVolume(targetVol);
       if (_ref != null) {
         _ref!.read(immersiveModeProvider.notifier).state = false;
       }
@@ -533,9 +559,21 @@ class PlaybackController extends ChangeNotifier {
   }
 
   Future<void> seek(Duration position) async {
+    final targetVol = _settings.isMuted ? 0.0 : (_settings.volume / 100.0);
+    _playbackEngine.setVolume(targetVol);
     _seekLockTimer?.cancel();
     _isSeeking = true;
     _currentPosition = position;
+
+    if (currentSong != null && currentSong!.duration > Duration.zero) {
+      final ref = _ref;
+      final crossfadeSecs = ref?.read(crossfadeDurationProvider) ?? 0;
+      final remaining = currentSong!.duration - position;
+      if (remaining > Duration(seconds: crossfadeSecs)) {
+        _hasFadedOutCurrentTrack = false;
+      }
+    }
+
     _eventController.add(clean.PositionChanged(position));
     notifyListeners();
 

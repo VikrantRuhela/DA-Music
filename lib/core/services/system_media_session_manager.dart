@@ -268,7 +268,34 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> stop() async {
-    SystemMediaSessionManager.controller?.stop();
+    final c = SystemMediaSessionManager.controller;
+    if (c != null) {
+      await c.stop();
+    }
+    SystemMediaSessionManager._stopPositionTimer();
+    playbackState.add(playbackState.value.copyWith(
+      playing: false,
+      processingState: AudioProcessingState.idle,
+      controls: const [],
+    ));
+    await super.stop();
+  }
+
+  @override
+  Future<void> onTaskRemoved() async {
+    DALogger.info('SystemMediaSessionManager: App removed from Recents. Initiating shutdown.');
+    final c = SystemMediaSessionManager.controller;
+    if (c != null) {
+      await c.stop();
+    }
+    SystemMediaSessionManager._stopPositionTimer();
+    playbackState.add(playbackState.value.copyWith(
+      playing: false,
+      processingState: AudioProcessingState.idle,
+      controls: const [],
+    ));
+    await stop();
+    await super.onTaskRemoved();
   }
 
   @override

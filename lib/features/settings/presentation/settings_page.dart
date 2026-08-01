@@ -223,6 +223,69 @@ class SettingsPage extends ConsumerWidget {
             ),
             const SizedBox(height: DATokens.spacingLarge),
 
+            _buildSectionHeader(context, 'Playback'),
+            DACard(
+              child: Column(
+                children: [
+                  _buildSwitchTile(
+                    context: context,
+                    icon: Icons.graphic_eq_outlined,
+                    title: 'Crossfade',
+                    subtitle: 'Fade out current track while fading in the next track',
+                    value: ref.watch(crossfadeEnabledProvider),
+                    onChanged: (val) {
+                      ref.read(crossfadeEnabledProvider.notifier).toggle(val);
+                    },
+                  ),
+                  if (ref.watch(crossfadeEnabledProvider)) ...[
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: DATokens.spacingMedium,
+                        vertical: DATokens.spacingSmall,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.timer_outlined, color: colors.textSecondary),
+                          const SizedBox(width: DATokens.spacingMedium),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Crossfade Duration',
+                                  style: typography.body.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                Text(
+                                  '${ref.watch(crossfadeDurationProvider)} seconds',
+                                  style: typography.caption.copyWith(color: colors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(
+                            width: 160,
+                            child: Slider(
+                              value: ref.watch(crossfadeDurationProvider).toDouble(),
+                              min: 0,
+                              max: 12,
+                              divisions: 12,
+                              activeColor: colors.primary,
+                              inactiveColor: colors.border,
+                              onChanged: (val) {
+                                ref.read(crossfadeDurationProvider.notifier).setDuration(val.round());
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: DATokens.spacingLarge),
+
              // Section 2: Storage & Cache Management
              _buildSectionHeader(context, 'Cache & Local Storage'),
              DACard(

@@ -31,7 +31,9 @@ import '../../core/services/source_service.dart';
 import '../../core/services/impl/service_impls.dart';
 import '../../core/services/playback_engine.dart';
 import '../../core/services/impl/playback_engine_impl.dart';
+import '../../core/services/impl/dual_player_engine.dart';
 import '../../core/services/impl/media_kit_audio_backend.dart';
+import 'player_providers.dart';
 import '../../core/services/event_bus.dart';
 import '../../core/services/cache_engine.dart';
 import '../../core/services/request_manager.dart';
@@ -243,9 +245,16 @@ final sourceServiceProvider = Provider<SourceService>((ref) {
 });
 
 final playbackEngineProvider = Provider<PlaybackEngine>((ref) {
-  final backend = MediaKitAudioBackend();
+  final backendA = MediaKitAudioBackend();
+  final backendB = MediaKitAudioBackend();
   final resolver = ref.watch(streamResolverProvider);
-  final engine = PlaybackEngineImpl(backend, resolver);
+  final engine = DualPlayerEngine(
+    backendA,
+    backendB,
+    resolver,
+    isCrossfadeEnabled: () => ref.read(crossfadeEnabledProvider),
+    getCrossfadeDuration: () => ref.read(crossfadeDurationProvider),
+  );
   ref.onDispose(() {
     engine.dispose();
   });

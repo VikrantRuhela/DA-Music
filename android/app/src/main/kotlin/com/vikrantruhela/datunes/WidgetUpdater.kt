@@ -221,8 +221,9 @@ object WidgetUpdater {
     }
 
     private fun processBlurredBackground(raw: Bitmap): Bitmap? {
-        val blurred = blur(raw, 8)
-        return darkenBitmap(blurred, 0.50f)
+        val blurred = blur(raw, 10)
+        val darkened = darkenBitmap(blurred, 0.40f)
+        return getRoundedCornerBitmap(darkened, 24)
     }
 
     private fun renderWidgets(
@@ -247,12 +248,15 @@ object WidgetUpdater {
             val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
             val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
 
-            val layoutResId = if (minWidth >= 250 && minHeight >= 180) {
-                R.layout.widget_large
-            } else if (minWidth >= 180) {
-                R.layout.widget_medium
-            } else {
+            val isSmall2x2 = minWidth < 200 && minHeight < 160
+            val isLarge4x4 = minWidth >= 200 && minHeight >= 160
+
+            val layoutResId = if (isSmall2x2) {
                 R.layout.widget_small
+            } else if (isLarge4x4) {
+                R.layout.widget_large
+            } else {
+                R.layout.widget_medium
             }
 
             if (isPartial) {

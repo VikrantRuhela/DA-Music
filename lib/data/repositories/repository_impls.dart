@@ -19,6 +19,8 @@ import '../models/data_models.dart';
 import '../../../shared/models/music_models.dart' as shared;
 
 /// Concrete implementation of SongRepository interface.
+import '../../core/services/song_deduplicator.dart';
+
 class SongRepositoryImpl implements SongRepository {
   final RemoteMusicDataSource remoteDataSource;
 
@@ -56,7 +58,8 @@ class SongRepositoryImpl implements SongRepository {
   Future<List<Song>> getRelatedSongs(String songId) async {
     try {
       final models = await remoteDataSource.getRecommendations(songId);
-      return models.map((m) => m.toEntity()).toList();
+      final songs = models.map((m) => m.toEntity()).toList();
+      return SongDeduplicator.deduplicate(songs);
     } catch (e, stack) {
       throw NetworkFailure(
         message: 'Failed to retrieve related songs list.',
@@ -348,7 +351,8 @@ class RecommendationRepositoryImpl implements RecommendationRepository {
   Future<List<Song>> getRecommendations(String songId) async {
     try {
       final models = await remoteDataSource.getRecommendations(songId);
-      return models.map((m) => m.toEntity()).toList();
+      final songs = models.map((m) => m.toEntity()).toList();
+      return SongDeduplicator.deduplicate(songs);
     } catch (e, stack) {
       throw NetworkFailure(
         message: 'Failed to load recommendation matches.',

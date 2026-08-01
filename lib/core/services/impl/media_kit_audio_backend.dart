@@ -26,6 +26,8 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
   StreamSubscription? _completedSub;
   StreamSubscription? _errorSub;
 
+  int _backendLoadTicket = 0;
+
   MediaKitAudioBackend();
 
   @override
@@ -75,20 +77,7 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
     _errorSub = p.stream.error.listen((err) {
       final song = StreamResolver.lastResolvedSong;
       final title = song?.title ?? "Unknown Title";
-      // ignore: avoid_print
-      print('=== SKIPPED SONG DIAGNOSTIC ===');
-      // ignore: avoid_print
-      print('- Song Title: $title');
-      // ignore: avoid_print
-      print('- Song ID: ${song?.id ?? "Unknown ID"}');
-      // ignore: avoid_print
-      print('- Provider ID: ${song?.sourceId ?? "Unknown Provider"}');
-      // ignore: avoid_print
-      print('- Exception from the audio backend: $err');
-      // ignore: avoid_print
-      print('===============================');
 
-      // Display SnackBar to the user
       final context = rootNavigatorKey.currentContext;
       if (context != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -129,7 +118,8 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
 
   @override
   Future<void> load(String url) async {
-    DALogger.info('MediaKitAudioBackend: Loading streaming URL: "$url"');
+    final ticket = ++_backendLoadTicket;
+    DALogger.info('MediaKitAudioBackend: Loading streaming URL: "$url" (ticket: $ticket)');
     _state = 'loading';
     DALogger.info('MediaKitAudioBackend: State changed to: LOADING');
     _position = Duration.zero;
@@ -141,25 +131,19 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
       if (p != null) {
         await p.open(Media(url), play: false);
       }
+      if (ticket != _backendLoadTicket) {
+        DALogger.info('MediaKitAudioBackend: Discarding finished load for ticket #$ticket because superseded by #$_backendLoadTicket');
+        final p = _player;
+        if (p != null) {
+          await p.stop();
+        }
+        return;
+      }
     } catch (e) {
+      if (ticket != _backendLoadTicket) return;
       final song = StreamResolver.lastResolvedSong;
       final title = song?.title ?? "Unknown Title";
-      // ignore: avoid_print
-      print('=== SKIPPED SONG DIAGNOSTIC ===');
-      // ignore: avoid_print
-      print('- Song Title: $title');
-      // ignore: avoid_print
-      print('- Song ID: ${song?.id ?? "Unknown ID"}');
-      // ignore: avoid_print
-      print('- Provider ID: ${song?.sourceId ?? "Unknown Provider"}');
-      // ignore: avoid_print
-      print('- Resolved Stream URL: $url');
-      // ignore: avoid_print
-      print('- Exception from the audio backend: $e');
-      // ignore: avoid_print
-      print('===============================');
 
-      // Display SnackBar to the user
       final context = rootNavigatorKey.currentContext;
       if (context != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -188,8 +172,6 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
         await p.play();
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('MediaKitAudioBackend: play/resume failed: $e');
       rethrow;
     }
   }
@@ -212,14 +194,13 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
         await p.play();
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('MediaKitAudioBackend: resume failed: $e');
       rethrow;
     }
   }
 
   @override
   Future<void> stop() async {
+    _backendLoadTicket++;
     DALogger.info('MediaKitAudioBackend: Stop playback.');
     final p = _player;
     if (p != null) {

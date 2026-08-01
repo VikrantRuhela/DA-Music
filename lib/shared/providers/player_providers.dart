@@ -180,3 +180,54 @@ class PlayerStyleNotifier extends StateNotifier<PlayerStyle> {
     await _storage.setString(_key, style.name);
   }
 }
+
+final crossfadeEnabledProvider = StateNotifierProvider<CrossfadeEnabledNotifier, bool>((ref) {
+  final storage = ref.watch(storageServiceProvider);
+  return CrossfadeEnabledNotifier(storage);
+});
+
+class CrossfadeEnabledNotifier extends StateNotifier<bool> {
+  final StorageService _storage;
+  static const _key = 'crossfade_enabled';
+
+  CrossfadeEnabledNotifier(this._storage) : super(false) {
+    _load();
+  }
+
+  void _load() async {
+    final val = await _storage.getString(_key);
+    if (val != null) state = val == 'true';
+  }
+
+  Future<void> toggle(bool val) async {
+    state = val;
+    await _storage.setString(_key, val.toString());
+  }
+}
+
+final crossfadeDurationProvider = StateNotifierProvider<CrossfadeDurationNotifier, int>((ref) {
+  final storage = ref.watch(storageServiceProvider);
+  return CrossfadeDurationNotifier(storage);
+});
+
+class CrossfadeDurationNotifier extends StateNotifier<int> {
+  final StorageService _storage;
+  static const _key = 'crossfade_duration';
+
+  CrossfadeDurationNotifier(this._storage) : super(0) {
+    _load();
+  }
+
+  void _load() async {
+    final val = await _storage.getString(_key);
+    if (val != null) {
+      final parsed = int.tryParse(val);
+      if (parsed != null) state = parsed.clamp(0, 12);
+    }
+  }
+
+  Future<void> setDuration(int seconds) async {
+    state = seconds.clamp(0, 12);
+    await _storage.setString(_key, state.toString());
+  }
+}

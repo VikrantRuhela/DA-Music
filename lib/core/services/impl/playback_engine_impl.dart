@@ -67,9 +67,12 @@ class PlaybackEngineImpl implements PlaybackEngine {
         await _backend.dispose();
       });
 
+  int _playbackRequestId = 0;
+
   @override
   Future<PlaybackResult<void>> load(Song song) =>
       _runSafe('load', () async {
+        final requestId = ++_playbackRequestId;
         _currentlyLoadingSongId = song.id;
         final targetSongId = song.id;
 
@@ -82,14 +85,14 @@ class PlaybackEngineImpl implements PlaybackEngine {
         final cachedFile = File(p.join(tempDir.path, 'da_tunes_cache', '${song.id}.mp3'));
 
         if (localFile.existsSync()) {
-          if (_currentlyLoadingSongId != targetSongId) {
+          if (_currentlyLoadingSongId != targetSongId || requestId != _playbackRequestId) {
             DALogger.info('PlaybackEngine: load($targetSongId) discarded because a newer load request started.');
             return;
           }
           DALogger.info('PlaybackEngine: Playing local offline file: ${localFile.path}');
           await _backend.load(localFile.path);
         } else if (cachedFile.existsSync()) {
-          if (_currentlyLoadingSongId != targetSongId) {
+          if (_currentlyLoadingSongId != targetSongId || requestId != _playbackRequestId) {
             DALogger.info('PlaybackEngine: load($targetSongId) discarded because a newer load request started.');
             return;
           }
@@ -104,13 +107,11 @@ class PlaybackEngineImpl implements PlaybackEngine {
             duration: song.duration.value,
           );
 
-          if (_currentlyLoadingSongId != targetSongId) {
+          if (_currentlyLoadingSongId != targetSongId || requestId != _playbackRequestId) {
             DALogger.info('PlaybackEngine: load($targetSongId) discarded after resolution because a newer load request started.');
             return;
           }
 
-          // ignore: avoid_print
-          print('Resolved stream URL: ${stream.streamUrl}');
           await _backend.load(stream.streamUrl);
         }
       });
