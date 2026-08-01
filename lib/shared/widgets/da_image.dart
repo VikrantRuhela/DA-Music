@@ -1,11 +1,7 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/device_memory_manager.dart';
 
-/// A unified image loader widget that transparently supports both remote HTTP URLs
-/// and local absolute file paths, with built-in placeholder fallback behavior
-/// and memory-efficient bitmap downscaling for low-end (4GB RAM) devices.
 class DAImage extends StatelessWidget {
   static String? cacheDirPath;
   static String? documentsDirPath;
@@ -76,6 +72,15 @@ class DAImage extends StatelessWidget {
       return fallback;
     }
 
+    String filePath = cleanUrl;
+    if (filePath.startsWith('file://')) {
+      try {
+        filePath = Uri.parse(filePath).toFilePath();
+      } catch (_) {
+        filePath = filePath.replaceFirst('file://', '');
+      }
+    }
+
     final hasNetwork = cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
     final hasAsset = cleanUrl.startsWith('assets/');
 
@@ -116,8 +121,7 @@ class DAImage extends StatelessWidget {
         },
       );
     } else {
-      // Local image file path
-      final file = File(cleanUrl);
+      final file = File(filePath);
       if (file.existsSync()) {
         final int targetWidth = targetCacheWidth ?? DeviceMemoryManager.instance.getTargetCacheDimension(400, devicePixelRatio: dpr);
         final int targetHeight = targetCacheHeight ?? DeviceMemoryManager.instance.getTargetCacheDimension(400, devicePixelRatio: dpr);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../shared/widgets/da_card.dart';
+import '../../../../shared/widgets/da_image.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../app/theme/tokens.dart';
 import '../../../../shared/utils/metadata_formatter.dart';
@@ -29,7 +30,6 @@ class AlbumCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Album artwork container
           AspectRatio(
             aspectRatio: 1.0,
             child: Container(
@@ -38,26 +38,14 @@ class AlbumCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(DATokens.radiusMedium),
               ),
               clipBehavior: Clip.antiAlias,
-              child: artworkUrl != null && artworkUrl!.isNotEmpty
-                  ? Image.network(
-                      artworkUrl!,
-                      fit: BoxFit.cover,
-                      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                        if (wasSynchronouslyLoaded) return child;
-                        return AnimatedOpacity(
-                          opacity: frame == null ? 0 : 1,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
-                          child: child,
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) => _buildPlaceholder(colors),
-                    )
-                  : _buildPlaceholder(colors),
+              child: DAImage(
+                url: artworkUrl,
+                fit: BoxFit.cover,
+                placeholder: _buildPlaceholder(colors),
+              ),
             ),
           ),
           const SizedBox(height: DATokens.spacingSmall + 2),
-          // Title
           Text(
             title,
             style: typography.title.copyWith(fontSize: 14.0),
@@ -65,7 +53,6 @@ class AlbumCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2.0),
-          // Subtitle
           Text(
             MetadataFormatter.formatArtist(subtitle),
             style: typography.body.copyWith(

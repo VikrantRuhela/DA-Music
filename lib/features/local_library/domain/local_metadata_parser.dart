@@ -81,6 +81,22 @@ class LocalMetadataParser {
           } catch (_) {}
         }
 
+        if (localArtworkPath == null) {
+          try {
+            final parentDir = file.parent;
+            if (parentDir.existsSync()) {
+              final coverNames = ['cover.jpg', 'cover.png', 'folder.jpg', 'folder.png', 'album.jpg', 'album.png'];
+              for (final name in coverNames) {
+                final coverFile = File(p.join(parentDir.path, name));
+                if (coverFile.existsSync()) {
+                  localArtworkPath = coverFile.path;
+                  break;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
         final extForCodec = p.extension(filePath).toLowerCase().replaceAll('.', '').toUpperCase();
         final hasArtwork = pictures.isNotEmpty;
         final extractionResult = hasArtwork 
