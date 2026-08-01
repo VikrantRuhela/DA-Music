@@ -1,3 +1,5 @@
+![DA Tunes](assets/images/DA-Tunes-banner.png)
+
 # DA Tunes
 
 DA Tunes is a thoughtfully crafted cross-platform music player built with Flutter, designed to deliver a fast, elegant, and uninterrupted listening experience on Android and Windows.
@@ -6,7 +8,7 @@ By combining a refined interface with a modern playback engine, DA Tunes focuses
 
 ## Highlights
 
-- YouTube Music integration
+- YouTube Music integration with YT music account login support
 - Native support for Android and Windows
 - Multiple player styles
 - Smart recommendations
@@ -17,6 +19,15 @@ By combining a refined interface with a modern playback engine, DA Tunes focuses
 - Sleep timer
 - Crossfade playback
 - Queue management
+- Hi-Res and lossless files support for offline playback
+
+## UI
+### Android
+![DA Tunes Android](assets/images/mobile-banner.png)
+
+### Windows
+![DA Tunes Windows](assets/images/windows-banner.png)
+
 
 ## Built With
 
