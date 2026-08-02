@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../core/extensions/context_extensions.dart';
@@ -1201,14 +1202,51 @@ class _WindowsQueueTab extends ConsumerWidget {
       );
     }
 
-    return ListView.builder(
+    return ReorderableListView.builder(
       physics: const BouncingScrollPhysics(),
+      buildDefaultDragHandles: false,
       itemCount: queue.length,
+      onReorder: (oldIdx, newIdx) {
+        HapticFeedback.mediumImpact();
+        final queueList = List<Song>.from(queue);
+        final song = queueList.removeAt(oldIdx);
+        if (newIdx > oldIdx) newIdx--;
+        queueList.insert(newIdx, song);
+        final newCurrentIndex = (currentIndex == oldIdx)
+            ? newIdx
+            : ((currentIndex > oldIdx && currentIndex <= newIdx)
+                ? currentIndex - 1
+                : ((currentIndex < oldIdx && currentIndex >= newIdx) ? currentIndex + 1 : currentIndex));
+        controller.reorderQueue(queueList, newCurrentIndex);
+      },
+      proxyDecorator: (Widget child, int index, Animation<double> animation) {
+        HapticFeedback.mediumImpact();
+        return AnimatedBuilder(
+          animation: animation,
+          builder: (context, child) {
+            final animValue = Curves.easeInOut.transform(animation.value);
+            final elevation = 0.0 + (8.0 - 0.0) * animValue;
+            final scale = 1.0 + (1.02 - 1.0) * animValue;
+            return Transform.scale(
+              scale: scale,
+              child: Material(
+                elevation: elevation,
+                color: Colors.transparent,
+                shadowColor: Colors.black.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12.0),
+                child: child,
+              ),
+            );
+          },
+          child: child,
+        );
+      },
       itemBuilder: (context, index) {
         final song = queue[index];
         final isPlaying = index == currentIndex;
 
         return Container(
+          key: ValueKey(song.id + '_' + index.toString()),
           margin: const EdgeInsets.symmetric(vertical: 4.0),
           decoration: BoxDecoration(
             color: isPlaying ? colors.primary.withOpacity(0.1) : Colors.transparent,
@@ -1216,14 +1254,30 @@ class _WindowsQueueTab extends ConsumerWidget {
             border: isPlaying ? Border.all(color: colors.primary.withOpacity(0.3)) : null,
           ),
           child: ListTile(
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(8.0),
-              child: DAImage(
-                url: song.artworkUrl,
-                width: 44.0,
-                height: 44.0,
-                fit: BoxFit.cover,
-              ),
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ReorderableDragStartListener(
+                  index: index,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Icon(
+                      Icons.drag_handle,
+                      color: Colors.white.withOpacity(0.3),
+                      size: 20.0,
+                    ),
+                  ),
+                ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8.0),
+                  child: DAImage(
+                    url: song.artworkUrl,
+                    width: 44.0,
+                    height: 44.0,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ],
             ),
             title: Text(
               song.title,
