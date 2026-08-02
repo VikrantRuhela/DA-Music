@@ -181,13 +181,17 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
       parent: _controller,
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
-    );
+    )..addListener(_onAnimationTick);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (ref.read(immersiveModeProvider)) {
         _controller.value = 1.0;
       }
     });
+  }
+
+  void _onAnimationTick() {
+    setState(() {});
   }
 
   @override
@@ -267,49 +271,55 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
     final codec = _getCodec(currentSong);
     final artworkUrl = currentSong.artworkUrl;
     final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape || screenWidth >= 900;
 
-    return PopScope(
-      canPop: !isImmersive,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && isImmersive) {
-          _controller.animateTo(0.0, duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic).then((_) {
-            ref.read(immersiveModeProvider.notifier).state = false;
-          });
-        }
-      },
-      child: AnimatedBuilder(
-        animation: _animation,
-        builder: (context, child) {
-          final t = _animation.value;
-          if (t == 0.0 && !isImmersive) {
-            return _buildMiniPlayerLayout(context, currentSong, colors, typography, isPlaying, progress);
+    final t = _animation.value;
+    if (t == 0.0 && !isImmersive) {
+      return _buildMiniPlayerLayout(context, currentSong, colors, typography, isPlaying, progress);
+    }
+
+    final double screenHeight = MediaQuery.of(context).size.height;
+    final double controlsTopRatio = screenHeight < 720.0
+        ? 0.45
+        : (screenHeight < 800.0 ? 0.48 : 0.52);
+    final double expandedArtHeight = screenHeight * controlsTopRatio;
+
+    final double bottomPadding = MediaQuery.of(context).padding.bottom;
+    final double bottom = (1.0 - t) * (82.0 + bottomPadding);
+    final double height = 64.0 + t * (screenHeight - 64.0 - bottom);
+    final double left = (1.0 - t) * 16.0;
+    final double right = (1.0 - t) * 16.0;
+    final double radius = (1.0 - t) * DATokens.radiusLarge;
+
+    final double miniOpacity = (1.0 - t * 5.0).clamp(0.0, 1.0);
+    final double fullOpacity = ((t - 0.2) / 0.8).clamp(0.0, 1.0);
+
+    final double artWidth = 40.0 + t * (screenWidth - 40.0);
+    final double artHeight = 40.0 + t * (expandedArtHeight - 40.0);
+    final double artLeft = 16.0 * (1.0 - t);
+    final double artTop = 12.0 * (1.0 - t);
+    final double artRadius = 8.0 * (1.0 - t);
+
+    return Positioned(
+      left: left,
+      right: right,
+      bottom: bottom,
+      height: height,
+      child: PopScope(
+        canPop: !isImmersive,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop && isImmersive) {
+            _controller.animateTo(0.0, duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic).then((_) {
+              ref.read(immersiveModeProvider.notifier).state = false;
+            });
           }
-
-          final double screenHeight = MediaQuery.of(context).size.height;
-          final double screenWidth = MediaQuery.of(context).size.width;
-
-          final double bottomPadding = MediaQuery.of(context).padding.bottom;
-          final double bottom = (1.0 - t) * (82.0 + bottomPadding);
-          final double height = 64.0 + t * (screenHeight - 64.0 - bottom);
-          final double left = (1.0 - t) * 16.0;
-          final double right = (1.0 - t) * 16.0;
-          final double radius = (1.0 - t) * DATokens.radiusLarge;
-
-          final double miniOpacity = (1.0 - t * 5.0).clamp(0.0, 1.0);
-          final double fullOpacity = ((t - 0.2) / 0.8).clamp(0.0, 1.0);
-
-          final double artWidth = 40.0 + t * (screenWidth - 40.0);
-          final double artHeight = 40.0 + t * (screenHeight * 0.58 - 40.0);
-          final double artLeft = 16.0 * (1.0 - t);
-          final double artTop = 12.0 * (1.0 - t);
-          final double artRadius = 8.0 * (1.0 - t);
-
-          return Positioned(
-            left: left,
-            right: right,
-            bottom: bottom,
-            height: height,
-            child: GestureDetector(
+        },
+        child: AnimatedSlide(
+          offset: isLandscape ? const Offset(0, 1.5) : Offset.zero,
+          duration: const Duration(milliseconds: 380),
+          curve: Curves.fastOutSlowIn,
+          child: GestureDetector(
               onVerticalDragUpdate: (details) {
                 final delta = details.primaryDelta ?? 0.0;
                 _controller.value -= delta / screenHeight;
@@ -500,7 +510,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                         ),
                         if (fullOpacity > 0.0) ...[
                           Positioned(
-                            top: screenHeight * 0.58,
+                            top: expandedArtHeight,
                             left: 0,
                             right: 0,
                             bottom: MediaQuery.of(context).padding.bottom + 8.0,
@@ -612,8 +622,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
               ),
             ),
           ),
-        );
-      },
+        ),
     ),
   );
 }
@@ -867,12 +876,18 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
     final playbackController = ref.watch(playbackControllerProvider);
 
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape || screenWidth >= 900;
     return Positioned(
       left: 16.0,
       right: 16.0,
       bottom: 82.0 + bottomPadding,
       height: 64.0,
-      child: GestureDetector(
+      child: AnimatedSlide(
+        offset: isLandscape ? const Offset(0, 2.5) : Offset.zero,
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.fastOutSlowIn,
+        child: GestureDetector(
         onTap: () {
           ref.read(immersiveModeProvider.notifier).state = true;
         },
@@ -995,6 +1010,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

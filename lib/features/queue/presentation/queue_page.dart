@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/extensions/context_extensions.dart';
 import '../../../app/theme/tokens.dart';
@@ -47,19 +48,48 @@ class QueuePage extends ConsumerWidget {
               )
             : ReorderableListView.builder(
                 physics: const BouncingScrollPhysics(),
+                buildDefaultDragHandles: false,
                 padding: const EdgeInsets.symmetric(
                   horizontal: DATokens.spacingMedium,
                   vertical: DATokens.spacingSmall,
                 ),
                 itemCount: queue.length,
+                proxyDecorator: (Widget child, int index, Animation<double> animation) {
+                  HapticFeedback.mediumImpact();
+                  return AnimatedBuilder(
+                    animation: animation,
+                    builder: (context, child) {
+                      final animValue = Curves.easeInOut.transform(animation.value);
+                      final elevation = 0.0 + (8.0 - 0.0) * animValue;
+                      final scale = 1.0 + (1.02 - 1.0) * animValue;
+                      return Transform.scale(
+                        scale: scale,
+                        child: Material(
+                          elevation: elevation,
+                          color: Colors.transparent,
+                          shadowColor: Colors.black.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: child,
+                  );
+                },
                 onReorder: (oldIdx, newIdx) {
+                  HapticFeedback.mediumImpact();
                   final controller = ref.read(playbackControllerProvider);
+                  final queue = controller.currentQueue;
                   final currIdx = controller.currentIndex;
                   final updatedSongs = List<Song>.from(queue);
                   final s = updatedSongs.removeAt(oldIdx);
                   if (newIdx > oldIdx) newIdx--;
                   updatedSongs.insert(newIdx, s);
-                  final newCurrentIndex = (currIdx == oldIdx) ? newIdx : ((currIdx > oldIdx && currIdx <= newIdx) ? currIdx - 1 : ((currIdx < oldIdx && currIdx >= newIdx) ? currIdx + 1 : currIdx));
+                  final newCurrentIndex = (currIdx == oldIdx)
+                      ? newIdx
+                      : ((currIdx > oldIdx && currIdx <= newIdx)
+                          ? currIdx - 1
+                          : ((currIdx < oldIdx && currIdx >= newIdx) ? currIdx + 1 : currIdx));
                   controller.reorderQueue(updatedSongs, newCurrentIndex);
                 },
                 itemBuilder: (context, index) {
@@ -82,14 +112,30 @@ class QueuePage extends ConsumerWidget {
                       onTap: () {
                         ref.read(playbackControllerProvider).skipToQueueIndex(index);
                       },
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(DATokens.radiusSmall),
-                        child: DAImage(
-                          url: song.artworkUrl,
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                        ),
+                      leading: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ReorderableDelayedDragStartListener(
+                            index: index,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: DATokens.spacingSmall),
+                              child: Icon(
+                                Icons.drag_handle,
+                                color: colors.textSecondary.withValues(alpha: 0.6),
+                                size: 22.0,
+                              ),
+                            ),
+                          ),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                            child: DAImage(
+                              url: song.artworkUrl,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ],
                       ),
                       title: Text(
                         song.title,

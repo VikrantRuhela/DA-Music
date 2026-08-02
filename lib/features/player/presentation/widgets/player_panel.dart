@@ -20,7 +20,6 @@ class PersistentPlayerPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isImmersive = ref.watch(immersiveModeProvider);
     final duration = isImmersive ? const Duration(milliseconds: 420) : const Duration(milliseconds: 380);
-
     final currentSong = ref.watch(currentSongProvider);
 
     return PlayerBackground(
@@ -30,53 +29,78 @@ class PersistentPlayerPanel extends ConsumerWidget {
         switchOutCurve: Curves.fastOutSlowIn,
         child: isImmersive
             ? const ImmersivePlayer(key: ValueKey('immersive'))
-            : Padding(
+            : LayoutBuilder(
                 key: const ValueKey('standard'),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: DATokens.spacingMedium,
-                  vertical: DATokens.spacingLarge,
-                ),
-                child: Column(
-                  children: [
-                    const PlayerHeader(),
-                    const SizedBox(height: DATokens.spacingLarge),
-                    _buildArtworkWidget(context, ref, currentSong),
-                    const SizedBox(height: DATokens.spacingLarge),
-                    SongInformation(
-                      title: currentSong?.title ?? 'No Track Selected',
-                      artist: currentSong?.artist ?? 'Choose a track to play',
-                      album: currentSong?.album ?? '',
+                builder: (context, constraints) {
+                  final height = constraints.maxHeight;
+                  final isCompact = height < 500.0;
+                  final isMedium = height >= 500.0 && height < 680.0;
+
+                  final spacing = isCompact
+                      ? DATokens.spacingSmall
+                      : (isMedium ? DATokens.spacingMedium : DATokens.spacingLarge);
+
+                  final artworkSize = isCompact
+                      ? 100.0
+                      : (isMedium ? 160.0 : 260.0);
+
+                  final artworkContainerHeight = isCompact
+                      ? 120.0
+                      : (isMedium ? 180.0 : 380.0);
+
+                  return Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: DATokens.spacingMedium,
+                      vertical: isCompact ? DATokens.spacingSmall : DATokens.spacingLarge,
                     ),
-                    const SizedBox(height: DATokens.spacingMedium),
-                    const ProgressSection(),
-                    const SizedBox(height: DATokens.spacingMedium),
-                    const PlaybackControls(),
-                    const SizedBox(height: DATokens.spacingLarge),
-                    const LyricsPreview(),
-                  ],
-                ),
+                    child: Column(
+                      children: [
+                        if (!isCompact) ...[
+                          const PlayerHeader(),
+                          SizedBox(height: spacing),
+                        ],
+                        _buildArtworkWidget(context, ref, currentSong, artworkSize, artworkContainerHeight),
+                        SizedBox(height: spacing),
+                        SongInformation(
+                          title: currentSong?.title ?? 'No Track Selected',
+                          artist: currentSong?.artist ?? 'Choose a track to play',
+                          album: currentSong?.album ?? '',
+                        ),
+                        SizedBox(height: isCompact ? 4.0 : DATokens.spacingMedium),
+                        const ProgressSection(),
+                        SizedBox(height: isCompact ? 4.0 : DATokens.spacingMedium),
+                        const PlaybackControls(),
+                        if (!isCompact) ...[
+                          SizedBox(height: spacing),
+                          const LyricsPreview(),
+                        ],
+                      ],
+                    ),
+                  );
+                },
               ),
       ),
     );
   }
 
-  Widget _buildArtworkWidget(BuildContext context, WidgetRef ref, dynamic currentSong) {
+  Widget _buildArtworkWidget(BuildContext context, WidgetRef ref, dynamic currentSong, double size, double containerHeight) {
     final style = ref.watch(playerStyleProvider);
     final colors = context.daColors;
 
     switch (style) {
       case PlayerStyle.minimal:
+      case PlayerStyle.immersive:
         return SizedBox(
-          height: 380.0,
+          height: containerHeight,
           child: Center(
             child: Container(
-              width: 260.0,
-              height: 260.0,
+              width: size,
+              height: size,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16.0),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 15.0,
                     offset: const Offset(0, 6),
                   ),
@@ -92,36 +116,12 @@ class PersistentPlayerPanel extends ConsumerWidget {
             ),
           ),
         );
-      case PlayerStyle.immersive:
-        return SizedBox(
-          height: 380.0,
-          child: Center(
-            child: Container(
-              width: 260.0,
-              height: 260.0,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 24.0,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16.0),
-                child: DAImage(
-                  url: currentSong?.artworkUrl,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ),
-        );
       case PlayerStyle.vinyl:
       default:
-        return const VinylPlayerWidget();
+        return SizedBox(
+          height: containerHeight,
+          child: const VinylPlayerWidget(),
+        );
     }
   }
 }

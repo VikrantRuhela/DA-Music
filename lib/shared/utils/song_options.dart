@@ -176,38 +176,6 @@ void showSongOptionsMenu(BuildContext context, WidgetRef ref, Song song, {int? q
     ),
     if (queueIndex != null) ...[
       MenuAction(
-        title: 'Move Up',
-        icon: Icons.arrow_upward,
-        onTap: () {
-          final controller = ref.read(playbackControllerProvider);
-          final queue = controller.currentQueue;
-          final currIdx = controller.currentIndex;
-          if (queueIndex > 0) {
-            final updatedSongs = List<Song>.from(queue);
-            final s = updatedSongs.removeAt(queueIndex);
-            updatedSongs.insert(queueIndex - 1, s);
-            final newCurrentIndex = (currIdx == queueIndex) ? queueIndex - 1 : (currIdx == queueIndex - 1 ? queueIndex : currIdx);
-            controller.reorderQueue(updatedSongs, newCurrentIndex);
-          }
-        },
-      ),
-      MenuAction(
-        title: 'Move Down',
-        icon: Icons.arrow_downward,
-        onTap: () {
-          final controller = ref.read(playbackControllerProvider);
-          final queue = controller.currentQueue;
-          final currIdx = controller.currentIndex;
-          if (queueIndex < queue.length - 1) {
-            final updatedSongs = List<Song>.from(queue);
-            final s = updatedSongs.removeAt(queueIndex);
-            updatedSongs.insert(queueIndex + 1, s);
-            final newCurrentIndex = (currIdx == queueIndex) ? queueIndex + 1 : (currIdx == queueIndex + 1 ? queueIndex : currIdx);
-            controller.reorderQueue(updatedSongs, newCurrentIndex);
-          }
-        },
-      ),
-      MenuAction(
         title: 'Remove from Queue',
         icon: Icons.delete_outline,
         color: Colors.redAccent,

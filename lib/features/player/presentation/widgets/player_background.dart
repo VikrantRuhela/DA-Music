@@ -1,9 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../app/theme/tokens.dart';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/providers/player_providers.dart';
+import '../../../../shared/providers/library_providers.dart';
+import '../../../../core/services/device_memory_manager.dart';
 
 class PlayerBackground extends ConsumerWidget {
   final Widget child;
@@ -17,6 +19,8 @@ class PlayerBackground extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.daColors;
     final isImmersive = ref.watch(immersiveModeProvider);
+    final showAlbumArt = ref.watch(showAlbumArtBackgroundProvider);
+    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
 
     final duration = isImmersive ? const Duration(milliseconds: 420) : const Duration(milliseconds: 380);
     const curve = Curves.fastOutSlowIn;
@@ -40,6 +44,20 @@ class PlayerBackground extends ConsumerWidget {
             ),
           );
 
+    Widget content = child;
+    if (!isImmersive && showAlbumArt) {
+      content = ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: isLowRam ? 16.0 : 25.0,
+            sigmaY: isLowRam ? 16.0 : 25.0,
+          ),
+          child: child,
+        ),
+      );
+    }
+
     return AnimatedContainer(
       duration: duration,
       curve: curve,
@@ -56,7 +74,7 @@ class PlayerBackground extends ConsumerWidget {
                 ),
               ),
       ),
-      child: child,
+      child: content,
     );
   }
 }

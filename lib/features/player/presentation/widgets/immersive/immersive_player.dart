@@ -109,6 +109,9 @@ class ImmersivePlayer extends ConsumerWidget {
     final isWindows = Theme.of(context).platform == TargetPlatform.windows ||
                       Theme.of(context).platform == TargetPlatform.macOS ||
                       Theme.of(context).platform == TargetPlatform.linux;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape || screenWidth >= 900;
+    final bool useLandscapePlayer = isWindows || isLandscape;
 
     final colors = context.daColors;
 
@@ -122,7 +125,7 @@ class ImmersivePlayer extends ConsumerWidget {
         break;
       case PlayerStyle.immersive:
       default:
-        playerWidget = isWindows ? const _WindowsImmersivePlayer() : const _ImmersiveStylePlayer();
+        playerWidget = useLandscapePlayer ? const _WindowsImmersivePlayer() : const _ImmersiveStylePlayer();
         break;
     }
 
@@ -210,7 +213,15 @@ class ImmersivePlayer extends ConsumerWidget {
           ],
           // The actual player UI
           Positioned.fill(
-            child: playerWidget,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              switchInCurve: Curves.easeInOut,
+              switchOutCurve: Curves.easeInOut,
+              child: ClipRect(
+                key: ValueKey(useLandscapePlayer),
+                child: playerWidget,
+              ),
+            ),
           ),
         ],
       ),
@@ -291,316 +302,338 @@ class _WindowsImmersivePlayerState extends ConsumerState<_WindowsImmersivePlayer
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(48.0, 48.0, 48.0, 24.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 1,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 48.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final height = constraints.maxHeight;
+          final width = constraints.maxWidth;
+
+          final bool isCompactHeight = height < 500.0;
+          final bool isMediumHeight = height >= 500.0 && height < 680.0;
+
+          final double topPadding = isCompactHeight ? 24.0 : (isMediumHeight ? 32.0 : 48.0);
+          final double bottomPadding = isCompactHeight ? 12.0 : (isMediumHeight ? 18.0 : 24.0);
+          final double horizontalPadding = isCompactHeight ? 16.0 : (isMediumHeight ? 32.0 : 48.0);
+
+          final double artworkSize = isCompactHeight ? 110.0 : (isMediumHeight ? 180.0 : 320.0);
+
+          final double titleFontSize = isCompactHeight ? 16.0 : (isMediumHeight ? 22.0 : 28.0);
+          final double artistFontSize = isCompactHeight ? 12.0 : (isMediumHeight ? 15.0 : 18.0);
+
+          final double tabPadding = isCompactHeight ? 12.0 : 24.0;
+
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(horizontalPadding, topPadding, horizontalPadding, bottomPadding),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 1,
+                        child: Padding(
+                          padding: EdgeInsets.only(right: horizontalPadding),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 20.0),
-                                onPressed: () => ref.read(immersiveModeProvider.notifier).state = false,
-                              ),
-                              const SizedBox(width: 8.0),
-                              Text(
-                                'NOW PLAYING',
-                                style: typography.caption.copyWith(
-                                  color: Colors.white54,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 2.0,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Spacer(flex: 3),
-                          Center(
-                            child: Container(
-                              width: 320.0,
-                              height: 320.0,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16.0),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.4),
-                                    blurRadius: 24.0,
-                                    offset: const Offset(0, 8),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 20.0),
+                                    onPressed: () => ref.read(immersiveModeProvider.notifier).state = false,
+                                  ),
+                                  const SizedBox(width: 8.0),
+                                  Text(
+                                    'NOW PLAYING',
+                                    style: typography.caption.copyWith(
+                                      color: Colors.white54,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 2.0,
+                                    ),
                                   ),
                                 ],
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16.0),
-                                child: DAImage(
-                                  url: artworkUrl,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const Spacer(flex: 2),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      currentSong?.title ?? 'No Track Selected',
-                                      style: typography.title.copyWith(
-                                        fontSize: 28.0,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4.0),
-                                    Text(
-                                      currentSong?.artist ?? 'Unknown Artist',
-                                      style: typography.body.copyWith(
-                                        fontSize: 18.0,
-                                        color: Colors.white.withOpacity(0.6),
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              _PlaybackIconButton(
-                                icon: isLiked ? Icons.favorite : Icons.favorite_border,
-                                color: isLiked ? Colors.redAccent : Colors.white70,
-                                size: 24.0,
-                                onPressed: currentSong != null
-                                    ? () => ref.read(libraryManagerProvider.notifier).toggleLikeSong(currentSong)
-                                    : null,
-                              ),
-                              Builder(
-                                builder: (btnContext) => _PlaybackIconButton(
-                                  icon: Icons.more_vert,
-                                  color: Colors.white70,
-                                  size: 24.0,
-                                  onPressed: currentSong != null
-                                      ? () => showSongOptionsMenu(btnContext, ref, currentSong)
-                                      : null,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24.0),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 4.0,
-                                    trackShape: const _RoundedTrackShape(),
-                                    activeTrackColor: colors.primary,
-                                    inactiveTrackColor: Colors.white.withOpacity(0.15),
-                                    thumbColor: colors.primary,
-                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
-                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
-                                  ),
-                                  child: Slider(
-                                    value: _dragValue ?? progress,
-                                    onChanged: (val) {
-                                      setState(() {
-                                        _dragValue = val;
-                                      });
-                                    },
-                                    onChangeEnd: (val) {
-                                      ref.read(playbackControllerProvider).seek(
-                                            Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
-                                          );
-                                      setState(() {
-                                        _dragValue = null;
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8.0),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                _formatDuration(displayPosition),
-                                style: typography.caption.copyWith(color: Colors.white54, fontSize: 12.0),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(12.0),
-                                  border: Border.all(color: Colors.white.withOpacity(0.12)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.waves, size: 12.0, color: Colors.white.withOpacity(0.6)),
-                                    const SizedBox(width: 4.0),
-                                    Text(
-                                      codec.toUpperCase(),
-                                      style: typography.caption.copyWith(
-                                        fontSize: 10.0,
-                                        color: Colors.white.withOpacity(0.8),
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.8,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                _formatDuration(duration),
-                                style: typography.caption.copyWith(color: Colors.white54, fontSize: 12.0),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 32.0),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              ImmersivePlaybackButton(
-                                icon: Icons.fast_rewind_rounded,
-                                size: 36.0,
-                                onPressed: () => ref.read(playbackControllerProvider).previous(),
-                              ),
-                              const SizedBox(width: 32.0),
-                              ImmersivePlaybackButton(
-                                icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                size: 48.0,
-                                onPressed: () {
-                                  if (isPlaying) {
-                                    ref.read(playbackControllerProvider).pause();
-                                  } else {
-                                    ref.read(playbackControllerProvider).resume();
-                                  }
-                                },
-                              ),
-                              const SizedBox(width: 32.0),
-                              ImmersivePlaybackButton(
-                                icon: Icons.fast_forward_rounded,
-                                size: 36.0,
-                                onPressed: () => ref.read(playbackControllerProvider).next(),
-                              ),
-                            ],
-                          ),
-                          const Spacer(flex: 1),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 1,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.04),
-                        borderRadius: BorderRadius.circular(24.0),
-                        border: Border.all(color: Colors.white.withOpacity(0.08)),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24.0),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(
-                            sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(12.0),
-                            sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(12.0),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(24.0),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(4.0),
+                              if (isCompactHeight) const SizedBox(height: 8.0) else const Spacer(flex: 3),
+                              Center(
+                                child: Container(
+                                  width: artworkSize,
+                                  height: artworkSize,
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.3),
                                     borderRadius: BorderRadius.circular(16.0),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: _TabButton(
-                                          label: 'Lyrics',
-                                          isActive: _activeTab == 0,
-                                          onTap: () => setState(() => _activeTab = 0),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: _TabButton(
-                                          label: 'Queue',
-                                          isActive: _activeTab == 1,
-                                          onTap: () => setState(() => _activeTab = 1),
-                                        ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.4),
+                                        blurRadius: isCompactHeight ? 12.0 : 24.0,
+                                        offset: Offset(0, isCompactHeight ? 4.0 : 8.0),
                                       ),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(height: 24.0),
-                                Expanded(
-                                  child: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 300),
-                                    child: _activeTab == 0
-                                        ? const _WindowsLyricsTab(key: ValueKey('lyrics'))
-                                        : const _WindowsQueueTab(key: ValueKey('queue')),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(16.0),
+                                    child: DAImage(
+                                      url: artworkUrl,
+                                      fit: BoxFit.cover,
+                                    ),
                                   ),
                                 ),
-                              ],
+                              ),
+                              if (isCompactHeight) const SizedBox(height: 8.0) else const Spacer(flex: 2),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          currentSong?.title ?? 'No Track Selected',
+                                          style: typography.title.copyWith(
+                                            fontSize: titleFontSize,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4.0),
+                                        Text(
+                                          currentSong?.artist ?? 'Unknown Artist',
+                                          style: typography.body.copyWith(
+                                            fontSize: artistFontSize,
+                                            color: Colors.white.withOpacity(0.6),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  _PlaybackIconButton(
+                                    icon: isLiked ? Icons.favorite : Icons.favorite_border,
+                                    color: isLiked ? Colors.redAccent : Colors.white70,
+                                    size: 24.0,
+                                    onPressed: currentSong != null
+                                        ? () => ref.read(libraryManagerProvider.notifier).toggleLikeSong(currentSong)
+                                        : null,
+                                  ),
+                                  Builder(
+                                    builder: (btnContext) => _PlaybackIconButton(
+                                      icon: Icons.more_vert,
+                                      color: Colors.white70,
+                                      size: 24.0,
+                                      onPressed: currentSong != null
+                                          ? () => showSongOptionsMenu(btnContext, ref, currentSong)
+                                          : null,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: isCompactHeight ? 8.0 : 24.0),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        trackHeight: 4.0,
+                                        trackShape: const _RoundedTrackShape(),
+                                        activeTrackColor: colors.primary,
+                                        inactiveTrackColor: Colors.white.withOpacity(0.15),
+                                        thumbColor: colors.primary,
+                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
+                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
+                                      ),
+                                      child: Slider(
+                                        value: _dragValue ?? progress,
+                                        onChanged: (val) {
+                                          setState(() {
+                                            _dragValue = val;
+                                          });
+                                        },
+                                        onChangeEnd: (val) {
+                                          ref.read(playbackControllerProvider).seek(
+                                                Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
+                                              );
+                                          setState(() {
+                                            _dragValue = null;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8.0),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    _formatDuration(displayPosition),
+                                    style: typography.caption.copyWith(color: Colors.white54, fontSize: 12.0),
+                                  ),
+                                  if (!isCompactHeight)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.08),
+                                        borderRadius: BorderRadius.circular(12.0),
+                                        border: Border.all(color: Colors.white.withOpacity(0.12)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.waves, size: 12.0, color: Colors.white.withOpacity(0.6)),
+                                          const SizedBox(width: 4.0),
+                                          Text(
+                                            codec.toUpperCase(),
+                                            style: typography.caption.copyWith(
+                                              fontSize: 10.0,
+                                              color: Colors.white.withOpacity(0.8),
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.8,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  Text(
+                                    _formatDuration(duration),
+                                    style: typography.caption.copyWith(color: Colors.white54, fontSize: 12.0),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: isCompactHeight ? 12.0 : 32.0),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ImmersivePlaybackButton(
+                                    icon: Icons.fast_rewind_rounded,
+                                    size: isCompactHeight ? 28.0 : 36.0,
+                                    onPressed: () => ref.read(playbackControllerProvider).previous(),
+                                  ),
+                                  SizedBox(width: isCompactHeight ? 16.0 : 32.0),
+                                  ImmersivePlaybackButton(
+                                    icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                    size: isCompactHeight ? 36.0 : 48.0,
+                                    onPressed: () {
+                                      if (isPlaying) {
+                                        ref.read(playbackControllerProvider).pause();
+                                      } else {
+                                        ref.read(playbackControllerProvider).resume();
+                                      }
+                                    },
+                                  ),
+                                  SizedBox(width: isCompactHeight ? 16.0 : 32.0),
+                                  ImmersivePlaybackButton(
+                                    icon: Icons.fast_forward_rounded,
+                                    size: isCompactHeight ? 28.0 : 36.0,
+                                    onPressed: () => ref.read(playbackControllerProvider).next(),
+                                  ),
+                                ],
+                              ),
+                              if (isCompactHeight) const SizedBox(height: 8.0) else const Spacer(flex: 1),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(24.0),
+                            border: Border.all(color: Colors.white.withOpacity(0.08)),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24.0),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(
+                                sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(12.0),
+                                sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(12.0),
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.all(tabPadding),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(4.0),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.3),
+                                        borderRadius: BorderRadius.circular(16.0),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: _TabButton(
+                                              label: 'Lyrics',
+                                              isActive: _activeTab == 0,
+                                              onTap: () => setState(() => _activeTab = 0),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: _TabButton(
+                                              label: 'Queue',
+                                              isActive: _activeTab == 1,
+                                              onTap: () => setState(() => _activeTab = 1),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(height: isCompactHeight ? 12.0 : 24.0),
+                                    Expanded(
+                                      child: AnimatedSwitcher(
+                                        duration: const Duration(milliseconds: 300),
+                                        child: _activeTab == 0
+                                            ? const _WindowsLyricsTab(key: ValueKey('lyrics'))
+                                            : const _WindowsQueueTab(key: ValueKey('queue')),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: MouseRegion(
-              onEnter: (_) => setState(() => _showTitleBar = true),
-              onExit: (_) => setState(() => _showTitleBar = false),
-              child: AnimatedSlide(
-                offset: _showTitleBar ? Offset.zero : const Offset(0, -1),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOutCubic,
-                child: AnimatedOpacity(
-                  opacity: _showTitleBar ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 250),
-                  child: Container(
-                    color: Colors.black.withOpacity(0.4),
-                    child: const CustomTitleBar(),
+                    ],
                   ),
                 ),
               ),
-            ),
-          ),
-          if (!_showTitleBar)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 12.0,
-              child: MouseRegion(
-                onEnter: (_) => setState(() => _showTitleBar = true),
-                child: const SizedBox(),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: MouseRegion(
+                  onEnter: (_) => setState(() => _showTitleBar = true),
+                  onExit: (_) => setState(() => _showTitleBar = false),
+                  child: AnimatedSlide(
+                    offset: _showTitleBar ? Offset.zero : const Offset(0, -1),
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOutCubic,
+                    child: AnimatedOpacity(
+                      opacity: _showTitleBar ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 250),
+                      child: Container(
+                        color: Colors.black.withOpacity(0.4),
+                        child: const CustomTitleBar(),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-        ],
+              if (!_showTitleBar)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 12.0,
+                  child: MouseRegion(
+                    onEnter: (_) => setState(() => _showTitleBar = true),
+                    child: const SizedBox(),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

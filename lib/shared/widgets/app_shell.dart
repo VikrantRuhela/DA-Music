@@ -75,8 +75,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
 
     final double screenWidth = MediaQuery.of(context).size.width;
-    final bool showPlayerPanel = screenWidth >= 1200;
-    final bool showNavRail = screenWidth >= 700;
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape || screenWidth >= 900;
+    final bool showPlayerPanel = isLandscape || screenWidth >= 1200;
+    final bool showNavRail = isLandscape || screenWidth >= 700;
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
 
     final duration = ref.scaledDuration(isImmersive ? DAMotion.large : const Duration(milliseconds: 380));
@@ -84,7 +85,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final containerBorderRadius = isImmersive
         ? BorderRadius.zero
-        : (isAndroid
+        : (isAndroid && !isLandscape
             ? const BorderRadius.vertical(
                 top: Radius.circular(DATokens.radiusXXLarge),
               )
@@ -92,7 +93,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final containerMargin = isImmersive
         ? EdgeInsets.zero
-        : (isAndroid
+        : (isAndroid && !isLandscape
             ? const EdgeInsets.only(
                 top: DATokens.spacingSmall,
                 left: DATokens.spacingSmall,
@@ -137,27 +138,27 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: Stack(
             children: [
               SafeArea(
-                bottom: !isAndroid,
+                bottom: !isAndroid || isLandscape,
                 child: Column(
                   children: [
                     const CustomTitleBar(),
                     Expanded(
                       child: Row(
                         children: [
-                          if (showNavRail && !isImmersive)
-                            const _DesktopNavRail(),
+                          _DesktopNavRail(visible: showNavRail),
                           Expanded(
                             child: AnimatedOpacity(
                               opacity: isImmersive ? 0.0 : 1.0,
                               duration: duration,
                               curve: curve,
-                              child: Container(
+                              child: AnimatedContainer(
+                                duration: duration,
+                                curve: curve,
                                 margin: containerMargin,
                                 child: ClipRRect(
                                   borderRadius: containerBorderRadius,
                                   child: Stack(
                                     children: [
-                                      // Layer 2: Main Dark Wine Container Surface (with frosted glass blur when showAlbumArt is enabled)
                                       Positioned.fill(
                                         child: showAlbumArt
                                             ? ClipRect(
@@ -189,8 +190,6 @@ class _AppShellState extends ConsumerState<AppShell> {
                                                 ),
                                               ),
                                       ),
-
-                                      // Layer 3: 100% Sharp & Unblurred Foreground Page UI
                                       Positioned.fill(
                                         child: IgnorePointer(
                                           ignoring: isImmersive,
@@ -198,13 +197,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                                             children: [
                                               Padding(
                                                 padding: EdgeInsets.only(
-                                                  bottom: isAndroid && !isImmersive
+                                                  bottom: isAndroid && !isImmersive && !isLandscape
                                                       ? (ref.watch(currentSongProvider) != null ? 144.0 + bottomPadding : 80.0 + bottomPadding)
                                                       : 0.0,
                                                 ),
                                                 child: widget.child,
                                               ),
-                                              if (!isAndroid && !showPlayerPanel && !isImmersive)
+                                              if (!isAndroid && !showPlayerPanel && !isImmersive && !isLandscape)
                                                 const Align(
                                                   alignment: Alignment.bottomCenter,
                                                   child: MiniPlayer(),
@@ -219,26 +218,45 @@ class _AppShellState extends ConsumerState<AppShell> {
                               ),
                             ),
                           ),
-                          if (!isAndroid)
-                            AnimatedContainer(
-                              duration: duration,
-                              curve: curve,
-                              width: isImmersive ? screenWidth : (showPlayerPanel ? 360.0 : 0.0),
-                              child: PersistentPlayerPanel(),
+                          AnimatedContainer(
+                            duration: duration,
+                            curve: curve,
+                            width: (isAndroid && !isLandscape)
+                                ? 0.0
+                                : (isImmersive
+                                    ? screenWidth
+                                    : (showPlayerPanel
+                                        ? (screenWidth >= 1200 ? 360.0 : (screenWidth * 0.35).clamp(260.0, 320.0))
+                                        : 0.0)),
+                            child: ClipRect(
+                              child: OverflowBox(
+                                minWidth: isImmersive ? screenWidth : 260.0,
+                                maxWidth: isImmersive
+                                    ? screenWidth
+                                    : (screenWidth >= 1200 ? 360.0 : (screenWidth * 0.35).clamp(260.0, 320.0)),
+                                alignment: Alignment.centerRight,
+                                child: PersistentPlayerPanel(),
+                              ),
                             ),
+                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-              if (isAndroid)
+              if (isAndroid) ...[
                 const AndroidSlidingPlayer(),
-              if (isAndroid && !isImmersive)
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: _AndroidBottomDock(showPlayerPanel: showPlayerPanel),
+                AnimatedSlide(
+                  offset: (isLandscape || isImmersive) ? const Offset(0, 1.5) : Offset.zero,
+                  duration: duration,
+                  curve: curve,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: _AndroidBottomDock(showPlayerPanel: showPlayerPanel),
+                  ),
                 ),
+              ],
             ],
           ),
         ),
@@ -252,7 +270,9 @@ class _AppShellState extends ConsumerState<AppShell> {
 }
 
 class _DesktopNavRail extends ConsumerWidget {
-  const _DesktopNavRail();
+  final bool visible;
+
+  const _DesktopNavRail({required this.visible});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -263,14 +283,14 @@ class _DesktopNavRail extends ConsumerWidget {
     return AnimatedContainer(
       duration: duration,
       curve: curve,
-      width: isImmersive ? 0.0 : 72.0,
+      width: (visible && !isImmersive) ? 72.0 : 0.0,
       child: ClipRect(
         child: OverflowBox(
           minWidth: 72.0,
           maxWidth: 72.0,
           alignment: Alignment.centerLeft,
           child: AnimatedOpacity(
-            opacity: isImmersive ? 0.0 : 1.0,
+            opacity: (visible && !isImmersive) ? 1.0 : 0.0,
             duration: duration,
             curve: curve,
             child: NavigationRailWidget(),
