@@ -423,6 +423,12 @@ object WidgetUpdater {
         } ?: run {
             views.setImageViewResource(R.id.widget_background_image, R.drawable.widget_background)
         }
+
+        cachedTopRoundedArtwork?.let {
+            views.setImageViewBitmap(R.id.widget_artwork, it)
+        } ?: run {
+            views.setImageViewResource(R.id.widget_artwork, R.drawable.da_placeholder)
+        }
     }
 
     private fun getPendingIntent(context: Context, action: String): android.app.PendingIntent {
