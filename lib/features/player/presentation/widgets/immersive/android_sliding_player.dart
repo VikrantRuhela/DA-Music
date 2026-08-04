@@ -165,10 +165,11 @@ class AndroidSlidingPlayer extends ConsumerStatefulWidget {
   ConsumerState<AndroidSlidingPlayer> createState() => _AndroidSlidingPlayerState();
 }
 
+
+
 class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _animation;
-  double? _dragValue;
 
   @override
   void initState() {
@@ -252,31 +253,20 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
     final colors = context.daColors;
     final typography = context.daTypography;
     final playbackState = ref.watch(playbackStateProvider);
-    final playbackController = ref.watch(playbackControllerProvider);
     final style = ref.watch(playerStyleProvider);
 
     final isPlaying = playbackState.status == PlaybackStatus.playing;
     final isLiked = ref.watch(libraryManagerProvider).isSongLiked(currentSong.id);
 
-    final duration = currentSong.duration;
-    final position = playbackController.position;
-    final double progress = duration.inMilliseconds > 0
-        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
-
-    final displayPosition = _dragValue != null
-        ? Duration(milliseconds: (_dragValue! * duration.inMilliseconds).toInt())
-        : position;
-
     final codec = _getCodec(currentSong);
     final artworkUrl = currentSong.artworkUrl;
-    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+    final isLowRam = !ref.watch(enableExtraEffectsProvider);
     final double screenWidth = MediaQuery.of(context).size.width;
     final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape || screenWidth >= 900;
 
     final t = _animation.value;
     if (t == 0.0 && !isImmersive) {
-      return _buildMiniPlayerLayout(context, currentSong, colors, typography, isPlaying, progress);
+      return _buildMiniPlayerLayout(context, currentSong, colors, typography, isPlaying);
     }
 
     final double screenHeight = MediaQuery.of(context).size.height;
@@ -516,7 +506,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                             bottom: MediaQuery.of(context).padding.bottom + 8.0,
                             child: Opacity(
                               opacity: fullOpacity,
-                              child: _buildImmersiveExpandedLayout(context, currentSong, colors, typography, isLiked, isPlaying, progress, duration, displayPosition, codec),
+                              child: _buildImmersiveExpandedLayout(context, currentSong, colors, typography, isLiked, isPlaying, codec),
                             ),
                           ),
                           Positioned(
@@ -578,9 +568,9 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                                   ),
                                   onPressed: () {
                                     if (isPlaying) {
-                                      playbackController.pause();
+                                      ref.read(playbackControllerProvider).pause();
                                     } else {
-                                      playbackController.resume();
+                                      ref.read(playbackControllerProvider).resume();
                                     }
                                   },
                                 ),
@@ -590,7 +580,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                                     color: colors.textPrimary,
                                     size: 24.0,
                                   ),
-                                  onPressed: () => playbackController.next(),
+                                  onPressed: () => ref.read(playbackControllerProvider).next(),
                                 ),
                                 IconButton(
                                   icon: Icon(
@@ -605,17 +595,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                           ),
                         ),
                       if (t == 0.0)
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          height: 3.0,
-                          child: LinearProgressIndicator(
-                            value: progress.clamp(0.0, 1.0),
-                            backgroundColor: colors.border.withValues(alpha: 0.3),
-                            valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
-                          ),
-                        ),
+                        const _SlidingPlayerMiniProgressBar(),
                     ],
                   ),
                 ),
@@ -634,12 +614,8 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
     dynamic typography,
     bool isLiked,
     bool isPlaying,
-    double progress,
-    Duration duration,
-    Duration displayPosition,
     String codec,
   ) {
-    final playbackController = ref.watch(playbackControllerProvider);
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -716,81 +692,14 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
               ],
             ),
           ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_border,
-                      color: isLiked ? Colors.redAccent : Colors.white70,
-                      size: 22.0,
-                    ),
-                    onPressed: () => ref.read(libraryManagerProvider.notifier).toggleLikeSong(currentSong),
-                  ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 6.0,
-                        trackShape: const _RoundedTrackShape(),
-                        activeTrackColor: colors.primary,
-                        inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
-                        thumbColor: colors.primary,
-                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
-                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
-                      ),
-                      child: Slider(
-                        value: _dragValue ?? progress,
-                        onChanged: (val) {
-                          setState(() {
-                            _dragValue = val;
-                          });
-                        },
-                        onChangeEnd: (val) {
-                          playbackController.seek(
-                            Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
-                          );
-                          setState(() {
-                            _dragValue = null;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  Builder(
-                    builder: (btnContext) => IconButton(
-                      icon: const Icon(Icons.more_vert, color: Colors.white70, size: 22.0),
-                      onPressed: () => showSongOptionsMenu(btnContext, ref, currentSong),
-                    ),
-                  ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _formatDuration(displayPosition),
-                      style: typography.caption.copyWith(color: Colors.white.withValues(alpha: 0.5), fontSize: 11.0),
-                    ),
-                    Text(
-                      _formatDuration(duration),
-                      style: typography.caption.copyWith(color: Colors.white.withValues(alpha: 0.5), fontSize: 11.0),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          const _SlidingPlayerProgressBar(),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ImmersivePlaybackButton(
                 icon: Icons.fast_rewind_rounded,
                 size: 36.0,
-                onPressed: () => playbackController.previous(),
+                onPressed: () => ref.read(playbackControllerProvider).previous(),
               ),
               const SizedBox(width: 24.0),
               ImmersivePlaybackButton(
@@ -798,9 +707,9 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                 size: 48.0,
                 onPressed: () {
                   if (isPlaying) {
-                    playbackController.pause();
+                    ref.read(playbackControllerProvider).pause();
                   } else {
-                    playbackController.resume();
+                    ref.read(playbackControllerProvider).resume();
                   }
                 },
               ),
@@ -808,7 +717,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
               ImmersivePlaybackButton(
                 icon: Icons.fast_forward_rounded,
                 size: 36.0,
-                onPressed: () => playbackController.next(),
+                onPressed: () => ref.read(playbackControllerProvider).next(),
               ),
             ],
           ),
@@ -871,9 +780,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
     dynamic colors,
     dynamic typography,
     bool isPlaying,
-    double progress,
   ) {
-    final playbackController = ref.watch(playbackControllerProvider);
 
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
     final double screenWidth = MediaQuery.of(context).size.width;
@@ -930,7 +837,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                           height: 40.0,
                           decoration: BoxDecoration(
                             color: colors.surfaceHover,
-                            borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                            borderRadius: BorderRadius.circular(8.0),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: DAImage(
@@ -968,9 +875,9 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                           ),
                           onPressed: () {
                             if (isPlaying) {
-                              playbackController.pause();
+                              ref.read(playbackControllerProvider).pause();
                             } else {
-                              playbackController.resume();
+                              ref.read(playbackControllerProvider).resume();
                             }
                           },
                         ),
@@ -980,7 +887,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                             color: colors.textPrimary,
                             size: 24.0,
                           ),
-                          onPressed: () => playbackController.next(),
+                          onPressed: () => ref.read(playbackControllerProvider).next(),
                         ),
                         IconButton(
                           icon: Icon(
@@ -993,17 +900,7 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
                       ],
                     ),
                   ),
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 3.0,
-                    child: LinearProgressIndicator(
-                      value: progress.clamp(0.0, 1.0),
-                      backgroundColor: colors.border.withValues(alpha: 0.3),
-                      valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
-                    ),
-                  ),
+                  const _SlidingPlayerMiniProgressBar(),
                 ],
               ),
             ),
@@ -1012,5 +909,140 @@ class _AndroidSlidingPlayerState extends ConsumerState<AndroidSlidingPlayer> wit
       ),
     ),
   );
+  }
+}
+
+class _SlidingPlayerProgressBar extends ConsumerStatefulWidget {
+  const _SlidingPlayerProgressBar();
+
+  @override
+  ConsumerState<_SlidingPlayerProgressBar> createState() => _SlidingPlayerProgressBarState();
+}
+
+class _SlidingPlayerProgressBarState extends ConsumerState<_SlidingPlayerProgressBar> {
+  double? _dragValue;
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.toString();
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.daColors;
+    final typography = context.daTypography;
+    final currentSong = ref.watch(currentSongProvider);
+    if (currentSong == null) return const SizedBox.shrink();
+
+    final position = ref.watch(playbackControllerProvider.select((c) => c.position));
+    final duration = currentSong.duration;
+    final double progress = duration.inMilliseconds > 0
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    final displayPosition = _dragValue != null
+        ? Duration(milliseconds: (_dragValue! * duration.inMilliseconds).toInt())
+        : position;
+
+    final isLiked = ref.watch(libraryManagerProvider).isSongLiked(currentSong.id);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: Icon(
+                isLiked ? Icons.favorite : Icons.favorite_border,
+                color: isLiked ? Colors.redAccent : Colors.white70,
+                size: 22.0,
+              ),
+              onPressed: () => ref.read(libraryManagerProvider.notifier).toggleLikeSong(currentSong),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 6.0,
+                  trackShape: const _RoundedTrackShape(),
+                  activeTrackColor: colors.primary,
+                  inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
+                  thumbColor: colors.primary,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
+                ),
+                child: Slider(
+                  value: _dragValue ?? progress,
+                  onChanged: (val) {
+                    setState(() {
+                      _dragValue = val;
+                    });
+                  },
+                  onChangeEnd: (val) {
+                    ref.read(playbackControllerProvider).seek(
+                          Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
+                        );
+                    setState(() {
+                      _dragValue = null;
+                    });
+                  },
+                ),
+              ),
+            ),
+            Builder(
+              builder: (btnContext) => IconButton(
+                icon: const Icon(Icons.more_vert, color: Colors.white70, size: 22.0),
+                onPressed: () => showSongOptionsMenu(btnContext, ref, currentSong),
+              ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _formatDuration(displayPosition),
+                style: typography.caption.copyWith(color: Colors.white.withValues(alpha: 0.5), fontSize: 11.0),
+              ),
+              Text(
+                _formatDuration(duration),
+                style: typography.caption.copyWith(color: Colors.white.withValues(alpha: 0.5), fontSize: 11.0),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SlidingPlayerMiniProgressBar extends ConsumerWidget {
+  const _SlidingPlayerMiniProgressBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.daColors;
+    final currentSong = ref.watch(currentSongProvider);
+    if (currentSong == null) return const SizedBox.shrink();
+
+    final position = ref.watch(playbackControllerProvider.select((c) => c.position));
+    final duration = currentSong.duration;
+    final double progress = duration.inMilliseconds > 0
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: 3.0,
+      child: LinearProgressIndicator(
+        value: progress,
+        backgroundColor: colors.border.withValues(alpha: 0.3),
+        valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
+      ),
+    );
   }
 }

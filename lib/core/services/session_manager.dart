@@ -55,6 +55,7 @@ class SessionManager extends ChangeNotifier {
         _isLoggedIn = true;
         _isGuestMode = false;
         _client = AuthenticatedClient(savedCookies);
+        notifyListeners();
 
         final result = await _verifySession(savedCookies);
         if (result == SessionVerificationResult.valid) {
@@ -244,24 +245,28 @@ class SessionManager extends ChangeNotifier {
             }
           }
 
+          _extractAccountFromResponse(body);
+
+          if (_accountName == null || _accountName!.isEmpty) {
+            await _fetchAccountMenu(testClient);
+          }
+
           final bodyStr = response.body;
           final isExplicitLoggedIn = loggedInValue == '1' ||
               bodyStr.contains('"logged_in":"1"') ||
+              bodyStr.contains('"logged_in":1') ||
+              bodyStr.contains('"logged_in":true') ||
               bodyStr.contains('"LOGGED_IN"') ||
-              bodyStr.contains('accountMenu');
+              bodyStr.contains('accountMenu') ||
+              bodyStr.contains('AccountMenu') ||
+              bodyStr.contains('musicAccountMenuRenderer') ||
+              bodyStr.contains('activeAccountHeaderRenderer') ||
+              bodyStr.contains('googleAccountHeaderRenderer') ||
+              (_accountName != null && _accountName!.isNotEmpty);
 
           DALogger.info('SessionManager: Verification server logged_in value is "$loggedInValue", isExplicitLoggedIn=$isExplicitLoggedIn');
 
           if (isExplicitLoggedIn) {
-            // Try to extract account name from browse response (deep search)
-            _extractAccountFromResponse(body);
-
-            // If name still not found, try dedicated account_menu endpoint
-            if (_accountName == null || _accountName!.isEmpty) {
-              await _fetchAccountMenu(testClient);
-            }
-
-            // Persist extracted name/email
             if (_accountName != null || _accountEmail != null) {
               final prefs = await SharedPreferences.getInstance();
               if (_accountName != null) await prefs.setString('ytm_account_name', _accountName!);

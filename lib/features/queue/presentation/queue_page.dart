@@ -127,7 +127,7 @@ class QueuePage extends ConsumerWidget {
                             ),
                           ),
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                            borderRadius: BorderRadius.circular(4.0),
                             child: DAImage(
                               url: song.artworkUrl,
                               width: 48,

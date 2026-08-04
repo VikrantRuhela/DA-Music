@@ -29,18 +29,14 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> with TickerProvid
       lowerBound: 2.0 * (pi / 180.0),
       upperBound: 27.0 * (pi / 180.0),
       value: 2.0 * (pi / 180.0),
-    )..addListener(() {
-        setState(() {});
-      });
+    );
 
     _liftController = AnimationController(
       vsync: this,
       lowerBound: 0.0,
       upperBound: 1.0,
       value: 1.0,
-    )..addListener(() {
-        setState(() {});
-      });
+    );
   }
 
   @override
@@ -199,16 +195,21 @@ class _TonearmWidgetState extends ConsumerState<TonearmWidget> with TickerProvid
       onPanEnd: (_) => _endDrag(),
       onPanCancel: () => _endDrag(),
       child: Stack(
-        key: ValueKey(songId), // Reset stack state on track change
+        key: ValueKey(songId),
         children: [
-          CustomPaint(
-            size: const Size(460.0, 380.0),
-            painter: _TonearmPainter(
-              angle: _rotationController.value,
-              lift: _liftController.value,
-              primaryColor: colors.primary,
-              accentColor: colors.accent,
-            ),
+          AnimatedBuilder(
+            animation: Listenable.merge([_rotationController, _liftController]),
+            builder: (context, child) {
+              return CustomPaint(
+                size: const Size(460.0, 380.0),
+                painter: _TonearmPainter(
+                  angle: _rotationController.value,
+                  lift: _liftController.value,
+                  primaryColor: colors.primary,
+                  accentColor: colors.accent,
+                ),
+              );
+            },
           ),
         ],
       ),

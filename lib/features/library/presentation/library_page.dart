@@ -438,7 +438,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                           );
                     },
                     leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                      borderRadius: BorderRadius.circular(4.0),
                       child: DAImage(
                         url: song.artworkUrl,
                         width: 40,
@@ -602,7 +602,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   );
             },
             leading: ClipRRect(
-              borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+              borderRadius: BorderRadius.circular(4.0),
               child: DAImage(
                 url: song.artworkUrl,
                 width: 40,
@@ -674,7 +674,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               children: [
                 Expanded(
                   child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(DATokens.radiusMedium)),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8.0)),
                     child: DAImage(
                       url: album.artworkUrl,
                       fit: BoxFit.cover,
@@ -858,7 +858,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                           );
                     },
                     leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                      borderRadius: BorderRadius.circular(4.0),
                       child: DAImage(
                         url: song.artworkUrl,
                         width: 40,

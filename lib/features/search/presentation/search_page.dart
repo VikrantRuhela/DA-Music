@@ -580,7 +580,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               child: Row(
                 children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                    borderRadius: BorderRadius.circular(8.0),
                     child: DAImage(
                       url: top.artwork.url,
                       width: 80,
@@ -664,7 +664,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       },
       contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
       leading: ClipRRect(
-        borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+        borderRadius: BorderRadius.circular(8.0),
         child: DAImage(
           url: song.thumbnail.url,
           width: 48,
@@ -770,7 +770,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+              borderRadius: BorderRadius.circular(8.0),
               child: Image.network(
                 album.cover.url,
                 width: 120,
@@ -820,7 +820,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+              borderRadius: BorderRadius.circular(8.0),
               child: Image.network(
                 playlist.cover.url,
                 width: 120,

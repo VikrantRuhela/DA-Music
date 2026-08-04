@@ -19,6 +19,17 @@ class _DnsCacheEntry {
 final Map<String, _DnsCacheEntry> _dnsProxyCache = {};
 
 Future<Socket> _connectDualStack(String host, int port) async {
+  if (host.contains('googlevideo.com')) {
+    try {
+      final addresses = await InternetAddress.lookup(host, type: InternetAddressType.IPv4)
+          .timeout(const Duration(milliseconds: 2000));
+      if (addresses.isNotEmpty) {
+        return await Socket.connect(addresses.first, port).timeout(const Duration(seconds: 4));
+      }
+    } catch (_) {}
+    return await Socket.connect(host, port).timeout(const Duration(seconds: 4));
+  }
+
   try {
     List<InternetAddress> ipv6Addresses = [];
     List<InternetAddress> ipv4Addresses = [];

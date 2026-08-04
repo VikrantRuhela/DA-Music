@@ -73,7 +73,7 @@ class _SongTileState extends State<SongTile> {
                       height: 48.0,
                       decoration: BoxDecoration(
                         color: colors.border,
-                        borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                        borderRadius: BorderRadius.circular(8.0),
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: DAImage(

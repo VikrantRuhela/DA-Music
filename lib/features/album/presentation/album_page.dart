@@ -89,7 +89,7 @@ class AlbumPage extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+                  borderRadius: BorderRadius.circular(12.0),
                   child: DAImage(
                     url: album.cover.url,
                     width: 180.0,
@@ -219,7 +219,7 @@ class AlbumPage extends ConsumerWidget {
                       ref.read(playbackControllerProvider).setQueue(modelSongs, startIndex: index, autoPlay: true, queueMode: QueueMode.album);
                     },
                     leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(DATokens.radiusSmall),
+                      borderRadius: BorderRadius.circular(4.0),
                       child: DAImage(
                         url: song.artwork.url,
                         width: 48.0,

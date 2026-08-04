@@ -218,6 +218,17 @@ class SettingsPage extends ConsumerWidget {
                       }
                     },
                   ),
+                  const Divider(height: 1),
+                  _buildSwitchTile(
+                    context: context,
+                    icon: Icons.auto_awesome_outlined,
+                    title: 'Enable Extra Effects',
+                    subtitle: 'May cause lag on some devices.',
+                    value: ref.watch(enableExtraEffectsProvider),
+                    onChanged: (val) {
+                      ref.read(enableExtraEffectsProvider.notifier).toggle(val);
+                    },
+                  ),
                 ],
               ),
             ),
@@ -281,6 +292,17 @@ class SettingsPage extends ConsumerWidget {
                       ),
                     ),
                   ],
+                  const Divider(height: 1),
+                  _buildSwitchTile(
+                    context: context,
+                    icon: Icons.power_settings_new_outlined,
+                    title: 'Prevent app from being killed',
+                    subtitle: 'Keep playback running in the background when the app is cleared from recents',
+                    value: ref.watch(preventAppKilledProvider),
+                    onChanged: (val) {
+                      ref.read(preventAppKilledProvider.notifier).toggle(val);
+                    },
+                  ),
                 ],
               ),
             ),

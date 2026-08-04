@@ -27,17 +27,28 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
   StreamSubscription? _errorSub;
 
   int _backendLoadTicket = 0;
+  bool _isInit = false;
 
   MediaKitAudioBackend();
 
   @override
   Future<void> initialize() async {
+    if (_isInit) return;
+    _isInit = true;
     DALogger.info('MediaKitAudioBackend: Initializing Player engine...');
-    MediaKit.ensureInitialized();
-    _player = Player();
-    _setupListeners();
     _state = 'ready';
     _eventController.add(const PlatformEngineInitialized());
+  }
+
+  Future<void> _ensurePlayerInitialized() async {
+    if (_player != null) return;
+    DALogger.info('MediaKitAudioBackend: Lazily initializing Player...');
+    MediaKit.ensureInitialized();
+    final p = Player();
+    _player = p;
+    _setupListeners();
+    await p.setVolume(_volume * 100.0);
+    await p.setRate(_speed);
   }
 
   void _setupListeners() {
@@ -118,6 +129,7 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
 
   @override
   Future<void> load(String url) async {
+    await _ensurePlayerInitialized();
     final ticket = ++_backendLoadTicket;
     DALogger.info('MediaKitAudioBackend: Loading streaming URL: "$url" (ticket: $ticket)');
     _state = 'loading';
@@ -166,9 +178,11 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
   @override
   Future<void> play() async {
     DALogger.info('MediaKitAudioBackend: Start playback.');
+    await _ensurePlayerInitialized();
     try {
       final p = _player;
       if (p != null) {
+        await p.setVolume(_volume * 100.0);
         await p.play();
       }
     } catch (e) {
@@ -188,9 +202,11 @@ class MediaKitAudioBackend implements PlatformAudioBackend {
   @override
   Future<void> resume() async {
     DALogger.info('MediaKitAudioBackend: Resume playback.');
+    await _ensurePlayerInitialized();
     try {
       final p = _player;
       if (p != null) {
+        await p.setVolume(_volume * 100.0);
         await p.play();
       }
     } catch (e) {

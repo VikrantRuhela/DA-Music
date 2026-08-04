@@ -59,8 +59,9 @@ class DAImage extends StatelessWidget {
     final fallback = placeholder ?? Container(
       width: width,
       height: height,
+
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8.0),
       ),
       child: const Center(
@@ -85,8 +86,12 @@ class DAImage extends StatelessWidget {
     final hasAsset = cleanUrl.startsWith('assets/');
 
     final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2.0;
-    final int? targetCacheWidth = width != null ? DeviceMemoryManager.instance.getTargetCacheDimension(width, devicePixelRatio: dpr) : null;
-    final int? targetCacheHeight = height != null ? DeviceMemoryManager.instance.getTargetCacheDimension(height, devicePixelRatio: dpr) : null;
+    final int targetWidth = width != null
+        ? DeviceMemoryManager.instance.getTargetCacheDimension(width!, devicePixelRatio: dpr)
+        : DeviceMemoryManager.instance.getTargetCacheDimension(400, devicePixelRatio: dpr);
+    final int targetHeight = height != null
+        ? DeviceMemoryManager.instance.getTargetCacheDimension(height!, devicePixelRatio: dpr)
+        : DeviceMemoryManager.instance.getTargetCacheDimension(400, devicePixelRatio: dpr);
 
     if (hasAsset) {
       return Image.asset(
@@ -94,8 +99,8 @@ class DAImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
-        cacheWidth: targetCacheWidth,
-        cacheHeight: targetCacheHeight,
+        cacheWidth: targetWidth,
+        cacheHeight: targetHeight,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (frame != null) return child;
           return fallback;
@@ -110,8 +115,8 @@ class DAImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
-        cacheWidth: targetCacheWidth,
-        cacheHeight: targetCacheHeight,
+        cacheWidth: targetWidth,
+        cacheHeight: targetHeight,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (frame != null) return child;
           return fallback;
@@ -123,8 +128,6 @@ class DAImage extends StatelessWidget {
     } else {
       final file = File(filePath);
       if (file.existsSync()) {
-        final int targetWidth = targetCacheWidth ?? DeviceMemoryManager.instance.getTargetCacheDimension(400, devicePixelRatio: dpr);
-        final int targetHeight = targetCacheHeight ?? DeviceMemoryManager.instance.getTargetCacheDimension(400, devicePixelRatio: dpr);
         return Image.file(
           file,
           width: width,

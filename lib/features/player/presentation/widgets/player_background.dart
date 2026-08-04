@@ -20,7 +20,7 @@ class PlayerBackground extends ConsumerWidget {
     final colors = context.daColors;
     final isImmersive = ref.watch(immersiveModeProvider);
     final showAlbumArt = ref.watch(showAlbumArtBackgroundProvider);
-    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+    final isLowRam = !ref.watch(enableExtraEffectsProvider);
 
     final duration = isImmersive ? const Duration(milliseconds: 420) : const Duration(milliseconds: 380);
     const curve = Curves.fastOutSlowIn;

@@ -132,7 +132,7 @@ class ImmersivePlayer extends ConsumerWidget {
 
     final currentSong = ref.watch(currentSongProvider);
     final artworkUrl = currentSong?.artworkUrl;
-    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+    final isLowRam = !ref.watch(enableExtraEffectsProvider);
     final isVinylOrMinimal = style == PlayerStyle.vinyl || style == PlayerStyle.minimal;
 
     return Scaffold(
@@ -254,15 +254,8 @@ class _WindowsImmersivePlayer extends ConsumerStatefulWidget {
 }
 
 class _WindowsImmersivePlayerState extends ConsumerState<_WindowsImmersivePlayer> {
-  double? _dragValue;
   int _activeTab = 0;
   bool _showTitleBar = false;
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.toString();
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
 
   String _getCodec(Song? song) {
     if (song == null) return 'AAC';
@@ -282,21 +275,8 @@ class _WindowsImmersivePlayerState extends ConsumerState<_WindowsImmersivePlayer
     final colors = context.daColors;
     final typography = context.daTypography;
     final currentSong = ref.watch(currentSongProvider);
-    final controller = ref.watch(playbackControllerProvider);
-    final playbackState = ref.watch(playbackStateProvider);
-
-    final isPlaying = playbackState.status == PlaybackStatus.playing;
+    final isPlaying = ref.watch(playbackControllerProvider.select((c) => c.status == PlaybackStatus.playing));
     final isLiked = currentSong != null && ref.watch(libraryManagerProvider).isSongLiked(currentSong.id);
-
-    final duration = currentSong?.duration ?? Duration.zero;
-    final position = controller.position;
-    final double progress = duration.inMilliseconds > 0
-        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
-
-    final displayPosition = _dragValue != null
-        ? Duration(milliseconds: (_dragValue! * duration.inMilliseconds).toInt())
-        : position;
 
     final artworkUrl = currentSong?.artworkUrl;
     final codec = _getCodec(currentSong);
@@ -429,77 +409,9 @@ class _WindowsImmersivePlayerState extends ConsumerState<_WindowsImmersivePlayer
                                 ],
                               ),
                               SizedBox(height: isCompactHeight ? 8.0 : 24.0),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: SliderTheme(
-                                      data: SliderTheme.of(context).copyWith(
-                                        trackHeight: 4.0,
-                                        trackShape: const _RoundedTrackShape(),
-                                        activeTrackColor: colors.primary,
-                                        inactiveTrackColor: Colors.white.withOpacity(0.15),
-                                        thumbColor: colors.primary,
-                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
-                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
-                                      ),
-                                      child: Slider(
-                                        value: _dragValue ?? progress,
-                                        onChanged: (val) {
-                                          setState(() {
-                                            _dragValue = val;
-                                          });
-                                        },
-                                        onChangeEnd: (val) {
-                                          ref.read(playbackControllerProvider).seek(
-                                                Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
-                                              );
-                                          setState(() {
-                                            _dragValue = null;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8.0),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    _formatDuration(displayPosition),
-                                    style: typography.caption.copyWith(color: Colors.white54, fontSize: 12.0),
-                                  ),
-                                  if (!isCompactHeight)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.08),
-                                        borderRadius: BorderRadius.circular(12.0),
-                                        border: Border.all(color: Colors.white.withOpacity(0.12)),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.waves, size: 12.0, color: Colors.white.withOpacity(0.6)),
-                                          const SizedBox(width: 4.0),
-                                          Text(
-                                            codec.toUpperCase(),
-                                            style: typography.caption.copyWith(
-                                              fontSize: 10.0,
-                                              color: Colors.white.withOpacity(0.8),
-                                              fontWeight: FontWeight.bold,
-                                              letterSpacing: 0.8,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  Text(
-                                    _formatDuration(duration),
-                                    style: typography.caption.copyWith(color: Colors.white54, fontSize: 12.0),
-                                  ),
-                                ],
+                              _WindowsPlayerProgressBar(
+                                codec: codec,
+                                isCompactHeight: isCompactHeight,
                               ),
                               SizedBox(height: isCompactHeight ? 12.0 : 32.0),
                               Row(
@@ -1317,7 +1229,6 @@ class _ImmersiveStylePlayer extends ConsumerStatefulWidget {
 }
 
 class _ImmersiveStylePlayerState extends ConsumerState<_ImmersiveStylePlayer> with SingleTickerProviderStateMixin {
-  double? _dragValue;
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
 
@@ -1364,21 +1275,8 @@ class _ImmersiveStylePlayerState extends ConsumerState<_ImmersiveStylePlayer> wi
     final colors = context.daColors;
     final typography = context.daTypography;
     final currentSong = ref.watch(currentSongProvider);
-    final controller = ref.watch(playbackControllerProvider);
-    final playbackState = ref.watch(playbackStateProvider);
-
-    final isPlaying = playbackState.status == PlaybackStatus.playing;
+    final isPlaying = ref.watch(playbackControllerProvider.select((c) => c.status == PlaybackStatus.playing));
     final isLiked = currentSong != null && ref.watch(libraryManagerProvider).isSongLiked(currentSong.id);
-
-    final duration = currentSong?.duration ?? Duration.zero;
-    final position = controller.position;
-    final double progress = duration.inMilliseconds > 0
-        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
-
-    final displayPosition = _dragValue != null
-        ? Duration(milliseconds: (_dragValue! * duration.inMilliseconds).toInt())
-        : position;
 
     final artworkUrl = currentSong?.artworkUrl;
     final codec = _getCodec(currentSong);
@@ -1516,73 +1414,8 @@ class _ImmersiveStylePlayerState extends ConsumerState<_ImmersiveStylePlayer> wi
                         ),
                       ),
                       const SizedBox(height: 36.0),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              isLiked ? Icons.favorite : Icons.favorite_border,
-                              color: isLiked ? Colors.redAccent : Colors.white70,
-                              size: 22.0,
-                            ),
-                            onPressed: currentSong != null
-                                ? () => ref.read(libraryManagerProvider.notifier).toggleLikeSong(currentSong)
-                                : null,
-                          ),
-                          Expanded(
-                            child: SliderTheme(
-                              data: SliderTheme.of(context).copyWith(
-                                trackHeight: 4.0,
-                                trackShape: const _RoundedTrackShape(),
-                                activeTrackColor: colors.primary,
-                                inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
-                                thumbColor: colors.primary,
-                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
-                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
-                              ),
-                              child: Slider(
-                                value: _dragValue ?? progress,
-                                onChanged: (val) {
-                                  setState(() {
-                                    _dragValue = val;
-                                  });
-                                },
-                                onChangeEnd: (val) {
-                                  ref.read(playbackControllerProvider).seek(
-                                        Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
-                                      );
-                                  setState(() {
-                                    _dragValue = null;
-                                  });
-                                },
-                              ),
-                            ),
-                          ),
-                          Builder(
-                            builder: (btnContext) => IconButton(
-                              icon: const Icon(Icons.more_vert, color: Colors.white70, size: 22.0),
-                              onPressed: currentSong != null
-                                  ? () => showSongOptionsMenu(btnContext, ref, currentSong)
-                                  : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6.0),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 48.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _formatDuration(displayPosition),
-                              style: typography.caption.copyWith(color: Colors.white.withValues(alpha: 0.5), fontSize: 12.0),
-                            ),
-                            Text(
-                              _formatDuration(duration),
-                              style: typography.caption.copyWith(color: Colors.white.withValues(alpha: 0.5), fontSize: 12.0),
-                            ),
-                          ],
-                        ),
+                      _VinylPlayerControlsSection(
+                        codec: codec,
                       ),
                       const SizedBox(height: 24.0),
                       Row(
@@ -1788,32 +1621,12 @@ class _MinimalStylePlayer extends ConsumerStatefulWidget {
 }
 
 class _MinimalStylePlayerState extends ConsumerState<_MinimalStylePlayer> {
-  double? _dragValue;
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.toString();
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = context.daColors;
     final typography = context.daTypography;
     final currentSong = ref.watch(currentSongProvider);
-    final controller = ref.watch(playbackControllerProvider);
-    final playbackState = ref.watch(playbackStateProvider);
-
-    final isPlaying = playbackState.status == PlaybackStatus.playing;
-    final duration = currentSong?.duration ?? Duration.zero;
-    final position = controller.position;
-    final double progress = duration.inMilliseconds > 0
-        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
-
-    final displayPosition = _dragValue != null
-        ? Duration(milliseconds: (_dragValue! * duration.inMilliseconds).toInt())
-        : position;
+    final isPlaying = ref.watch(playbackControllerProvider.select((c) => c.status == PlaybackStatus.playing));
 
     return ImmersiveBackground(
       child: SafeArea(
@@ -1879,43 +1692,7 @@ class _MinimalStylePlayerState extends ConsumerState<_MinimalStylePlayer> {
                 ),
               ),
               const SizedBox(height: 40.0),
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 2.0,
-                  activeTrackColor: colors.primary,
-                  inactiveTrackColor: colors.border.withValues(alpha: 0.3),
-                  thumbColor: colors.primary,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.0),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 10.0),
-                ),
-                child: Slider(
-                  value: _dragValue ?? progress,
-                  onChanged: (val) {
-                    setState(() {
-                      _dragValue = val;
-                    });
-                  },
-                  onChangeEnd: (val) {
-                    ref.read(playbackControllerProvider).seek(
-                          Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
-                        );
-                    setState(() {
-                      _dragValue = null;
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(height: 8.0),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(_formatDuration(displayPosition), style: typography.caption),
-                    Text(_formatDuration(duration), style: typography.caption),
-                  ],
-                ),
-              ),
+              const _MinimalPlayerProgressBarSection(),
               const SizedBox(height: 32.0),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -2406,6 +2183,314 @@ class _SwipeableArtworkState extends ConsumerState<SwipeableArtwork> with Single
         },
         child: widget.child,
       ),
+    );
+  }
+}
+
+class _WindowsPlayerProgressBar extends ConsumerStatefulWidget {
+  final String codec;
+  final bool isCompactHeight;
+
+  const _WindowsPlayerProgressBar({
+    required this.codec,
+    required this.isCompactHeight,
+  });
+
+  @override
+  ConsumerState<_WindowsPlayerProgressBar> createState() => _WindowsPlayerProgressBarState();
+}
+
+class _WindowsPlayerProgressBarState extends ConsumerState<_WindowsPlayerProgressBar> {
+  double? _dragValue;
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.toString();
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.daColors;
+    final typography = context.daTypography;
+    final currentSong = ref.watch(currentSongProvider);
+    if (currentSong == null) return const SizedBox.shrink();
+
+    final position = ref.watch(playbackControllerProvider.select((c) => c.position));
+    final duration = currentSong.duration;
+    final double progress = duration.inMilliseconds > 0
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    final displayPosition = _dragValue != null
+        ? Duration(milliseconds: (_dragValue! * duration.inMilliseconds).toInt())
+        : position;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 4.0,
+                  trackShape: const _RoundedTrackShape(),
+                  activeTrackColor: colors.primary,
+                  inactiveTrackColor: Colors.white.withOpacity(0.15),
+                  thumbColor: colors.primary,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
+                ),
+                child: Slider(
+                  value: _dragValue ?? progress,
+                  onChanged: (val) {
+                    setState(() {
+                      _dragValue = val;
+                    });
+                  },
+                  onChangeEnd: (val) {
+                    ref.read(playbackControllerProvider).seek(
+                          Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
+                        );
+                    setState(() {
+                      _dragValue = null;
+                    });
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8.0),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              _formatDuration(displayPosition),
+              style: typography.caption.copyWith(color: Colors.white54, fontSize: 12.0),
+            ),
+            if (!widget.isCompactHeight)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.0),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12.0),
+                  border: Border.all(color: Colors.white.withOpacity(0.12)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.waves, size: 12.0, color: Colors.white.withOpacity(0.6)),
+                    const SizedBox(width: 4.0),
+                    Text(
+                      widget.codec.toUpperCase(),
+                      style: typography.caption.copyWith(
+                        fontSize: 10.0,
+                        color: Colors.white.withOpacity(0.8),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Text(
+              _formatDuration(duration),
+              style: typography.caption.copyWith(color: Colors.white54, fontSize: 12.0),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _VinylPlayerControlsSection extends ConsumerStatefulWidget {
+  final String codec;
+
+  const _VinylPlayerControlsSection({
+    required this.codec,
+  });
+
+  @override
+  ConsumerState<_VinylPlayerControlsSection> createState() => _VinylPlayerControlsSectionState();
+}
+
+class _VinylPlayerControlsSectionState extends ConsumerState<_VinylPlayerControlsSection> {
+  double? _dragValue;
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.toString();
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.daColors;
+    final typography = context.daTypography;
+    final currentSong = ref.watch(currentSongProvider);
+    if (currentSong == null) return const SizedBox.shrink();
+
+    final position = ref.watch(playbackControllerProvider.select((c) => c.position));
+    final duration = currentSong.duration;
+    final double progress = duration.inMilliseconds > 0
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    final displayPosition = _dragValue != null
+        ? Duration(milliseconds: (_dragValue! * duration.inMilliseconds).toInt())
+        : position;
+
+    final isLiked = ref.watch(libraryManagerProvider).isSongLiked(currentSong.id);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: Icon(
+                isLiked ? Icons.favorite : Icons.favorite_border,
+                color: isLiked ? Colors.redAccent : Colors.white70,
+                size: 22.0,
+              ),
+              onPressed: () => ref.read(libraryManagerProvider.notifier).toggleLikeSong(currentSong),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 4.0,
+                  trackShape: const _RoundedTrackShape(),
+                  activeTrackColor: colors.primary,
+                  inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
+                  thumbColor: colors.primary,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0.0),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 0.0),
+                ),
+                child: Slider(
+                  value: _dragValue ?? progress,
+                  onChanged: (val) {
+                    setState(() {
+                      _dragValue = val;
+                    });
+                  },
+                  onChangeEnd: (val) {
+                    ref.read(playbackControllerProvider).seek(
+                          Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
+                        );
+                    setState(() {
+                      _dragValue = null;
+                    });
+                  },
+                ),
+              ),
+            ),
+            Builder(
+              builder: (btnContext) => IconButton(
+                icon: const Icon(Icons.more_vert, color: Colors.white70, size: 22.0),
+                onPressed: () => showSongOptionsMenu(btnContext, ref, currentSong),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6.0),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 48.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _formatDuration(displayPosition),
+                style: typography.caption.copyWith(color: Colors.white.withValues(alpha: 0.5), fontSize: 12.0),
+              ),
+              Text(
+                _formatDuration(duration),
+                style: typography.caption.copyWith(color: Colors.white.withValues(alpha: 0.5), fontSize: 12.0),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MinimalPlayerProgressBarSection extends ConsumerStatefulWidget {
+  const _MinimalPlayerProgressBarSection();
+
+  @override
+  ConsumerState<_MinimalPlayerProgressBarSection> createState() => _MinimalPlayerProgressBarSectionState();
+}
+
+class _MinimalPlayerProgressBarSectionState extends ConsumerState<_MinimalPlayerProgressBarSection> {
+  double? _dragValue;
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.toString();
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.daColors;
+    final typography = context.daTypography;
+    final currentSong = ref.watch(currentSongProvider);
+    if (currentSong == null) return const SizedBox.shrink();
+
+    final position = ref.watch(playbackControllerProvider.select((c) => c.position));
+    final duration = currentSong.duration;
+    final double progress = duration.inMilliseconds > 0
+        ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    final displayPosition = _dragValue != null
+        ? Duration(milliseconds: (_dragValue! * duration.inMilliseconds).toInt())
+        : position;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 2.0,
+            activeTrackColor: colors.primary,
+            inactiveTrackColor: colors.border.withValues(alpha: 0.3),
+            thumbColor: colors.primary,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.0),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 10.0),
+          ),
+          child: Slider(
+            value: _dragValue ?? progress,
+            onChanged: (val) {
+              setState(() {
+                _dragValue = val;
+              });
+            },
+            onChangeEnd: (val) {
+              ref.read(playbackControllerProvider).seek(
+                    Duration(milliseconds: (val * duration.inMilliseconds).toInt()),
+                  );
+              setState(() {
+                _dragValue = null;
+              });
+            },
+          ),
+        ),
+        const SizedBox(height: 8.0),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_formatDuration(displayPosition), style: typography.caption),
+              Text(_formatDuration(duration), style: typography.caption),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'playback_controller.dart';
 import '../../shared/models/music_models.dart';
 import '../../shared/models/playback_state.dart' as clean;
@@ -283,6 +284,17 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> onTaskRemoved() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final preventAppKilled = prefs.getString('prevent_app_killed') == 'true';
+      if (preventAppKilled) {
+        DALogger.info('SystemMediaSessionManager: App removed from Recents, but preventAppKilled is enabled. Background service will continue.');
+        return;
+      }
+    } catch (e) {
+      DALogger.error('SystemMediaSessionManager: Error checking preventAppKilled setting', e);
+    }
+
     DALogger.info('SystemMediaSessionManager: App removed from Recents. Initiating shutdown.');
     final c = SystemMediaSessionManager.controller;
     if (c != null) {

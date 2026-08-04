@@ -11,6 +11,25 @@ import '../../../core/services/lyrics_controller.dart';
 import '../../../shared/widgets/da_empty_state.dart';
 import '../../../shared/widgets/da_image.dart';
 import '../../../core/services/device_memory_manager.dart';
+import '../../../shared/providers/library_providers.dart';
+
+final lyricsActiveIndexProvider = Provider<int>((ref) {
+  final position = ref.watch(playbackControllerProvider.select((c) => c.position));
+  final lyricsState = ref.watch(lyricsControllerProvider);
+  if (lyricsState.syncedLyrics == null || lyricsState.syncedLyrics!.isEmpty) {
+    return -1;
+  }
+  final timestamps = lyricsState.syncedLyrics!.keys.toList()..sort();
+  int activeIndex = -1;
+  for (int i = 0; i < timestamps.length; i++) {
+    if (timestamps[i] <= position) {
+      activeIndex = i;
+    } else {
+      break;
+    }
+  }
+  return activeIndex;
+});
 
 class AnimatedBackgroundOrbs extends StatefulWidget {
   final String artworkUrl;
@@ -101,7 +120,7 @@ class _AnimatedBackgroundOrbsState extends State<AnimatedBackgroundOrbs> with Si
   }
 }
 
-class LyricLineWidget extends StatelessWidget {
+class LyricLineWidget extends ConsumerWidget {
   final String text;
   final bool isActive;
   final int index;
@@ -122,10 +141,13 @@ class LyricLineWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cleanText = text.replaceAll(RegExp(r'<.*?>'), '').trim();
     final int distanceFromActive = (index - activeIndex).abs();
-    final double targetBlur = isActive ? 0.0 : (distanceFromActive.toDouble() * 1.5).clamp(0.0, 5.0);
+    final isLowRam = !ref.watch(enableExtraEffectsProvider);
+    final shouldBlur = !isLowRam && distanceFromActive > 0 && distanceFromActive <= 2;
+
+    final double targetBlur = shouldBlur ? (distanceFromActive.toDouble() * 1.5).clamp(0.0, 5.0) : 0.0;
     final double targetOpacity = isActive ? 1.0 : (0.45 / distanceFromActive).clamp(0.12, 0.45);
 
     return TweenAnimationBuilder<double>(
@@ -158,8 +180,7 @@ class LyricLineWidget extends StatelessWidget {
               textAlign: TextAlign.center,
             );
 
-            final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
-            if (!isLowRam && blurValue > 0.05) {
+            if (shouldBlur && blurValue > 0.05) {
               textContent = ImageFiltered(
                 imageFilter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
                 child: Opacity(
@@ -229,67 +250,16 @@ class LyricLineWidget extends StatelessWidget {
   }
 }
 
-class LyricsPage extends ConsumerStatefulWidget {
+class LyricsPage extends ConsumerWidget {
   const LyricsPage({super.key});
 
   @override
-  ConsumerState<LyricsPage> createState() => _LyricsPageState();
-}
-
-class _LyricsPageState extends ConsumerState<LyricsPage> {
-  final ScrollController _scrollController = ScrollController();
-  bool _isUserScrolling = false;
-  Timer? _userScrollTimer;
-  int _lastActiveIndex = -1;
-  String? _lastSongId;
-  List<GlobalKey> _lineKeys = [];
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _userScrollTimer?.cancel();
-    super.dispose();
-  }
-
-  void _scrollToActiveLine(int index) {
-    if (_isUserScrolling || index < 0 || index >= _lineKeys.length) return;
-
-    final key = _lineKeys[index];
-    final context = key.currentContext;
-    if (context != null) {
-      Scrollable.ensureVisible(
-        context,
-        alignment: 0.5,
-        duration: const Duration(milliseconds: 600),
-        curve: Curves.easeOutCubic,
-      );
-    }
-  }
-
-  String _formatTimestamp(Duration d) {
-    final minutes = d.inMinutes.toString().padLeft(2, '0');
-    final seconds = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.daColors;
     final typography = context.daTypography;
 
     final currentSong = ref.watch(currentSongProvider);
     final lyricsState = ref.watch(lyricsControllerProvider);
-    final playbackPosition = ref.watch(playbackControllerProvider).position;
-
-    if (currentSong != null && currentSong.id != _lastSongId) {
-      _lastSongId = currentSong.id;
-      _lastActiveIndex = -1;
-      _isUserScrolling = false;
-      _userScrollTimer?.cancel();
-      if (_scrollController.hasClients) {
-        _scrollController.jumpTo(0.0);
-      }
-    }
 
     if (currentSong == null) {
       return PopScope(
@@ -321,34 +291,14 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
       );
     }
 
-    int activeIndex = -1;
     List<Duration> timestamps = [];
     List<String> lines = [];
 
     if (lyricsState.syncedLyrics != null && lyricsState.syncedLyrics!.isNotEmpty) {
       timestamps = lyricsState.syncedLyrics!.keys.toList()..sort();
       lines = timestamps.map((t) => lyricsState.syncedLyrics![t]!).toList();
-
-      for (int i = 0; i < timestamps.length; i++) {
-        if (timestamps[i] <= playbackPosition) {
-          activeIndex = i;
-        } else {
-          break;
-        }
-      }
     } else if (lyricsState.plainLyrics.isNotEmpty) {
       lines = lyricsState.plainLyrics.split('\n');
-    }
-
-    if (lines.length != _lineKeys.length) {
-      _lineKeys = List.generate(lines.length, (index) => GlobalKey());
-    }
-
-    if (activeIndex != _lastActiveIndex && activeIndex != -1) {
-      _lastActiveIndex = activeIndex;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToActiveLine(activeIndex);
-      });
     }
 
     final artworkUrl = currentSong.artworkUrl ?? '';
@@ -447,52 +397,109 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
                     const Divider(color: Colors.white10, height: 1.0),
                     const SizedBox(height: 16.0),
                     Expanded(
-                      child: _buildLyricsGlassContainer(
-                        colors,
-                        lyricsState,
-                        lines,
-                        activeIndex,
-                        timestamps,
+                      child: _LyricsGlassContainer(
+                        lines: lines,
+                        timestamps: timestamps,
+                        songId: currentSong.id,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            if (_isUserScrolling && timestamps.isNotEmpty)
-              Positioned(
-                bottom: 30,
-                right: 30,
-                child: FloatingActionButton.extended(
-                  backgroundColor: colors.primary,
-                  onPressed: () {
-                    setState(() {
-                      _isUserScrolling = false;
-                    });
-                    if (activeIndex != -1) {
-                      _scrollToActiveLine(activeIndex);
-                    }
-                  },
-                  icon: const Icon(Icons.sync, color: Colors.white),
-                  label: const Text(
-                    'Sync View',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildLyricsGlassContainer(
-    dynamic colors,
-    dynamic lyricsState,
-    List<String> lines,
-    int activeIndex,
-    List<Duration> timestamps,
-  ) {
+class _LyricsGlassContainer extends ConsumerStatefulWidget {
+  final List<String> lines;
+  final List<Duration> timestamps;
+  final String songId;
+
+  const _LyricsGlassContainer({
+    super.key,
+    required this.lines,
+    required this.timestamps,
+    required this.songId,
+  });
+
+  @override
+  ConsumerState<_LyricsGlassContainer> createState() => _LyricsGlassContainerState();
+}
+
+class _LyricsGlassContainerState extends ConsumerState<_LyricsGlassContainer> {
+  final ScrollController _scrollController = ScrollController();
+  bool _isUserScrolling = false;
+  Timer? _userScrollTimer;
+  int _lastActiveIndex = -1;
+  List<GlobalKey> _lineKeys = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _lineKeys = List.generate(widget.lines.length, (index) => GlobalKey());
+  }
+
+  @override
+  void didUpdateWidget(covariant _LyricsGlassContainer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.songId != oldWidget.songId) {
+      _lastActiveIndex = -1;
+      _isUserScrolling = false;
+      _userScrollTimer?.cancel();
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0.0);
+      }
+    }
+    if (widget.lines.length != _lineKeys.length) {
+      _lineKeys = List.generate(widget.lines.length, (index) => GlobalKey());
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _userScrollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scrollToActiveLine(int index) {
+    if (_isUserScrolling || index < 0 || index >= _lineKeys.length) return;
+
+    final key = _lineKeys[index];
+    final context = key.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  String _formatTimestamp(Duration d) {
+    final minutes = d.inMinutes.toString().padLeft(2, '0');
+    final seconds = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.daColors;
+    final activeIndex = ref.watch(lyricsActiveIndexProvider);
+
+    if (activeIndex != _lastActiveIndex && activeIndex != -1) {
+      _lastActiveIndex = activeIndex;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToActiveLine(activeIndex);
+      });
+    }
+
+    final lyricsState = ref.watch(lyricsControllerProvider);
     Widget innerContent;
 
     if (lyricsState.isLoading) {
@@ -508,7 +515,7 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
           style: context.daTypography.title.copyWith(color: Colors.white),
         ),
       );
-    } else if (lines.isEmpty || lines.contains('Lyrics unavailable.')) {
+    } else if (widget.lines.isEmpty || widget.lines.contains('Lyrics unavailable.')) {
       innerContent = Center(
         key: const ValueKey('unavailable'),
         child: Column(
@@ -524,103 +531,124 @@ class _LyricsPageState extends ConsumerState<LyricsPage> {
         ),
       );
     } else {
-      innerContent = Column(
-        key: const ValueKey('content'),
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(lines.length, (index) {
-          final isActive = index == activeIndex;
-          return LyricLineWidget(
-            key: _lineKeys[index],
-            text: lines[index],
-            isActive: isActive,
-            index: index,
-            activeIndex: activeIndex,
-            colors: colors,
-            timestampText: (_isUserScrolling && timestamps.isNotEmpty)
-                ? _formatTimestamp(timestamps[index])
-                : null,
-            onTap: () {
-              if (timestamps.isNotEmpty) {
-                ref.read(playbackControllerProvider).seek(timestamps[index]);
+      final height = MediaQuery.of(context).size.height;
+      innerContent = ShaderMask(
+        shaderCallback: (rect) {
+          return const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
+            stops: [0.0, 0.15, 0.85, 1.0],
+          ).createShader(rect);
+        },
+        blendMode: BlendMode.dstIn,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollStartNotification) {
+              if (notification.dragDetails != null) {
                 setState(() {
-                  _isUserScrolling = false;
+                  _isUserScrolling = true;
                 });
-              }
-            },
-          );
-        }),
-      );
-    }
-
-    final height = MediaQuery.of(context).size.height;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(24.0),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1.0,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(20.0),
-          sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(20.0),
-        ),
-        child: ShaderMask(
-          shaderCallback: (rect) {
-            return const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
-              stops: [0.0, 0.15, 0.85, 1.0],
-            ).createShader(rect);
-          },
-          blendMode: BlendMode.dstIn,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification is ScrollStartNotification) {
-                if (notification.dragDetails != null) {
-                  setState(() {
-                    _isUserScrolling = true;
-                  });
-                  _userScrollTimer?.cancel();
-                }
-              } else if (notification is ScrollEndNotification) {
                 _userScrollTimer?.cancel();
-                _userScrollTimer = Timer(const Duration(seconds: 4), () {
-                  if (mounted) {
+              }
+            } else if (notification is ScrollEndNotification) {
+              _userScrollTimer?.cancel();
+              _userScrollTimer = Timer(const Duration(seconds: 4), () {
+                if (mounted) {
+                  setState(() {
+                    _isUserScrolling = false;
+                  });
+                  if (activeIndex != -1) {
+                    _scrollToActiveLine(activeIndex);
+                  }
+                }
+              });
+            }
+            return false;
+          },
+          child: ListView.builder(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.symmetric(
+              vertical: height / 2 - 40.0,
+              horizontal: 24.0,
+            ),
+            itemCount: widget.lines.length,
+            itemBuilder: (context, index) {
+              final isActive = index == activeIndex;
+              return LyricLineWidget(
+                key: _lineKeys[index],
+                text: widget.lines[index],
+                isActive: isActive,
+                index: index,
+                activeIndex: activeIndex,
+                colors: colors,
+                timestampText: (_isUserScrolling && widget.timestamps.isNotEmpty)
+                    ? _formatTimestamp(widget.timestamps[index])
+                    : null,
+                onTap: () {
+                  if (widget.timestamps.isNotEmpty) {
+                    ref.read(playbackControllerProvider).seek(widget.timestamps[index]);
                     setState(() {
                       _isUserScrolling = false;
                     });
-                    if (activeIndex != -1) {
-                      _scrollToActiveLine(activeIndex);
-                    }
                   }
-                });
-              }
-              return false;
+                },
+              );
             },
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.symmetric(
-                vertical: height / 2 - 40.0,
-                horizontal: 24.0,
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: KeyedSubtree(
-                  key: ValueKey<String>('${_lastSongId}_${lyricsState.isLoading}'),
-                  child: innerContent,
-                ),
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(24.0),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 1.0,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(
+              sigmaX: DeviceMemoryManager.instance.getRecommendedBlurSigma(20.0),
+              sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(20.0),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: KeyedSubtree(
+                key: ValueKey<String>('${widget.songId}_${lyricsState.isLoading}'),
+                child: innerContent,
               ),
             ),
           ),
         ),
-      ),
+        if (_isUserScrolling && widget.timestamps.isNotEmpty)
+          Positioned(
+            bottom: 30,
+            right: 30,
+            child: FloatingActionButton.extended(
+              backgroundColor: colors.primary,
+              onPressed: () {
+                setState(() {
+                  _isUserScrolling = false;
+                });
+                if (activeIndex != -1) {
+                  _scrollToActiveLine(activeIndex);
+                }
+              },
+              icon: const Icon(Icons.sync, color: Colors.white),
+              label: const Text(
+                'Sync View',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

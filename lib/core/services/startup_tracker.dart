@@ -2,6 +2,7 @@
 // Copyright (c) 2026 DA Tunes Contributors
 // Licensed under GPL-3.0.
 
+import 'dart:async';
 import 'logger_service.dart';
 
 class StartupStepRecord {
@@ -25,6 +26,30 @@ class StartupStepRecord {
 class StartupTracker {
   static final List<StartupStepRecord> _records = [];
   static final DateTime _overallStartTime = DateTime.now();
+
+  static Timer? _stallDetectorTimer;
+  static DateTime _lastTickTime = DateTime.now();
+  static final List<String> _stalls = [];
+
+  static void startStallDetector() {
+    _lastTickTime = DateTime.now();
+    _stalls.clear();
+    _stallDetectorTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      final now = DateTime.now();
+      final elapsed = now.difference(_lastTickTime).inMilliseconds;
+      if (elapsed > 150) {
+        final stallMsg = 'Main thread stall detected: ${elapsed}ms delay (expected 50ms)';
+        _stalls.add('[$now] $stallMsg');
+        DALogger.warning('[STARTUP PROFILE] ⚠ $stallMsg');
+      }
+      _lastTickTime = now;
+    });
+  }
+
+  static void stopStallDetector() {
+    _stallDetectorTimer?.cancel();
+    _stallDetectorTimer = null;
+  }
 
   static StartupStepRecord startStep(String name) {
     final record = StartupStepRecord(name: name, startTime: DateTime.now());
@@ -65,6 +90,14 @@ class StartupTracker {
       final r = _records[i];
       final statusStr = r.isSuccess ? 'SUCCESS' : 'FAILED (${r.error})';
       buffer.writeln('${i + 1}. ${r.name.padRight(40)} : ${r.durationMs}ms [$statusStr]');
+    }
+    if (_stalls.isNotEmpty) {
+      buffer.writeln('\n=== MAIN THREAD STALLS DETECTED ===');
+      for (final stall in _stalls) {
+        buffer.writeln(stall);
+      }
+    } else {
+      buffer.writeln('\nNo major main thread stalls detected.');
     }
     buffer.writeln('===========================================');
     DALogger.info(buffer.toString());

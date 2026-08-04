@@ -59,7 +59,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final isImmersive = ref.watch(immersiveModeProvider);
     final isAndroid = Theme.of(context).platform == TargetPlatform.android;
     final showAlbumArt = ref.watch(showAlbumArtBackgroundProvider);
-    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+    final isLowRam = !ref.watch(enableExtraEffectsProvider);
     debugPrint(' [AppShell] build - isImmersive: $isImmersive, currentSong: ${currentSong?.title}, showAlbumArt: $showAlbumArt');
 
     if (isAndroid) {

@@ -35,7 +35,7 @@ class AlbumCard extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: colors.surfaceHover,
-                borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                borderRadius: BorderRadius.circular(8.0),
               ),
               clipBehavior: Clip.antiAlias,
               child: DAImage(

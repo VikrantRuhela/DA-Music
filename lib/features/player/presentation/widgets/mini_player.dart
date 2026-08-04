@@ -23,14 +23,7 @@ class MiniPlayer extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final controller = ref.watch(playbackControllerProvider);
-    final isPlaying = controller.status == PlaybackStatus.playing;
-
-    final duration = currentSong.duration;
-    final position = controller.position;
-    final double progress = (duration.inMilliseconds > 0)
-        ? position.inMilliseconds / duration.inMilliseconds
-        : 0.0;
+    final isPlaying = ref.watch(playbackControllerProvider.select((c) => c.status == PlaybackStatus.playing));
 
     return InteractiveScale(
       hoverScale: 1.01,
@@ -41,6 +34,7 @@ class MiniPlayer extends ConsumerWidget {
       child: GestureDetector(
         onHorizontalDragEnd: (details) {
           if (details.primaryVelocity != null) {
+            final controller = ref.read(playbackControllerProvider);
             if (details.primaryVelocity! > 0) {
               controller.previous();
             } else if (details.primaryVelocity! < 0) {
@@ -88,7 +82,7 @@ class MiniPlayer extends ConsumerWidget {
                             height: 40.0,
                             decoration: BoxDecoration(
                               color: colors.surfaceHover,
-                              borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                              borderRadius: BorderRadius.circular(8.0),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: DAImage(
@@ -129,6 +123,7 @@ class MiniPlayer extends ConsumerWidget {
                               size: 28.0,
                             ),
                             onPressed: () {
+                              final controller = ref.read(playbackControllerProvider);
                               if (isPlaying) {
                                 controller.pause();
                               } else {
@@ -143,7 +138,7 @@ class MiniPlayer extends ConsumerWidget {
                               size: 24.0,
                             ),
                             onPressed: () {
-                              controller.next();
+                              ref.read(playbackControllerProvider).next();
                             },
                           ),
                           IconButton(
@@ -160,19 +155,40 @@ class MiniPlayer extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  SizedBox(
-                    height: 3.0,
-                    child: LinearProgressIndicator(
-                      value: progress.clamp(0.0, 1.0),
-                      backgroundColor: colors.border.withValues(alpha: 0.3),
-                      valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
-                    ),
-                  ),
+                  const _MiniPlayerProgressBar(),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MiniPlayerProgressBar extends ConsumerWidget {
+  const _MiniPlayerProgressBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.daColors;
+    final currentSong = ref.watch(currentSongProvider);
+    if (currentSong == null) {
+      return const SizedBox.shrink();
+    }
+
+    final position = ref.watch(playbackControllerProvider.select((c) => c.position));
+    final duration = currentSong.duration;
+    final double progress = (duration.inMilliseconds > 0)
+        ? position.inMilliseconds / duration.inMilliseconds
+        : 0.0;
+
+    return SizedBox(
+      height: 3.0,
+      child: LinearProgressIndicator(
+        value: progress.clamp(0.0, 1.0),
+        backgroundColor: colors.border.withValues(alpha: 0.3),
+        valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
       ),
     );
   }

@@ -16,7 +16,7 @@ final dynamicThemeProvider = StateNotifierProvider<DynamicThemeNotifier, ThemeDa
 });
 
 class DynamicThemeNotifier extends StateNotifier<ThemeData> {
-  static final Map<String, DAThemeExtension> _cache = {};
+  static final Map<String, ThemeData> _themeCache = {};
 
   DynamicThemeNotifier() : super(DATheme.darkTheme);
 
@@ -38,8 +38,8 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
     }
 
     final songId = song.id;
-    if (songId != null && _cache.containsKey(songId)) {
-      state = _buildThemeData(_cache[songId]!);
+    if (songId != null && _themeCache.containsKey(songId)) {
+      state = _themeCache[songId]!;
       return;
     }
 
@@ -180,11 +180,12 @@ class DynamicThemeNotifier extends StateNotifier<ThemeData> {
         gradientEnd: gradientEnd,
       );
 
-      _cache[song.id] = customExtension;
-      if (_cache.length > 30) {
-        _cache.remove(_cache.keys.first);
+      final themeData = _buildThemeData(customExtension);
+      _themeCache[song.id] = themeData;
+      if (_themeCache.length > 30) {
+        _themeCache.remove(_themeCache.keys.first);
       }
-      state = _buildThemeData(customExtension);
+      state = themeData;
     } catch (e) {
       dev.log('DynamicTheme: Palette extraction failed: $e');
       if (state == DATheme.darkTheme) {

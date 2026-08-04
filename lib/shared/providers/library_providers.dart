@@ -6,6 +6,7 @@ import '../../data/repositories/download_repository.dart';
 import '../../shared/models/music_models.dart';
 import '../../features/local_library/data/local_library_repository.dart';
 import 'backend_providers.dart';
+import '../../core/services/device_memory_manager.dart';
 
 // 1. Expose StorageService (initialized at boot and overridden)
 final storageServiceProvider = Provider<StorageService>((ref) {
@@ -57,6 +58,36 @@ class ShowAlbumArtBackgroundNotifier extends StateNotifier<bool> {
   Future<void> toggle(bool val) async {
     state = val;
     await _storage.setString(_key, val.toString());
+  }
+}
+
+final enableExtraEffectsProvider = StateNotifierProvider<EnableExtraEffectsNotifier, bool>((ref) {
+  final storage = ref.watch(storageServiceProvider);
+  return EnableExtraEffectsNotifier(storage);
+});
+
+class EnableExtraEffectsNotifier extends StateNotifier<bool> {
+  final StorageService _storage;
+  static const _key = 'enable_extra_effects';
+
+  EnableExtraEffectsNotifier(this._storage) : super(true) {
+    _load();
+  }
+
+  void _load() async {
+    final val = await _storage.getString(_key);
+    if (val == null) {
+      state = true;
+    } else {
+      state = val == 'true';
+    }
+    DeviceMemoryManager.instance.setExtraEffectsEnabled(state);
+  }
+
+  Future<void> toggle(bool val) async {
+    state = val;
+    await _storage.setString(_key, val.toString());
+    DeviceMemoryManager.instance.setExtraEffectsEnabled(val);
   }
 }
 
@@ -146,3 +177,27 @@ final unifiedArtistsProvider = FutureProvider<List<Artist>>((ref) async {
   }
   return merged;
 });
+
+final preventAppKilledProvider = StateNotifierProvider<PreventAppKilledNotifier, bool>((ref) {
+  final storage = ref.watch(storageServiceProvider);
+  return PreventAppKilledNotifier(storage);
+});
+
+class PreventAppKilledNotifier extends StateNotifier<bool> {
+  final StorageService _storage;
+  static const _key = 'prevent_app_killed';
+
+  PreventAppKilledNotifier(this._storage) : super(false) {
+    _load();
+  }
+
+  void _load() async {
+    final val = await _storage.getString(_key);
+    state = val == 'true';
+  }
+
+  Future<void> toggle(bool val) async {
+    state = val;
+    await _storage.setString(_key, val.toString());
+  }
+}

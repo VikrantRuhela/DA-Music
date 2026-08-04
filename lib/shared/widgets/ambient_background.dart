@@ -83,7 +83,7 @@ class AmbientBackground extends ConsumerWidget {
     final showAlbumArt = ref.watch(showAlbumArtBackgroundProvider);
     final currentSong = ref.watch(currentSongProvider);
     final String? artworkUrl = currentSong?.artworkUrl;
-    final isLowRam = DeviceMemoryManager.instance.isLowRamDevice;
+    final isLowRam = !ref.watch(enableExtraEffectsProvider);
 
     Widget backgroundWidget;
 

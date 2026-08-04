@@ -17,7 +17,6 @@ class DeviceMemoryManager {
 
   bool get isLowRamDevice => _isLowRamDevice;
 
-  /// Initialize memory bounds and detect device capabilities.
   void initialize({bool? forceLowRamForTesting}) {
     if (_isInitialized && forceLowRamForTesting == null) return;
     _isInitialized = true;
@@ -25,9 +24,14 @@ class DeviceMemoryManager {
     if (forceLowRamForTesting != null) {
       _isLowRamDevice = forceLowRamForTesting;
     } else {
-      _isLowRamDevice = _detectLowRamCondition();
+      _isLowRamDevice = false;
     }
 
+    _configureImageCache();
+  }
+
+  void setExtraEffectsEnabled(bool enabled) {
+    _isLowRamDevice = !enabled;
     _configureImageCache();
   }
 

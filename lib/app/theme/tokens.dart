@@ -25,11 +25,11 @@ class DATokens {
   static const Color lightTextSecondary = Color(0xFF666666);
   static const Color lightBorder = Color(0xFFE0E0E0);
 
-  static const double radiusSmall = 4.0;
-  static const double radiusMedium = 8.0;
-  static const double radiusLarge = 12.0;
-  static const double radiusXLarge = 16.0;
-  static const double radiusXXLarge = 24.0;
+  static const double radiusSmall = 6.0;
+  static const double radiusMedium = 12.0;
+  static const double radiusLarge = 16.0;
+  static const double radiusXLarge = 20.0;
+  static const double radiusXXLarge = 32.0;
   static const double radiusCircular = 999.0;
 
   static const double spacingTiny = 4.0;

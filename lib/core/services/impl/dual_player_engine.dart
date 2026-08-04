@@ -37,6 +37,7 @@ class DualPlayerEngine implements PlaybackEngine {
   bool _isMuted = false;
 
   Timer? _crossfadeTimer;
+  Timer? _standbyInitTimer;
   bool _isCrossfading = false;
 
   DualPlayerEngine(
@@ -94,8 +95,18 @@ class DualPlayerEngine implements PlaybackEngine {
   @override
   Future<PlaybackResult<void>> initialize() =>
       _runSafe('initialize', () async {
-        await _backendA.initialize();
-        await _backendB.initialize();
+        unawaited(_backendA.initialize().catchError((e) {
+          DALogger.error('DualPlayerEngine: Failed to initialize active backend', e);
+        }));
+
+        _standbyInitTimer = Timer(const Duration(seconds: 3), () async {
+          try {
+            await _backendB.initialize();
+            DALogger.info('DualPlayerEngine: Standby backend B initialized successfully in background.');
+          } catch (e) {
+            DALogger.error('DualPlayerEngine: Failed to initialize standby backend', e);
+          }
+        });
 
         await _subA?.cancel();
         await _subB?.cancel();
@@ -108,6 +119,8 @@ class DualPlayerEngine implements PlaybackEngine {
   Future<PlaybackResult<void>> dispose() =>
       _runSafe('dispose', () async {
         _cancelCrossfade();
+        _standbyInitTimer?.cancel();
+        _standbyInitTimer = null;
         await _subA?.cancel();
         await _subB?.cancel();
         _subA = null;

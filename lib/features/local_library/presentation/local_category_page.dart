@@ -168,7 +168,7 @@ class LocalCategoryPage extends ConsumerWidget {
               },
               contentPadding: const EdgeInsets.symmetric(horizontal: DATokens.spacingMedium, vertical: 4),
               leading: ClipRRect(
-                borderRadius: BorderRadius.circular(DATokens.radiusMedium),
+                borderRadius: BorderRadius.circular(8.0),
                 child: DAImage(
                   url: song.artworkUrl,
                   width: 48,
@@ -309,7 +309,7 @@ class LocalCategoryPage extends ConsumerWidget {
               children: [
                 Expanded(
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(DATokens.radiusLarge),
+                    borderRadius: BorderRadius.circular(12.0),
                     child: DAImage(
                       url: album.artworkUrl,
                       fit: BoxFit.cover,
