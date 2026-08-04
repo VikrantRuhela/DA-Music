@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,94 +30,7 @@ final lyricsActiveIndexProvider = Provider<int>((ref) {
   return activeIndex;
 });
 
-class AnimatedBackgroundOrbs extends StatefulWidget {
-  final String artworkUrl;
 
-  const AnimatedBackgroundOrbs({super.key, required this.artworkUrl});
-
-  @override
-  State<AnimatedBackgroundOrbs> createState() => _AnimatedBackgroundOrbsState();
-}
-
-class _AnimatedBackgroundOrbsState extends State<AnimatedBackgroundOrbs> with SingleTickerProviderStateMixin {
-  late final AnimationController _orbController;
-
-  @override
-  void initState() {
-    super.initState();
-    _orbController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 25),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _orbController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.daColors;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 1000),
-            child: DAImage(
-              key: ValueKey<String>(widget.artworkUrl),
-              url: widget.artworkUrl,
-              fit: BoxFit.cover,
-              placeholder: Container(color: Colors.black87),
-            ),
-          ),
-        ),
-        AnimatedBuilder(
-          animation: _orbController,
-          builder: (context, child) {
-            final t = _orbController.value;
-            final dx1 = sin(t * 2 * pi) * 120.0;
-            final dy1 = cos(t * 2 * pi) * 120.0;
-            final dx2 = cos(t * 2 * pi + pi) * 140.0;
-            final dy2 = sin(t * 2 * pi + pi) * 140.0;
-
-            final size = MediaQuery.of(context).size;
-
-            return Stack(
-              children: [
-                Positioned(
-                  left: size.width * 0.15 + dx1,
-                  top: size.height * 0.25 + dy1,
-                  child: Container(
-                    width: size.width * 0.45,
-                    height: size.width * 0.45,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: colors.primary.withValues(alpha: 0.25),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: size.width * 0.1 + dx2,
-                  bottom: size.height * 0.2 + dy2,
-                  child: Container(
-                    width: size.width * 0.5,
-                    height: size.width * 0.5,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: colors.accent.withValues(alpha: 0.25),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
 
 class LyricLineWidget extends ConsumerWidget {
   final String text;
@@ -145,9 +57,7 @@ class LyricLineWidget extends ConsumerWidget {
     final cleanText = text.replaceAll(RegExp(r'<.*?>'), '').trim();
     final int distanceFromActive = (index - activeIndex).abs();
     final isLowRam = !ref.watch(enableExtraEffectsProvider);
-    final shouldBlur = !isLowRam && distanceFromActive > 0 && distanceFromActive <= 2;
-
-    final double targetBlur = shouldBlur ? (distanceFromActive.toDouble() * 1.5).clamp(0.0, 5.0) : 0.0;
+    final double targetBlur = (isActive || isLowRam) ? 0.0 : (distanceFromActive.toDouble() * 1.5).clamp(0.0, 8.0);
     final double targetOpacity = isActive ? 1.0 : (0.45 / distanceFromActive).clamp(0.12, 0.45);
 
     return TweenAnimationBuilder<double>(
@@ -180,7 +90,7 @@ class LyricLineWidget extends ConsumerWidget {
               textAlign: TextAlign.center,
             );
 
-            if (shouldBlur && blurValue > 0.05) {
+            if (!isLowRam && blurValue > 0.05) {
               textContent = ImageFiltered(
                 imageFilter: ImageFilter.blur(sigmaX: blurValue, sigmaY: blurValue),
                 child: Opacity(
@@ -314,22 +224,11 @@ class LyricsPage extends ConsumerWidget {
         body: Stack(
           children: [
             Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      colors.gradientStart,
-                      colors.gradientMiddle,
-                      colors.gradientEnd,
-                    ],
-                  ),
-                ),
+              child: DAImage(
+                url: artworkUrl,
+                fit: BoxFit.cover,
+                placeholder: Container(color: colors.surface),
               ),
-            ),
-            Positioned.fill(
-              child: AnimatedBackgroundOrbs(artworkUrl: artworkUrl),
             ),
             Positioned.fill(
               child: BackdropFilter(
@@ -338,8 +237,17 @@ class LyricsPage extends ConsumerWidget {
                   sigmaY: DeviceMemoryManager.instance.getRecommendedBlurSigma(45.0),
                 ),
                 child: Container(
-                  color: Colors.black.withValues(alpha: 0.55),
+                  color: Colors.black.withValues(alpha: 0.44),
                 ),
+              ),
+            ),
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ColorFilter.mode(
+                  Colors.black.withValues(alpha: 0.10),
+                  BlendMode.darken,
+                ),
+                child: const SizedBox(),
               ),
             ),
             SafeArea(

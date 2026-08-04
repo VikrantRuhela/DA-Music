@@ -14,7 +14,6 @@ import '../../../../../shared/models/music_models.dart';
 import '../../../../../shared/utils/song_options.dart';
 import '../../../../../shared/widgets/da_image.dart';
 import '../../../../../core/services/device_memory_manager.dart';
-import '../../../../../shared/widgets/custom_title_bar.dart';
 import '../../../../../core/services/lyrics_controller.dart';
 import '../vinyl_player_widget.dart';
 import 'immersive_background.dart';
@@ -255,7 +254,6 @@ class _WindowsImmersivePlayer extends ConsumerStatefulWidget {
 
 class _WindowsImmersivePlayerState extends ConsumerState<_WindowsImmersivePlayer> {
   int _activeTab = 0;
-  bool _showTitleBar = false;
 
   String _getCodec(Song? song) {
     if (song == null) return 'AAC';
@@ -511,39 +509,6 @@ class _WindowsImmersivePlayerState extends ConsumerState<_WindowsImmersivePlayer
                   ),
                 ),
               ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: MouseRegion(
-                  onEnter: (_) => setState(() => _showTitleBar = true),
-                  onExit: (_) => setState(() => _showTitleBar = false),
-                  child: AnimatedSlide(
-                    offset: _showTitleBar ? Offset.zero : const Offset(0, -1),
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOutCubic,
-                    child: AnimatedOpacity(
-                      opacity: _showTitleBar ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 250),
-                      child: Container(
-                        color: Colors.black.withOpacity(0.4),
-                        child: const CustomTitleBar(),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (!_showTitleBar)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 12.0,
-                  child: MouseRegion(
-                    onEnter: (_) => setState(() => _showTitleBar = true),
-                    child: const SizedBox(),
-                  ),
-                ),
             ],
           );
         },
@@ -747,7 +712,7 @@ class _TabLyricLineWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final cleanText = text.replaceAll(RegExp(r'<.*?>'), '').trim();
     final int distanceFromActive = (index - activeIndex).abs();
-    final double targetBlur = isActive ? 0.0 : (distanceFromActive.toDouble() * 1.5).clamp(0.0, 5.0);
+    final double targetBlur = isActive ? 0.0 : (distanceFromActive.toDouble() * 1.5).clamp(0.0, 8.0);
     final double targetOpacity = isActive ? 1.0 : (0.45 / distanceFromActive).clamp(0.12, 0.45);
 
     return TweenAnimationBuilder<double>(
